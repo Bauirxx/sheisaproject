@@ -52,7 +52,14 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
         _sessionmaker = async_sessionmaker(
             bind=get_engine(),
             expire_on_commit=False,
-            autoflush=False,
+            # `autoflush=True` (o valor por omissão do SQLAlchemy) é aqui uma
+            # decisão de correcção, não de conveniência. Com autoflush
+            # desactivado, uma alteração ainda por escrever é invisível às
+            # consultas seguintes da mesma transacção — e o motor de
+            # inteligência, que lê o que acabou de ser escrito para calcular
+            # pontuações, produzia resultados silenciosamente errados em vez de
+            # falhar. Preferimos um flush a mais a uma pontuação inventada.
+            autoflush=True,
         )
     return _sessionmaker
 

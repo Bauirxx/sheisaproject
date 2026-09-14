@@ -87,6 +87,32 @@ async def cmd_mitre_load(args: argparse.Namespace) -> int:
     return 0
 
 
+async def cmd_seed_assets(args: argparse.Namespace) -> int:
+    from app.services.seed_service import seed_lab_assets
+
+    factory = get_sessionmaker()
+    async with factory() as session:
+        _banner("Inventario de activos do laboratorio")
+        created, existing = await seed_lab_assets(session)
+        await session.commit()
+        print(f"  {created} criado(s), {existing} ja existente(s).")
+    print()
+    return 0
+
+
+async def cmd_seed_integrations(args: argparse.Namespace) -> int:
+    from app.services.integration_service import ensure_catalog
+
+    factory = get_sessionmaker()
+    async with factory() as session:
+        _banner("Catalogo de integracoes")
+        created = await ensure_catalog(session)
+        await session.commit()
+        print(f"  {created} integracao(oes) registada(s).")
+    print()
+    return 0
+
+
 async def cmd_seed_correlation(args: argparse.Namespace) -> int:
     from app.services.seed_service import seed_correlation_rules
 
@@ -166,6 +192,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_corr = sub.add_parser("seed-correlation", help="Instala regras de correlação base.")
     p_corr.set_defaults(func=cmd_seed_correlation)
+
+    p_assets = sub.add_parser("seed-assets", help="Instala o inventário do laboratório.")
+    p_assets.set_defaults(func=cmd_seed_assets)
+
+    p_integ = sub.add_parser("seed-integrations", help="Regista o catálogo de integrações.")
+    p_integ.set_defaults(func=cmd_seed_integrations)
 
     p_play = sub.add_parser("seed-playbooks", help="Instala playbooks de resposta base.")
     p_play.set_defaults(func=cmd_seed_playbooks)

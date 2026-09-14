@@ -193,5 +193,7 @@ async def readiness() -> JSONResponse:
 
 # ---------------------------------------------------------------------- rotas
 from app.api.v1 import auth as auth_routes  # noqa: E402
+from app.api.v1 import ingest as ingest_routes  # noqa: E402
 
 app.include_router(auth_routes.router, prefix=settings.api_prefix)
+app.include_router(ingest_routes.router, prefix=settings.api_prefix)
