@@ -1,0 +1,21 @@
+# --- Nucleo da API ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# --- Persistencia ---
+SQLAlchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+
+# --- Validacao e configuracao ---
+pydantic==2.10.4
+pydantic-settings==2.7.0
+email-validator==2.2.0
+
+# --- Seguranca ---
+PyJWT==2.10.1
+argon2-cffi==23.1.0
+
+# --- Integracoes / cliente HTTP ---
+httpx==0.28.1

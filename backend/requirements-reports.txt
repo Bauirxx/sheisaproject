@@ -1,0 +1,6 @@
+# Exportacao de relatorios em PDF.
+# Opcional: a plataforma gera sempre relatorios em JSON e HTML a partir dos
+# dados reais; o reportlab acrescenta apenas a exportacao PDF. Se nao estiver
+# instalado, a API responde 503 nesse formato em vez de fingir que produziu um
+# ficheiro (§4 / §34).
+reportlab==4.2.5

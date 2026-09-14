@@ -1,0 +1,48 @@
+# Infraestrutura base da plataforma SHEISA.
+# O laboratório de detecção (Wazuh/Suricata) vive em lab/docker-compose.lab.yml
+# para poder ser ligado e desligado independentemente da plataforma.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sheisa-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sheisa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD tem de estar definido no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-sheisa}
+      # Garante ordenação determinística independentemente do locale do host.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      # Exposto apenas em loopback: a base de dados nunca deve ser alcançável a partir da rede.
+      - "127.0.0.1:${POSTGRES_PORT:-15433}:5432"
+    volumes:
+      - sheisa-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sheisa} -d ${POSTGRES_DB:-sheisa}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Base de dados dedicada aos testes automatizados. Efémera por design (tmpfs):
+  # cada arranque começa limpo, evitando que estado de testes anteriores mascare falhas.
+  db-test:
+    image: postgres:16-alpine
+    container_name: sheisa-db-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sheisa
+      POSTGRES_PASSWORD: sheisa_test
+      POSTGRES_DB: sheisa_test
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "127.0.0.1:${POSTGRES_TEST_PORT:-15434}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sheisa -d sheisa_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  sheisa-db-data:

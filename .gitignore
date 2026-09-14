@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+*.pyc
+__pycache__/
+.venv/
+backend/.venv/
+backend/var/
+var/
+node_modules/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+lab/data/
+*.log
