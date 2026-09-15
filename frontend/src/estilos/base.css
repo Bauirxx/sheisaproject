@@ -1,0 +1,442 @@
+/* Estilos de base e componentes partilhados. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--fonte);
+  font-size: var(--texto-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: var(--texto-xl);
+}
+h2 {
+  font-size: var(--texto-lg);
+}
+h3 {
+  font-size: var(--texto-md);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--primaria);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--primaria-hover);
+}
+
+code,
+.mono {
+  font-family: var(--fonte-mono);
+  font-size: 0.95em;
+}
+
+/*
+ * Foco visível em tudo o que é focável. Não é opcional: metade do trabalho de
+ * triagem faz-se com o teclado, e um contorno de foco invisível transforma a
+ * navegação por teclado em adivinhação.
+ */
+:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+  border-radius: var(--raio-pequeno);
+}
+
+/* ------------------------------------------------------------------ botões */
+.botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espaco-2);
+  padding: 7px 14px;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio);
+  background: var(--superficie-elevada);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: var(--texto-base);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transicao), border-color var(--transicao);
+  white-space: nowrap;
+}
+.botao:hover:not(:disabled) {
+  background: var(--superficie-hover);
+  border-color: var(--primaria);
+}
+.botao:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.botao--primario {
+  background: var(--primaria);
+  border-color: var(--primaria);
+  color: #fff;
+}
+.botao--primario:hover:not(:disabled) {
+  background: var(--primaria-hover);
+  border-color: var(--primaria-hover);
+}
+
+.botao--perigo {
+  background: transparent;
+  border-color: var(--perigo);
+  color: var(--perigo);
+}
+.botao--perigo:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.botao--discreto {
+  background: transparent;
+  border-color: transparent;
+  color: var(--texto-secundario);
+  padding: 5px 8px;
+}
+.botao--discreto:hover:not(:disabled) {
+  background: var(--superficie-hover);
+  border-color: transparent;
+  color: var(--texto);
+}
+
+.botao--pequeno {
+  padding: 4px 10px;
+  font-size: var(--texto-sm);
+}
+
+/* ------------------------------------------------------------- formulários */
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-2);
+}
+
+.campo__etiqueta {
+  font-size: var(--texto-sm);
+  font-weight: 500;
+  color: var(--texto-secundario);
+}
+
+.campo__ajuda {
+  font-size: var(--texto-xs);
+  color: var(--texto-terciario);
+}
+
+.entrada,
+.selector,
+.area-texto {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio);
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: var(--texto-base);
+  transition: border-color var(--transicao);
+}
+.entrada:focus,
+.selector:focus,
+.area-texto:focus {
+  border-color: var(--primaria);
+  outline: none;
+}
+.entrada::placeholder,
+.area-texto::placeholder {
+  color: var(--texto-terciario);
+}
+.area-texto {
+  resize: vertical;
+  min-height: 84px;
+  line-height: 1.55;
+}
+.selector {
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------- cartões */
+.cartao {
+  background: var(--superficie);
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-grande);
+  padding: var(--espaco-5);
+}
+
+.cartao__titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espaco-3);
+  margin-bottom: var(--espaco-4);
+}
+
+/* --------------------------------------------------------------- tabelas */
+.tabela-envolvente {
+  overflow-x: auto;
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-grande);
+  background: var(--superficie);
+}
+
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--texto-base);
+}
+
+.tabela thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px var(--espaco-4);
+  text-align: left;
+  font-size: var(--texto-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texto-terciario);
+  background: var(--superficie-elevada);
+  border-bottom: 1px solid var(--contorno);
+  white-space: nowrap;
+}
+
+.tabela tbody td {
+  padding: 10px var(--espaco-4);
+  border-bottom: 1px solid var(--contorno-suave);
+  vertical-align: middle;
+}
+
+.tabela tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabela tbody tr.clicavel {
+  cursor: pointer;
+  transition: background var(--transicao);
+}
+.tabela tbody tr.clicavel:hover {
+  background: var(--superficie-elevada);
+}
+
+/* ------------------------------------------------------------ distintivos */
+.distintivo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--texto-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.distintivo__ponto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* Severidades — cor + texto, nunca só cor (§79). */
+.sev--INFO {
+  color: var(--sev-info);
+  background: var(--sev-info-fundo);
+}
+.sev--BAIXA {
+  color: var(--sev-baixa);
+  background: var(--sev-baixa-fundo);
+}
+.sev--MEDIA {
+  color: var(--sev-media);
+  background: var(--sev-media-fundo);
+}
+.sev--ALTA {
+  color: var(--sev-alta);
+  background: var(--sev-alta-fundo);
+}
+.sev--CRITICA {
+  color: var(--sev-critica);
+  background: var(--sev-critica-fundo);
+  border-color: var(--sev-critica);
+}
+
+.distintivo--neutro {
+  color: var(--texto-secundario);
+  background: var(--superficie-elevada);
+  border-color: var(--contorno);
+}
+.distintivo--activo {
+  color: var(--info);
+  background: rgba(56, 189, 248, 0.12);
+}
+.distintivo--sucesso {
+  color: var(--sucesso);
+  background: rgba(34, 197, 94, 0.12);
+}
+.distintivo--aviso {
+  color: var(--aviso);
+  background: rgba(245, 158, 11, 0.12);
+}
+.distintivo--perigo {
+  color: var(--perigo);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* Marca de dados de demonstração. Visível de propósito (§4 — não simular). */
+.distintivo--demonstracao {
+  color: var(--aviso);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--aviso);
+  border-style: dashed;
+}
+
+/* ------------------------------------------------------- estados vazios */
+.vazio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espaco-2);
+  padding: var(--espaco-7) var(--espaco-5);
+  text-align: center;
+  color: var(--texto-secundario);
+}
+.vazio__titulo {
+  font-size: var(--texto-md);
+  font-weight: 600;
+  color: var(--texto);
+}
+.vazio__detalhe {
+  max-width: 44ch;
+  font-size: var(--texto-sm);
+  color: var(--texto-terciario);
+}
+
+/* ------------------------------------------------------------- mensagens */
+.mensagem {
+  display: flex;
+  gap: var(--espaco-3);
+  padding: var(--espaco-3) var(--espaco-4);
+  border: 1px solid var(--contorno);
+  border-left-width: 3px;
+  border-radius: var(--raio);
+  background: var(--superficie);
+  font-size: var(--texto-base);
+}
+.mensagem--erro {
+  border-left-color: var(--perigo);
+  color: var(--texto);
+}
+.mensagem--aviso {
+  border-left-color: var(--aviso);
+}
+.mensagem--info {
+  border-left-color: var(--info);
+}
+.mensagem--sucesso {
+  border-left-color: var(--sucesso);
+}
+.mensagem__codigo {
+  font-family: var(--fonte-mono);
+  font-size: var(--texto-xs);
+  color: var(--texto-terciario);
+}
+
+/* ------------------------------------------------------------- utilidades */
+.carregando {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--contorno);
+  border-top-color: var(--primaria);
+  border-radius: 50%;
+  animation: rodar 700ms linear infinite;
+}
+
+@keyframes rodar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.pilha {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-4);
+}
+.linha {
+  display: flex;
+  align-items: center;
+  gap: var(--espaco-3);
+}
+.linha--espalhada {
+  justify-content: space-between;
+}
+.crescer {
+  flex: 1;
+  min-width: 0;
+}
+.secundario {
+  color: var(--texto-secundario);
+}
+.terciario {
+  color: var(--texto-terciario);
+  font-size: var(--texto-sm);
+}
+.truncar {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.so-leitores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

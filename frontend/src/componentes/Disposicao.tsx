@@ -1,0 +1,180 @@
+/**
+ * Disposição do centro de operações (§80 do briefing).
+ *
+ * Barra lateral fixa, topo com pesquisa e identidade, área de trabalho. O
+ * princípio é que o analista chegue a qualquer fila — alertas, incidentes,
+ * recomendações, aprovações — num clique, sem navegar por menus encadeados.
+ * Numa sala de operações, cada clique a mais é tempo de resposta.
+ *
+ * As entradas da barra lateral são filtradas pelas permissões do utilizador.
+ * É cortesia, não segurança: o servidor recusa na mesma quem lá chegar pelo
+ * URL. Mostrar um menu que dá 403 ao ser clicado ensina o utilizador a
+ * desconfiar da interface.
+ */
+
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+
+import { useSessao } from "@/autenticacao/contexto";
+
+interface Entrada {
+  para: string;
+  rotulo: string;
+  icone: string;
+  /** Permissões exigidas para a entrada ser mostrada. */
+  permissoes?: string[];
+}
+
+interface Grupo {
+  titulo: string;
+  entradas: Entrada[];
+}
+
+const NAVEGACAO: Grupo[] = [
+  {
+    titulo: "Operação",
+    entradas: [
+      { para: "/painel", rotulo: "Painel", icone: "◧", permissoes: ["dashboard:read"] },
+      { para: "/alertas", rotulo: "Alertas", icone: "◆", permissoes: ["alerts:read"] },
+      {
+        para: "/incidentes",
+        rotulo: "Incidentes",
+        icone: "▣",
+        permissoes: ["incidents:read"],
+      },
+      {
+        para: "/recomendacoes",
+        rotulo: "Recomendações",
+        icone: "✦",
+        permissoes: ["recommendations:read"],
+      },
+    ],
+  },
+  {
+    titulo: "Resposta",
+    entradas: [
+      { para: "/aprovacoes", rotulo: "Aprovações", icone: "⎔", permissoes: ["actions:read"] },
+      { para: "/playbooks", rotulo: "Playbooks", icone: "≡", permissoes: ["playbooks:read"] },
+    ],
+  },
+  {
+    titulo: "Inteligência",
+    entradas: [
+      { para: "/indicadores", rotulo: "Indicadores", icone: "◇", permissoes: ["iocs:read"] },
+      { para: "/activos", rotulo: "Activos", icone: "▤", permissoes: ["assets:read"] },
+      { para: "/mitre", rotulo: "MITRE ATT&CK", icone: "⊞", permissoes: ["mitre:read"] },
+    ],
+  },
+  {
+    titulo: "Governo",
+    entradas: [
+      { para: "/relatorios", rotulo: "Relatórios", icone: "▦", permissoes: ["reports:read"] },
+      { para: "/auditoria", rotulo: "Auditoria", icone: "⊟", permissoes: ["audit:read"] },
+      {
+        para: "/administracao",
+        rotulo: "Administração",
+        icone: "⚙",
+        permissoes: ["users:read"],
+      },
+    ],
+  },
+];
+
+function AlternarTema() {
+  const alternar = () => {
+    const raiz = document.documentElement;
+    const claro = raiz.getAttribute("data-tema") === "claro";
+    raiz.setAttribute("data-tema", claro ? "escuro" : "claro");
+    try {
+      window.localStorage.setItem("sheisa.tema", claro ? "escuro" : "claro");
+    } catch {
+      // Preferência não persistida: irrelevante para o funcionamento.
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="botao botao--discreto"
+      onClick={alternar}
+      title="Alternar entre modo escuro e claro"
+    >
+      ◐<span className="so-leitores">Alternar tema</span>
+    </button>
+  );
+}
+
+export function Disposicao() {
+  const { utilizador, sair, pode } = useSessao();
+  const navegar = useNavigate();
+
+  const terminarSessao = async () => {
+    await sair();
+    navegar("/entrar", { replace: true });
+  };
+
+  const grupos = NAVEGACAO.map((grupo) => ({
+    ...grupo,
+    entradas: grupo.entradas.filter(
+      (entrada) => !entrada.permissoes || pode(...entrada.permissoes),
+    ),
+  })).filter((grupo) => grupo.entradas.length > 0);
+
+  return (
+    <div className="disposicao">
+      <aside className="barra-lateral">
+        <div className="barra-lateral__marca">
+          <span className="barra-lateral__sigla">SH</span>
+          <div className="pilha" style={{ gap: 0 }}>
+            <strong>SHEISA</strong>
+            <span className="terciario">Resposta a incidentes</span>
+          </div>
+        </div>
+
+        <nav className="barra-lateral__navegacao" aria-label="Navegação principal">
+          {grupos.map((grupo) => (
+            <div key={grupo.titulo} className="barra-lateral__grupo">
+              <p className="barra-lateral__grupo-titulo">{grupo.titulo}</p>
+              {grupo.entradas.map((entrada) => (
+                <NavLink
+                  key={entrada.para}
+                  to={entrada.para}
+                  className={({ isActive }) =>
+                    `barra-lateral__ligacao${isActive ? " barra-lateral__ligacao--activa" : ""}`
+                  }
+                >
+                  <span className="barra-lateral__icone" aria-hidden="true">
+                    {entrada.icone}
+                  </span>
+                  {entrada.rotulo}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="area">
+        <header className="topo">
+          <div className="crescer" />
+          <AlternarTema />
+          <div className="topo__identidade">
+            <div className="pilha" style={{ gap: 0, alignItems: "flex-end" }}>
+              <span className="truncar">{utilizador?.full_name}</span>
+              <span className="terciario">{utilizador?.role?.name ?? "—"}</span>
+            </div>
+            <button
+              type="button"
+              className="botao botao--discreto"
+              onClick={() => void terminarSessao()}
+            >
+              Sair
+            </button>
+          </div>
+        </header>
+
+        <main className="area__conteudo">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,26 @@
+{
+  "name": "sheisa-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Interface da plataforma SHEISA de gestão e resposta a incidentes.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "verificar": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.62.7",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "7.18.3"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.17",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.7.2",
+    "vite": "6.4.3"
+  }
+}

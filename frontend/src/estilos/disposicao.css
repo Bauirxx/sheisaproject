@@ -1,0 +1,264 @@
+/* Disposição do centro de operações (§80). */
+
+.disposicao {
+  display: flex;
+  height: 100%;
+}
+
+/* ------------------------------------------------------------ barra lateral */
+.barra-lateral {
+  width: var(--largura-barra-lateral);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--superficie);
+  border-right: 1px solid var(--contorno);
+  overflow-y: auto;
+}
+
+.barra-lateral__marca {
+  display: flex;
+  align-items: center;
+  gap: var(--espaco-3);
+  height: var(--altura-topo);
+  padding: 0 var(--espaco-4);
+  border-bottom: 1px solid var(--contorno);
+  flex: none;
+}
+
+.barra-lateral__sigla {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--raio);
+  background: var(--primaria);
+  color: #fff;
+  font-size: var(--texto-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex: none;
+}
+
+.barra-lateral__navegacao {
+  padding: var(--espaco-4) var(--espaco-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-5);
+}
+
+.barra-lateral__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.barra-lateral__grupo-titulo {
+  padding: 0 var(--espaco-3) var(--espaco-2);
+  font-size: var(--texto-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--texto-terciario);
+}
+
+.barra-lateral__ligacao {
+  display: flex;
+  align-items: center;
+  gap: var(--espaco-3);
+  padding: 7px var(--espaco-3);
+  border-radius: var(--raio);
+  color: var(--texto-secundario);
+  font-size: var(--texto-base);
+  font-weight: 500;
+  transition: background var(--transicao), color var(--transicao);
+}
+.barra-lateral__ligacao:hover {
+  background: var(--superficie-elevada);
+  color: var(--texto);
+}
+.barra-lateral__ligacao--activa {
+  background: var(--primaria-suave);
+  color: var(--primaria);
+}
+
+.barra-lateral__icone {
+  width: 16px;
+  text-align: center;
+  font-size: var(--texto-sm);
+  flex: none;
+}
+
+/* -------------------------------------------------------------- área e topo */
+.area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topo {
+  display: flex;
+  align-items: center;
+  gap: var(--espaco-3);
+  height: var(--altura-topo);
+  padding: 0 var(--espaco-5);
+  background: var(--superficie);
+  border-bottom: 1px solid var(--contorno);
+  flex: none;
+}
+
+.topo__identidade {
+  display: flex;
+  align-items: center;
+  gap: var(--espaco-3);
+  font-size: var(--texto-sm);
+  max-width: 280px;
+}
+
+.area__conteudo {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--espaco-5);
+}
+
+/* -------------------------------------------------------- cabeçalho de página */
+.pagina__cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espaco-4);
+  margin-bottom: var(--espaco-5);
+  flex-wrap: wrap;
+}
+
+.pagina__titulo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-1);
+}
+
+.pagina__descricao {
+  color: var(--texto-secundario);
+  font-size: var(--texto-base);
+  max-width: 78ch;
+}
+
+.pagina__accoes {
+  display: flex;
+  align-items: center;
+  gap: var(--espaco-2);
+}
+
+/* ---------------------------------------------------------------- filtros */
+.filtros {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--espaco-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--espaco-4);
+}
+.filtros .campo {
+  min-width: 150px;
+}
+.filtros .campo--pesquisa {
+  flex: 1;
+  min-width: 220px;
+}
+
+/* ------------------------------------------------------------- paginação */
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espaco-3);
+  padding: var(--espaco-3) var(--espaco-4);
+  border-top: 1px solid var(--contorno);
+  font-size: var(--texto-sm);
+  color: var(--texto-secundario);
+}
+
+/* --------------------------------------------------------------- entrada */
+.entrada-pagina {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: var(--espaco-5);
+}
+
+.entrada-cartao {
+  width: 100%;
+  max-width: 380px;
+  background: var(--superficie);
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-grande);
+  padding: var(--espaco-6);
+  box-shadow: var(--sombra-elevada);
+}
+
+.entrada-cartao__marca {
+  display: flex;
+  align-items: center;
+  gap: var(--espaco-3);
+  margin-bottom: var(--espaco-5);
+}
+
+/* ---------------------------------------------------------- grelha de cartões */
+.grelha {
+  display: grid;
+  gap: var(--espaco-4);
+}
+.grelha--4 {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.grelha--3 {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.grelha--2 {
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+}
+
+/* ------------------------------------------------------------- indicador */
+.indicador {
+  background: var(--superficie);
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-grande);
+  padding: var(--espaco-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-1);
+}
+
+.indicador__rotulo {
+  font-size: var(--texto-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texto-terciario);
+}
+
+.indicador__valor {
+  font-size: 30px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.indicador__nota {
+  font-size: var(--texto-sm);
+  color: var(--texto-secundario);
+}
+
+.indicador--alerta .indicador__valor {
+  color: var(--aviso);
+}
+.indicador--critico .indicador__valor {
+  color: var(--critico);
+}
+
+@media (max-width: 900px) {
+  .barra-lateral {
+    display: none;
+  }
+}

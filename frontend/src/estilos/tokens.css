@@ -1,0 +1,140 @@
+/*
+ * Identidade visual da plataforma (§77–§79 do briefing).
+ *
+ * O modo escuro é o principal, não uma alternativa: um SOC trabalha com salas
+ * mal iluminadas e turnos longos, e é esse o modo em que a interface vai estar
+ * durante quase todo o tempo em que for usada. O modo claro existe para
+ * projecção e impressão — numa defesa, um ecrã escuro projectado lê-se mal.
+ *
+ * Regra que atravessa o ficheiro: **a cor indica estado, não decora**. Fora dos
+ * elementos de estado (severidade, resultado, alerta) a paleta é
+ * deliberadamente neutra. Uma interface onde tudo é colorido é uma interface
+ * onde nada se destaca — e o que se perde é exactamente o alerta crítico no
+ * meio de uma lista.
+ */
+
+:root {
+  /* ---------------------------------------------------- superfícies (escuro) */
+  --fundo: #0b1120;
+  --superficie: #111827;
+  --superficie-elevada: #172033;
+  --superficie-hover: #1c2740;
+  --contorno: #263247;
+  --contorno-suave: #1e2942;
+
+  /* --------------------------------------------------------------- acção */
+  --primaria: #4f8cff;
+  --primaria-hover: #6ea3ff;
+  --primaria-suave: rgba(79, 140, 255, 0.14);
+
+  /* ----------------------------------------------------------------- texto */
+  --texto: #f8fafc;
+  --texto-secundario: #94a3b8;
+  --texto-terciario: #64748b;
+
+  /* -------------------------------------------------------------- estados */
+  --sucesso: #22c55e;
+  --aviso: #f59e0b;
+  --perigo: #ef4444;
+  --critico: #dc2626;
+  --info: #38bdf8;
+
+  /*
+   * Severidade (§79). A escala tem cinco degraus e cada um tem de ser
+   * distinguível do vizinho mesmo em daltonismo — por isso **nunca** se usa a
+   * cor sozinha: todos os distintivos de severidade trazem também texto, e os
+   * mais graves trazem ícone.
+   */
+  --sev-info: #38bdf8;
+  --sev-baixa: #22c55e;
+  --sev-media: #f59e0b;
+  --sev-alta: #f97316;
+  --sev-critica: #dc2626;
+
+  /* Fundos translúcidos correspondentes, para distintivos e linhas. */
+  --sev-info-fundo: rgba(56, 189, 248, 0.14);
+  --sev-baixa-fundo: rgba(34, 197, 94, 0.14);
+  --sev-media-fundo: rgba(245, 158, 11, 0.14);
+  --sev-alta-fundo: rgba(249, 115, 22, 0.16);
+  --sev-critica-fundo: rgba(220, 38, 38, 0.18);
+
+  /* ------------------------------------------------------------- dimensões */
+  --raio: 8px;
+  --raio-pequeno: 5px;
+  --raio-grande: 12px;
+
+  --espaco-1: 4px;
+  --espaco-2: 8px;
+  --espaco-3: 12px;
+  --espaco-4: 16px;
+  --espaco-5: 24px;
+  --espaco-6: 32px;
+  --espaco-7: 48px;
+
+  --largura-barra-lateral: 236px;
+  --altura-topo: 56px;
+
+  /* ------------------------------------------------------------ tipografia */
+  /*
+   * Densidade de SOC: o corpo é 13px, não 16px. Um analista tem de ver quantas
+   * linhas de uma fila couberem no ecrã; cada pixel de altura de linha custa
+   * uma linha de trabalho visível.
+   */
+  --fonte: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --fonte-mono: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+
+  --texto-xs: 11px;
+  --texto-sm: 12px;
+  --texto-base: 13px;
+  --texto-md: 15px;
+  --texto-lg: 18px;
+  --texto-xl: 24px;
+
+  --sombra: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sombra-elevada: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  --transicao: 120ms ease;
+}
+
+/*
+ * Modo claro. Os nomes dos tokens são os mesmos, pelo que nenhum componente
+ * precisa de saber em que modo está — é a condição para que a alternância não
+ * se transforme numa segunda folha de estilos a divergir da primeira.
+ */
+:root[data-tema="claro"] {
+  --fundo: #f8fafc;
+  --superficie: #ffffff;
+  --superficie-elevada: #f1f5f9;
+  --superficie-hover: #e9eef5;
+  --contorno: #e2e8f0;
+  --contorno-suave: #eef2f7;
+
+  --primaria: #2563eb;
+  --primaria-hover: #1d4ed8;
+  --primaria-suave: rgba(37, 99, 235, 0.1);
+
+  --texto: #0f172a;
+  --texto-secundario: #64748b;
+  --texto-terciario: #94a3b8;
+
+  --sucesso: #16a34a;
+  --aviso: #d97706;
+  --perigo: #dc2626;
+  --critico: #b91c1c;
+  --info: #0284c7;
+
+  --sev-info: #0284c7;
+  --sev-baixa: #16a34a;
+  --sev-media: #d97706;
+  --sev-alta: #ea580c;
+  --sev-critica: #b91c1c;
+
+  --sev-info-fundo: rgba(2, 132, 199, 0.1);
+  --sev-baixa-fundo: rgba(22, 163, 74, 0.1);
+  --sev-media-fundo: rgba(217, 119, 6, 0.12);
+  --sev-alta-fundo: rgba(234, 88, 12, 0.12);
+  --sev-critica-fundo: rgba(185, 28, 28, 0.12);
+
+  --sombra: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --sombra-elevada: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
