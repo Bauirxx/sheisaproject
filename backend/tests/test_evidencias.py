@@ -196,3 +196,66 @@ async def test_o_carregamento_fica_auditado_com_o_hash(
     assert evidencia["sha256"] in registo.description or (
         evidencia["sha256"] in str(registo.new_value)
     ), "a auditoria do carregamento não regista o hash"
+
+
+# ------------------------------------- limites expostos e carregamento de imagem
+async def test_limites_sao_expostos_pela_api(cliente, token_analista):
+    """A interface lê os limites daqui em vez de os repetir.
+
+    Uma lista de extensões duplicada no cliente acabaria por divergir da que é
+    de facto imposta, e o utilizador veria um ficheiro ser recusado depois de a
+    interface lhe dizer que era aceite.
+    """
+    resposta = await cliente.get(
+        "/api/evidence/limits", headers=cabecalho(token_analista)
+    )
+
+    assert resposta.status_code == 200, resposta.text
+    corpo = resposta.json()
+    assert corpo["tamanho_maximo_bytes"] > 0
+    assert ".png" in corpo["extensoes_permitidas"]
+    assert "CAPTURA_ECRA" in corpo["tipos"]
+
+    # O que é anunciado tem de ser o que é aplicado.
+    from app.core.config import settings
+
+    assert corpo["tamanho_maximo_bytes"] == settings.evidence_max_bytes
+    assert set(corpo["extensoes_permitidas"]) == settings.evidence_allowed_suffixes
+
+
+async def test_limites_exigem_autenticacao(cliente):
+    resposta = await cliente.get("/api/evidence/limits")
+    assert resposta.status_code == 401, resposta.text
+
+
+async def test_carregar_imagem_preserva_os_bytes(cliente, token_analista):
+    """Uma captura de ecrã é o caso corrente de recolha num posto comprometido."""
+    incidente = await _incidente(cliente, token_analista)
+
+    # PNG 1x1 válido: bytes binários, não texto.
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d494844520000000100000001080600000"
+        "01f15c4890000000d4944415478da63f8cfc0f01f0003030201fdc5b7"
+        "1e0000000049454e44ae426082"
+    )
+    resposta = await _carregar(
+        cliente,
+        token_analista,
+        incidente["id"],
+        nome="captura.png",
+        conteudo=png,
+        tipo="CAPTURA_ECRA",
+    )
+
+    assert resposta.status_code == 201, resposta.text
+    corpo = resposta.json()
+    assert corpo["evidence_type"] == "CAPTURA_ECRA"
+    assert corpo["size_bytes"] == len(png)
+
+    # Descarregar tem de devolver exactamente os mesmos bytes: uma imagem
+    # corrompida na ida ou na volta deixa de ser prova de coisa nenhuma.
+    descarga = await cliente.get(
+        f"/api/evidence/{corpo['id']}/download", headers=cabecalho(token_analista)
+    )
+    assert descarga.status_code == 200, descarga.text
+    assert descarga.content == png

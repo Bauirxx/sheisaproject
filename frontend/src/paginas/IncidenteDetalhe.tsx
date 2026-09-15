@@ -23,7 +23,6 @@ import { Link, useParams } from "react-router-dom";
 import {
   consulta,
   descarregar,
-  enviarFormulario,
   ErroDaApi,
   pedir,
 } from "@/api/cliente";
@@ -54,6 +53,7 @@ import {
   tamanhoDeFicheiro,
   Vazio,
 } from "@/componentes/comuns";
+import { CarregarEvidencias } from "@/componentes/CarregarEvidencias";
 import { GrafoInvestigativo } from "@/componentes/GrafoInvestigativo";
 import { Playbooks, Tarefas } from "@/componentes/TarefasEPlaybooks";
 
@@ -496,111 +496,6 @@ function Observacoes({ incidenteId }: { incidenteId: string }) {
   );
 }
 
-/** Carregamento de evidência. Só aparece a quem tem `evidence:upload`. */
-function CarregarEvidencia({ incidenteId }: { incidenteId: string }) {
-  const clienteDeConsultas = useQueryClient();
-  const [ficheiro, definirFicheiro] = useState<File | null>(null);
-  const [descricao, definirDescricao] = useState("");
-  const [tipo, definirTipo] = useState("LOG");
-  const [aberto, definirAberto] = useState(false);
-
-  const enviar = useMutation({
-    mutationFn: async () => {
-      if (!ficheiro) throw new Error("Escolha um ficheiro.");
-      const formulario = new FormData();
-      // Os nomes dos campos são os que a API declara no formulário
-      // (ver app/api/v1/investigation.py).
-      formulario.append("incident_id", incidenteId);
-      formulario.append("ficheiro", ficheiro);
-      formulario.append("descricao", descricao);
-      formulario.append("tipo", tipo);
-      return enviarFormulario<Evidencia>("/evidence", formulario);
-    },
-    onSuccess: () => {
-      clienteDeConsultas.invalidateQueries({ queryKey: ["evidencias", incidenteId] });
-      // A chave da linha temporal é "linha" (ver `LinhaTemporal`); usar outro
-      // nome invalidaria uma consulta inexistente e a nova evidência só
-      // apareceria depois de recarregar a página.
-      clienteDeConsultas.invalidateQueries({ queryKey: ["linha", incidenteId] });
-      definirFicheiro(null);
-      definirDescricao("");
-      definirAberto(false);
-    },
-  });
-
-  if (!aberto) {
-    return (
-      <div className="linha">
-        <button className="botao botao--pequeno" onClick={() => definirAberto(true)}>
-          Carregar evidência
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <form
-      className="cartao pilha"
-      style={{ gap: "var(--espaco-3)" }}
-      onSubmit={(e) => {
-        e.preventDefault();
-        enviar.mutate();
-      }}
-    >
-      <div className="linha" style={{ gap: "var(--espaco-3)", flexWrap: "wrap" }}>
-        <label className="campo">
-          <span className="campo__etiqueta">Ficheiro</span>
-          <input
-            type="file"
-            required
-            onChange={(e) => definirFicheiro(e.target.files?.[0] ?? null)}
-          />
-        </label>
-        <label className="campo">
-          <span className="campo__etiqueta">Tipo</span>
-          <select value={tipo} onChange={(e) => definirTipo(e.target.value)}>
-            <option value="LOG">Registo (log)</option>
-            <option value="CAPTURA_ECRA">Captura de ecrã</option>
-            <option value="CAPTURA_REDE">Captura de rede</option>
-            <option value="FICHEIRO">Ficheiro</option>
-            <option value="RELATORIO">Relatório</option>
-            <option value="ARTEFACTO">Artefacto</option>
-            <option value="OUTRO">Outro</option>
-          </select>
-        </label>
-      </div>
-      <label className="campo">
-        <span className="campo__etiqueta">Descrição</span>
-        <input
-          type="text"
-          value={descricao}
-          maxLength={2000}
-          placeholder="O que é e de onde veio."
-          onChange={(e) => definirDescricao(e.target.value)}
-        />
-      </label>
-      <p className="terciario">
-        O SHA-256 é calculado sobre os bytes recebidos e passa a ser a
-        referência para verificações de integridade posteriores.
-      </p>
-      {enviar.error ? <Erro erro={enviar.error} /> : null}
-      <div className="linha">
-        <button className="botao botao--primario" disabled={enviar.isPending}>
-          {enviar.isPending ? "A carregar…" : "Carregar"}
-        </button>
-        <button
-          type="button"
-          className="botao botao--pequeno"
-          onClick={() => definirAberto(false)}
-          disabled={enviar.isPending}
-        >
-          Cancelar
-        </button>
-      </div>
-    </form>
-  );
-}
-
 function Evidencias({ incidenteId }: { incidenteId: string }) {
   const { pode } = useSessao();
   const [erroDeDescarga, definirErroDeDescarga] = useState<unknown>(null);
@@ -615,20 +510,24 @@ function Evidencias({ incidenteId }: { incidenteId: string }) {
   if (error) return <Erro erro={error} />;
   if (!data || data.length === 0) {
     return (
-      <>
-        {podeCarregar ? <CarregarEvidencia incidenteId={incidenteId} /> : null}
+      <div className="pilha" style={{ gap: "var(--espaco-4)" }}>
+        {podeCarregar ? <CarregarEvidencias incidenteId={incidenteId} /> : null}
         <Vazio
           titulo="Sem evidências"
           detalhe="As evidências carregadas são registadas com SHA-256, o que permite demonstrar mais tarde que não foram alteradas."
         />
-      </>
+      </div>
     );
   }
 
   return (
-    <div className="tabela-envolvente">
-      {podeCarregar ? <CarregarEvidencia incidenteId={incidenteId} /> : null}
+    // A zona de largada fica **fora** de `tabela-envolvente`: esse contentor
+    // tem `overflow-x: auto` para as tabelas largas, e lá dentro a área de
+    // arrastar ficaria cortada.
+    <div className="pilha" style={{ gap: "var(--espaco-4)" }}>
+      {podeCarregar ? <CarregarEvidencias incidenteId={incidenteId} /> : null}
       {erroDeDescarga ? <Erro erro={erroDeDescarga} /> : null}
+      <div className="tabela-envolvente">
       <table className="tabela">
         <thead>
           <tr>
@@ -679,6 +578,7 @@ function Evidencias({ incidenteId }: { incidenteId: string }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

@@ -66,6 +66,32 @@ async def upload_evidence(
 
 
 @evidence_router.get(
+    "/limits",
+    summary="Limites de carregamento",
+    description=(
+        "Tamanho máximo e extensões aceites, tal como o servidor os aplica. "
+        "A interface lê-os daqui em vez de os repetir: uma lista duplicada no "
+        "cliente acabaria por divergir da que é de facto imposta, e o "
+        "utilizador veria um ficheiro ser recusado depois de a interface lhe "
+        "dizer que era aceite."
+    ),
+)
+async def evidence_limits(
+    _: Annotated[object, Depends(require(Permission.EVIDENCE_READ))],
+) -> dict:
+    from app.core.config import settings
+
+    return {
+        "tamanho_maximo_bytes": settings.evidence_max_bytes,
+        "tamanho_maximo_legivel": (
+            f"{settings.evidence_max_bytes // (1024 * 1024)} MiB"
+        ),
+        "extensoes_permitidas": sorted(settings.evidence_allowed_suffixes),
+        "tipos": [t.value for t in EvidenceType],
+    }
+
+
+@evidence_router.get(
     "",
     response_model=list[EvidenceRead],
     summary="Evidências de um incidente",
