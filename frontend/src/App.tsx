@@ -14,10 +14,14 @@ import { ProvedorDeSessao, useSessao } from "@/autenticacao/contexto";
 import { Carregando } from "@/componentes/comuns";
 import { Disposicao } from "@/componentes/Disposicao";
 import { Alertas } from "@/paginas/Alertas";
+import { Aprovacoes } from "@/paginas/Aprovacoes";
 import { Entrada } from "@/paginas/Entrada";
 import { IncidenteDetalhe } from "@/paginas/IncidenteDetalhe";
+import { IncidenteNovo } from "@/paginas/IncidenteNovo";
 import { Incidentes } from "@/paginas/Incidentes";
 import { Painel } from "@/paginas/Painel";
+import { Recomendacoes } from "@/paginas/Recomendacoes";
+import { Relatorios } from "@/paginas/Relatorios";
 
 const clienteDeDados = new QueryClient({
   defaultOptions: {
@@ -56,7 +60,11 @@ function Encaminhamento() {
         <Route path="/painel" element={<Painel />} />
         <Route path="/alertas" element={<Alertas />} />
         <Route path="/incidentes" element={<Incidentes />} />
+        <Route path="/incidentes/novo" element={<IncidenteNovo />} />
         <Route path="/incidentes/:id" element={<IncidenteDetalhe />} />
+        <Route path="/recomendacoes" element={<Recomendacoes />} />
+        <Route path="/aprovacoes" element={<Aprovacoes />} />
+        <Route path="/relatorios" element={<Relatorios />} />
       </Route>
       <Route path="*" element={<Navigate to="/painel" replace />} />
     </Routes>

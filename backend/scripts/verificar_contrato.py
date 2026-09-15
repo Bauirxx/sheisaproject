@@ -193,6 +193,43 @@ if recs.get("total"):
 else:
     print("  --  sem recomendacoes pendentes para verificar")
 
+print("\n== relatorios ==")
+# Gera um relatorio para haver o que verificar, e confere o esquema do detalhe.
+estado, novo_rel = pedir(
+    "/reports/incident", token, metodo="POST", corpo={"incident_id": alvo["id"]}
+)
+if estado == 201:
+    conferir("RelatorioDetalhado", novo_rel,
+             ["id", "reference", "kind", "title", "parameters", "period_start",
+              "period_end", "incident_id", "record_count", "created_at", "content"])
+    _, lista_rel = pedir("/reports?size=5", token)
+    if lista_rel.get("total"):
+        conferir("Relatorio", lista_rel["itens"][0],
+                 ["id", "reference", "title", "kind", "parameters", "period_start",
+                  "period_end", "incident_id", "record_count", "created_at"])
+else:
+    falhas.append(f"relatorios: HTTP {estado} ao gerar")
+
+print("\n== aprovacoes ==")
+estado, aprov = pedir("/approvals?size=5", token)
+if estado != 200:
+    falhas.append(f"aprovacoes: HTTP {estado}")
+else:
+    conferir("Pagina (aprovacoes)", aprov,
+             ["itens", "total", "pagina", "tamanho", "total_paginas"])
+    if aprov["total"]:
+        primeira = aprov["itens"][0]
+        conferir("Accao (fila de aprovacao)", primeira,
+                 ["id", "reference", "incident_id", "action_kind", "title",
+                  "rationale", "target", "status", "risk_level", "proposed_by",
+                  "approvals", "executavel", "motivo_nao_executavel", "created_at"])
+        if primeira["approvals"]:
+            conferir("Aprovacao", primeira["approvals"][0],
+                     ["id", "decision", "required_permission", "requested_at",
+                      "decided_at", "decided_by", "justification", "expires_at"])
+    else:
+        print("  --  fila de aprovacao vazia")
+
 print("\n== grafo ==")
 estado, grafo = pedir(f"/graph/incident/{alvo['id']}", token)
 conferir("Grafo", grafo, ["nos", "arestas"])

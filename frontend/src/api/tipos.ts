@@ -73,6 +73,19 @@ export interface Utilizador {
   permissions: string[];
 }
 
+/** O que `GET /users` devolve: sem a lista de permissões. */
+export interface UtilizadorResumo {
+  id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  must_change_password: boolean;
+  role: Perfil | null;
+  team: { id: string; name: string } | null;
+  last_login_at: string | null;
+  created_at: string;
+}
+
 export interface RespostaEntrada {
   access_token: string;
   refresh_token: string;
@@ -398,10 +411,12 @@ export interface Relatorio {
   reference: string;
   title: string;
   kind: string;
-  generated_at: string;
-  generated_by: ResumoUtilizador | null;
-  record_count: number;
   parameters: Record<string, unknown>;
+  period_start: string | null;
+  period_end: string | null;
+  incident_id: string | null;
+  record_count: number;
+  created_at: string;
 }
 
 export interface RelatorioDetalhado extends Relatorio {

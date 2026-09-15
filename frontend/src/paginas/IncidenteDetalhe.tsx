@@ -29,6 +29,7 @@ import type {
   EstadoIncidente,
   Evidencia,
   Incidente,
+  Grafo,
   Observacao,
   Pagina,
 } from "@/api/tipos";
@@ -46,6 +47,7 @@ import {
   tamanhoDeFicheiro,
   Vazio,
 } from "@/componentes/comuns";
+import { GrafoInvestigativo } from "@/componentes/GrafoInvestigativo";
 
 type Aba =
   | "visao"
@@ -54,7 +56,8 @@ type Aba =
   | "observacoes"
   | "evidencias"
   | "accoes"
-  | "tecnicas";
+  | "tecnicas"
+  | "grafo";
 
 const ABAS: { chave: Aba; rotulo: string }[] = [
   { chave: "visao", rotulo: "Visão geral" },
@@ -64,6 +67,7 @@ const ABAS: { chave: Aba; rotulo: string }[] = [
   { chave: "evidencias", rotulo: "Evidências" },
   { chave: "accoes", rotulo: "Acções" },
   { chave: "tecnicas", rotulo: "Técnicas" },
+  { chave: "grafo", rotulo: "Grafo" },
 ];
 
 const ROTULO_DO_ESTADO: Record<string, string> = {
@@ -538,6 +542,17 @@ function Accoes({ incidenteId }: { incidenteId: string }) {
   );
 }
 
+function GrafoDoIncidente({ incidenteId }: { incidenteId: string }) {
+  const { data, isPending, error } = useQuery({
+    queryKey: ["grafo", incidenteId],
+    queryFn: () => pedir<Grafo>(`/graph/incident/${incidenteId}`),
+  });
+
+  if (isPending) return <Carregando texto="A construir o grafo…" />;
+  if (error) return <Erro erro={error} />;
+  return <GrafoInvestigativo grafo={data} />;
+}
+
 function Tecnicas({ incidente }: { incidente: Incidente }) {
   const tecnicas = incidente.tecnicas ?? [];
   if (tecnicas.length === 0) {
@@ -716,6 +731,11 @@ export function IncidenteDetalhe() {
           {aba === "evidencias" ? <Evidencias incidenteId={data.id} /> : null}
           {aba === "accoes" ? <Accoes incidenteId={data.id} /> : null}
           {aba === "tecnicas" ? <Tecnicas incidente={data} /> : null}
+          {aba === "grafo" ? (
+            <div className="cartao">
+              <GrafoDoIncidente incidenteId={data.id} />
+            </div>
+          ) : null}
         </div>
 
         <aside className="pilha" style={{ gap: "var(--espaco-4)" }}>
