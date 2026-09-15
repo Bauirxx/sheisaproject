@@ -1,0 +1,24 @@
+#!/bin/sh
+# Invólucro exigido pelo Wazuh.
+#
+# O daemon `integrator` procura um executável chamado exactamente
+# `custom-<nome>` e passa-lhe os argumentos. Quando a lógica está em Python, a
+# convenção do Wazuh é ter o executável como este invólucro e o trabalho em
+# `custom-<nome>.py` ao lado — é assim que os integradores que vêm de fábrica
+# (Slack, VirusTotal, PagerDuty) estão feitos.
+#
+# `"$@"` e não `$*`: um caminho com espaços tem de chegar como um argumento e
+# não como vários.
+WPYTHON_BIN="framework/python/bin/python3"
+
+SCRIPT_PATH="$0"
+DIR_NAME="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+WAZUH_PATH="$(cd "$DIR_NAME/.." && pwd)"
+
+# O gestor Wazuh traz um Python próprio embutido; usa-se esse quando existe,
+# para não depender do que estiver instalado no sistema.
+if [ -x "${WAZUH_PATH}/${WPYTHON_BIN}" ]; then
+    "${WAZUH_PATH}/${WPYTHON_BIN}" "${SCRIPT_PATH}.py" "$@"
+else
+    python3 "${SCRIPT_PATH}.py" "$@"
+fi

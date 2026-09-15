@@ -1,0 +1,182 @@
+<!--
+  Configuração do gestor Wazuh do laboratório (§26).
+
+  É uma configuração mínima e deliberadamente legível, não a de fábrica com as
+  secções todas: o que aqui está é o que o laboratório precisa, e cada bloco
+  pode ser explicado numa defesa. A configuração de fábrica traz dezenas de
+  módulos — vulnerabilidades, SCA, inventário, integrações na nuvem — que não
+  participam nesta demonstração e só acrescentariam ruído aos logs.
+
+  As duas peças que importam:
+
+  1. O bloco <integration> no fim, que manda o `integrator` executar
+     `custom-sheisa` sempre que um alerta atinge o nível configurado.
+  2. O <localfile> que vigia /var/log/lab/auth.log, alimentado pelo gerador de
+     alertas do laboratório.
+-->
+<ossec_config>
+
+  <global>
+    <jsonout_output>yes</jsonout_output>
+    <alerts_log>yes</alerts_log>
+    <logall>no</logall>
+    <logall_json>no</logall_json>
+    <email_notification>no</email_notification>
+    <agents_disconnection_time>10m</agents_disconnection_time>
+    <agents_disconnection_alert_time>0</agents_disconnection_alert_time>
+  </global>
+
+  <!--
+    Nível mínimo para gerar alerta. 3 é permissivo de propósito num
+    laboratório: queremos ver a cadeia a funcionar, não filtrar ruído. Em
+    produção seria mais alto.
+  -->
+  <alerts>
+    <log_alert_level>3</log_alert_level>
+  </alerts>
+
+  <!-- Recepção de agentes. -->
+  <remote>
+    <connection>secure</connection>
+    <port>1514</port>
+    <protocol>tcp</protocol>
+    <queue_size>131072</queue_size>
+  </remote>
+
+  <!-- Registo do próprio gestor. -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/ossec/logs/active-responses.log</location>
+  </localfile>
+
+  <!--
+    Registos que o gestor vigia directamente, como agente 000. Ficam numa
+    pasta **só sua**: o agente tem a dele.
+
+    Se ambos vigiassem o mesmo ficheiro, cada linha de log produziria dois
+    alertas — um por colector — e a plataforma mostraria tudo em duplicado.
+    Não é um problema da plataforma: é uma configuração de Wazuh errada, e a
+    separação por pasta é o que a evita.
+
+    Esta pasta existe para o laboratório funcionar sem o agente a correr.
+  -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/lab/gestor/auth.log</location>
+  </localfile>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/lab/gestor/web.log</location>
+  </localfile>
+
+  <!-- Registo de comandos e integridade ficam desligados: não participam na
+       demonstração e escreveriam alertas de ruído continuamente. -->
+  <rootcheck>
+    <disabled>yes</disabled>
+  </rootcheck>
+
+  <syscheck>
+    <disabled>yes</disabled>
+  </syscheck>
+
+  <sca>
+    <enabled>no</enabled>
+  </sca>
+
+  <wodle name="syscollector">
+    <disabled>yes</disabled>
+  </wodle>
+
+  <vulnerability-detection>
+    <enabled>no</enabled>
+  </vulnerability-detection>
+
+  <!-- Sem indexer no laboratório: a SHEISA é o destino dos alertas. -->
+  <indexer>
+    <enabled>no</enabled>
+  </indexer>
+
+  <ruleset>
+    <decoder_dir>ruleset/decoders</decoder_dir>
+    <rule_dir>ruleset/rules</rule_dir>
+    <decoder_dir>etc/decoders</decoder_dir>
+    <rule_dir>etc/rules</rule_dir>
+    <list>etc/lists/audit-keys</list>
+    <list>etc/lists/amazon/aws-eventnames</list>
+    <list>etc/lists/security-eventchannel</list>
+  </ruleset>
+
+  <auth>
+    <disabled>no</disabled>
+    <port>1515</port>
+    <use_source_ip>no</use_source_ip>
+    <purge>yes</purge>
+    <use_password>no</use_password>
+    <ssl_verify_host>no</ssl_verify_host>
+    <ssl_auto_negotiate>no</ssl_auto_negotiate>
+
+    <!--
+      Substituição de um agente já registado com o mesmo nome.
+
+      Num laboratório que se levanta e derruba à vontade, o contentor do agente
+      é recriado muitas vezes e o gestor recusaria cada novo registo com
+      "Duplicate agent name". Os tempos estão curtos por isso.
+
+      **Em produção isto não se usa.** Lá, dois agentes com o mesmo nome são um
+      erro de inventário que deve ser visto, e não resolvido em silêncio — o
+      gestor a substituir registos sozinho esconderia exactamente o sintoma de
+      alguém a clonar uma máquina monitorizada.
+    -->
+    <force>
+      <enabled>yes</enabled>
+      <key_mismatch>yes</key_mismatch>
+      <disconnected_time enabled="yes">10s</disconnected_time>
+      <after_registration_time>0</after_registration_time>
+    </force>
+  </auth>
+
+  <cluster>
+    <name>wazuh</name>
+    <node_name>master</node_name>
+    <node_type>master</node_type>
+    <key></key>
+    <port>1516</port>
+    <bind_addr>0.0.0.0</bind_addr>
+    <nodes>
+      <node>wazuh-manager</node>
+    </nodes>
+    <hidden>no</hidden>
+    <disabled>yes</disabled>
+  </cluster>
+
+  <!--
+    ==========================================================================
+    A ponte para a SHEISA.
+    ==========================================================================
+
+    O daemon `integrator` corre /var/ossec/integrations/custom-sheisa sempre que
+    um alerta satisfaz o critério abaixo, passando-lhe:
+
+        argv[1]  ficheiro temporário com o alerta em JSON
+        argv[2]  o valor de <api_key>
+        argv[3]  o valor de <hook_url>
+
+    `<level>3` acompanha o log_alert_level: se o integrador filtrasse mais do
+    que o gestor, haveria alertas visíveis no Wazuh e ausentes na plataforma —
+    e a diferença seria atribuída à plataforma, não à configuração.
+
+    **A chave tem de ser substituída.** Crie-a com:
+        python -m scripts.manage create-api-key --name "Wazuh" --kind WAZUH
+    e escreva-a aqui. Sem isso a plataforma responde 401 e o integrador
+    regista-o em /var/ossec/logs/integrations.log.
+  -->
+  <integration>
+    <name>custom-sheisa</name>
+    <hook_url>http://host.docker.internal:8099/api/ingest/wazuh</hook_url>
+    <api_key>SUBSTITUIR-PELA-CHAVE-DE-INGESTAO</api_key>
+    <level>3</level>
+    <alert_format>json</alert_format>
+  </integration>
+
+</ossec_config>

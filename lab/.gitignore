@@ -1,0 +1,8 @@
+# A configuracao em uso leva a chave de ingestao em claro. O ficheiro
+# versionado e `config/ossec.conf.exemplo`; `preparar.sh` gera este a partir
+# dele. Mesmo sendo uma chave de laboratorio, uma chave em git e uma chave
+# comprometida — e este repositorio e publico.
+config/ossec.conf
+
+# Dados dos contentores, se alguem os montar localmente.
+data/

@@ -1,0 +1,106 @@
+# Laboratório de detecção (§26).
+#
+# Vive separado de `docker-compose.yml` de propósito: a plataforma tem de poder
+# correr sem o laboratório, e o laboratório tem de poder ser desligado sem
+# derrubar a base de dados. Um analista que só quer ver a interface não precisa
+# de ter um gestor Wazuh a consumir 2 GB de memória.
+#
+# **O que este laboratório deliberadamente NÃO tem:** o Wazuh Indexer e o Wazuh
+# Dashboard. Não é omissão por economia — é a tese do trabalho. O Wazuh serve
+# aqui como camada de detecção; quem organiza, investiga e responde é a SHEISA.
+# Levantar o dashboard do Wazuh ao lado seria montar duas interfaces a competir
+# pelo mesmo papel, e triplicaria os recursos necessários.
+#
+# Arranque:
+#   docker compose -f lab/docker-compose.lab.yml up -d --build
+#
+# A chave de ingestão tem de existir antes (ver lab/README.md).
+
+name: sheisa-lab
+
+services:
+  # ------------------------------------------------------------------ gestor
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.12.0
+    container_name: sheisa-wazuh-manager
+    hostname: wazuh-manager-lab
+    restart: unless-stopped
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 655360, hard: 655360 }
+    environment:
+      # Sem indexer no laboratório: desligar o envio evita que o `wazuh-modulesd`
+      # tente ligar-se a um serviço que não existe e encha o log de erros.
+      INDEXER_URL: ""
+      INDEXER_USERNAME: ""
+      INDEXER_PASSWORD: ""
+      FILEBEAT_SSL_VERIFICATION_MODE: none
+      SSL_CERTIFICATE_AUTHORITIES: ""
+      SSL_CERTIFICATE: ""
+      SSL_KEY: ""
+      API_USERNAME: wazuh-wui
+      API_PASSWORD: ${WAZUH_API_PASSWORD:-SheisaLab2026!}
+    ports:
+      # 1514/1515 são as portas dos agentes; 55000 é a API do Wazuh.
+      # Expostas apenas em loopback: um gestor Wazuh alcançável a partir da
+      # rede é um alvo, não uma conveniência.
+      - "127.0.0.1:1514:1514"
+      - "127.0.0.1:1515:1515"
+      - "127.0.0.1:55000:55000"
+    volumes:
+      # A configuração que acrescenta o bloco <integration> e o ficheiro que o
+      # gerador de alertas escreve.
+      - ./config/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
+      # O integrador. É montado em `/wazuh-config-mount/` porque a imagem copia
+      # o que está aí para dentro de `/var/ossec/` no arranque, aplicando as
+      # permissões correctas — montar directamente em `/var/ossec/integrations`
+      # a partir do Windows dá ficheiros que o `integrator` recusa executar.
+      - ./integrations/custom-sheisa:/wazuh-config-mount/integrations/custom-sheisa:ro
+      - ./integrations/custom-sheisa.py:/wazuh-config-mount/integrations/custom-sheisa.py:ro
+      # Registos que o gerador alimenta e que o gestor vigia.
+      - lab-logs:/var/log/lab
+      - lab-manager-etc:/var/ossec/etc
+      - lab-manager-logs:/var/ossec/logs
+      - lab-manager-queue:/var/ossec/queue
+    extra_hosts:
+      # Como a plataforma corre no anfitrião e não em Docker, o integrador
+      # precisa de um nome para lá chegar. No Docker Desktop
+      # `host.docker.internal` já existe; em Linux esta linha cria-o.
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "/var/ossec/bin/wazuh-control status | grep -q 'wazuh-analysisd is running'"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+  # ------------------------------------------------------------------ agente
+  # Não existe imagem oficial `wazuh/wazuh-agent`, pelo que o agente é
+  # construído a partir do repositório de pacotes da Wazuh. Ver lab/agente/.
+  wazuh-agent:
+    build:
+      context: ./agente
+      args:
+        WAZUH_VERSION: "4.12.0-1"
+    container_name: sheisa-wazuh-agent
+    hostname: srv-web-lab
+    restart: unless-stopped
+    depends_on:
+      wazuh-manager:
+        condition: service_healthy
+    environment:
+      WAZUH_MANAGER: wazuh-manager
+      WAZUH_AGENT_NAME: srv-web-lab
+    volumes:
+      # O agente vigia o mesmo ficheiro que o gerador alimenta, o que permite
+      # demonstrar a cadeia completa: linha no log → agente → gestor →
+      # integrador → SHEISA.
+      - lab-logs:/var/log/lab
+    cap_add:
+      - SYS_PTRACE
+
+volumes:
+  lab-logs:
+  lab-manager-etc:
+  lab-manager-logs:
+  lab-manager-queue:
