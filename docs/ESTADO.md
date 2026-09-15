@@ -3,7 +3,7 @@
 > Documento de passagem de testemunho. Descreve o que está **feito e
 > verificado**, o que **falta**, e como retomar o trabalho sem repetir análise.
 >
-> Última actualização: 2026-09-15 (recomendações, testes e cenário de demonstração concluídos)
+> Última actualização: 2026-09-15 (recomendações, testes, demonstração e frontend)
 
 ---
 
@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
-| **A seguir** | **5.4 frontend** → 5.5 laboratório Wazuh → 5.7 documentação |
+| **A seguir** | 5.4 frontend (12 páginas feitas; falta polir e ver no ecrã) → 5.5 laboratório Wazuh → 5.7 documentação |
 | **Backend** | 106 rotas, 21 domínios, ~19k linhas |
-| **Testes** | 221 a passar, 75% de cobertura |
-| **Ambiente** | Python 3.13.7 · PostgreSQL 16 em Docker · API em :8099 |
+| **Testes** | 222 a passar, 75% de cobertura · `verificar_contrato.py` para o frontend |
+| **Ambiente** | Python 3.13.7 · Node 22.20 · PostgreSQL 16 em Docker · API em :8099 · interface em :5173 |
 | **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
 
 **Documentos de referência, agora versionados:**
@@ -164,6 +164,44 @@ diagnóstico errado uma vez).
 - Aplicação passa sempre pelos serviços reais (`incident_service.transition`,
   `promote_alert`, `playbook_engine.start_execution`) — uma recomendação aceite
   tem exactamente o mesmo efeito que a acção feita à mão.
+
+### Frontend (§4.13, §28–§30, §77–§82) — 12 páginas
+`frontend/`, React 18 + TypeScript + Vite, tudo em português.
+`npm install && npm run dev` → <http://localhost:5173>. O proxy de `/api` para
+`127.0.0.1:8099` mantém os caminhos iguais aos de produção e dispensa CORS.
+
+As seis telas do §4.13 estão todas: entrada, painel, lista de incidentes,
+registo, detalhe e relatórios. Mais: alertas, recomendações, aprovações,
+indicadores, activos, MITRE, auditoria, administração e playbooks.
+
+Decisões que convém não desfazer:
+
+- **O token de acesso vive em memória**, nunca em `localStorage` — que é
+  legível por qualquer XSS. A sessão recupera-se pelo token de renovação.
+- **A renovação é partilhada** entre pedidos concorrentes: cinco renovações ao
+  mesmo tempo disparariam a detecção de reutilização do servidor, que revoga a
+  sessão inteira por suspeitar de roubo.
+- **`pode()` esconde, não protege.** Quem chegar pelo URL leva 403 do servidor.
+- **O ciclo de vida vem do servidor** (`transicoes_permitidas`); o cliente não
+  reimplementa `INCIDENT_TRANSITIONS`.
+- **A cor nunca comunica sozinha** (§79): todos os distintivos de severidade
+  trazem o texto do valor.
+- **O grafo tem disposição determinística.** Uma simulação física move os nós
+  enquanto estabiliza, e um analista que aponta para um nó e o vê fugir perde o
+  fio à investigação.
+
+> **`backend/scripts/verificar_contrato.py`** confirma que os campos que o
+> frontend lê existem mesmo nas respostas da API. O TypeScript garante
+> coerência interna, não correspondência com o servidor — os tipos foram
+> escritos à mão. Apanhou quatro divergências reais que teriam aparecido na
+> interface como "undefined", entre elas `ActionRead` não expor **quem propôs**
+> a acção, o que impedia a interface de explicar a separação de funções.
+> **Correr depois de mexer nos esquemas do backend.**
+
+> **Por verificar: o aspecto.** Nada disto foi visto num navegador — não havia
+> um disponível. Compila, o servidor serve, o proxy responde, a autenticação
+> real funciona e o contrato está confirmado campo a campo. O que falta
+> confirmar é espaçamento, contraste e se alguma tabela transborda.
 
 ### Cenário de demonstração — os dez passos do §4.14
 `app/services/demo_service.py`, invocado por `python -m scripts.manage demo
@@ -355,12 +393,19 @@ Onde a cobertura continua baixa, e porquê:
 - `playbooks/engine` — os caminhos de suspensão e retoma estão testados; os
   tipos de passo menos usados não.
 
-### 5.4 Frontend (§28–§30) — **não começado**
-`frontend/` está vazio. React + TypeScript + Vite, **interface toda em
-português**, 20 páginas do §30, densidade de SOC, grafo investigativo
-interactivo. A API já expõe tudo o que é preciso, incluindo
-`transicoes_permitidas` em cada incidente (para o frontend não duplicar as
-regras do ciclo de vida) e `executavel`/`motivo_nao_executavel` nas acções.
+### 5.4 Frontend — **feito na substância; falta vê-lo** (ver §4)
+12 páginas, as seis telas do §4.13 incluídas. `cd frontend && npm install &&
+npm run dev`.
+
+Por fazer:
+- **abrir num navegador e corrigir o que estiver torto** — é o único passo que
+  não pôde ser dado;
+- upload de evidências pela interface (a API aceita `multipart/form-data`; a
+  página mostra e descarrega, mas ainda não carrega);
+- edição de incidente (`PATCH /incidents/{id}`) e atribuição a partir do
+  detalhe;
+- notificações (`/api/notifications`) e integrações (`/api/integrations`), que
+  têm API e ainda não têm ecrã.
 
 ### 5.5 Laboratório Wazuh (§26) — **não começado**
 `lab/` tem as pastas mas está vazio. Falta `lab/docker-compose.lab.yml` com
@@ -431,6 +476,9 @@ backend/tests/  conftest (migração, transacção por teste, contas), e por tem
 1. `docker compose up -d db db-test` e `./scripts/api.sh start`.
 2. Confirmar: `curl http://127.0.0.1:8099/api/health/ready`.
 3. Ler este ficheiro e a secção 5.
-4. Trabalhar pela ordem 5.4 → 5.5 (frontend, lab); 5.1, 5.2 e 5.3 estão feitos.
-5. Antes de cada commit: `./.venv/Scripts/python.exe -m ruff check app tests scripts`
-   e `./.venv/Scripts/python.exe -m pytest`.
+4. Trabalhar pela ordem 5.5 → 5.7 (laboratório, PDF, documentação);
+   5.1 a 5.4 estão feitos. Antes disso, abrir a interface e corrigir o
+   que estiver visualmente errado.
+5. Antes de cada commit: `ruff check app tests scripts`, `pytest`, e no
+   frontend `npm run verificar`. Depois de mexer nos esquemas da API,
+   `python -m scripts.verificar_contrato <senha-de-admin>`.
