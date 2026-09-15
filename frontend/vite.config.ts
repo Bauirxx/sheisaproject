@@ -12,8 +12,20 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   server: {
-    port: 5173,
+    // Porta 5500 e nao a 5173 habitual do Vite.
+    //
+    // O Windows reserva intervalos de portas para o Hyper-V/WSL e a 5173 cai
+    // dentro de um deles nesta maquina (5141-5240), o que faz o arranque
+    // rebentar com `EACCES: permission denied ::1:5173` — um erro que parece
+    // de permissoes do processo mas e do sistema operativo.
+    // Confirmar os intervalos com:
+    //   netsh interface ipv4 show excludedportrange protocol=tcp
+    // A 5500 esta fora de todos eles. `SHEISA_PORTA_UI` permite mudar sem
+    // editar este ficheiro.
+    port: Number(process.env.SHEISA_PORTA_UI ?? 5500),
     strictPort: true,
+    // Apenas IPv4: o `EACCES` acima manifestou-se primeiro em `::1`.
+    host: "127.0.0.1",
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8099",

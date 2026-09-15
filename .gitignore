@@ -14,3 +14,7 @@ dist/
 htmlcov/
 lab/data/
 *.log
+
+# Clone vazio criado acidentalmente dentro do projecto (repositorio sem commits).
+# Ignorado em vez de apagado: nao foi criado por este trabalho.
+/sheisaproject/

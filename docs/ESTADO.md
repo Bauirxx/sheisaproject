@@ -12,10 +12,11 @@
 | | |
 |---|---|
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
-| **A seguir** | 5.4 frontend (12 páginas feitas; falta polir e ver no ecrã) → 5.5 laboratório Wazuh → 5.7 documentação |
+| **A seguir** | 5.4 frontend (compila e serve; falta ver no ecrã e acrescentar upload/edição) → 5.5 levantar o laboratório Wazuh → 5.7 documentação |
 | **Backend** | 106 rotas, 21 domínios, ~19k linhas |
 | **Testes** | 222 a passar, 75% de cobertura · `verificar_contrato.py` para o frontend |
-| **Ambiente** | Python 3.13.7 · Node 22.20 · PostgreSQL 16 em Docker · API em :8099 · interface em :5173 |
+| **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
+| **Ambiente** | Python 3.13.7 · Node 22.20 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
 | **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
 
 **Documentos de referência, agora versionados:**
@@ -93,8 +94,8 @@ docker compose up -d   sheisa-db :15433 · sheisa-db-test :15434
 >
 > Depois de um clone **não existe** `.env`, `backend/.venv`, `var/` (onde vive
 > a cópia local do bundle STIX do ATT&CK) nem as contas do §6 — tudo isso é
-> ignorado pelo git. As pastas `frontend/` e `lab/` também não vêm no clone
-> porque estavam vazias e o git não versiona pastas vazias.
+> ignorado pelo git. `frontend/node_modules` também não: correr
+> `cd frontend && npm install` depois do clone.
 
 Arranque de raiz:
 
@@ -393,7 +394,13 @@ Onde a cobertura continua baixa, e porquê:
 - `playbooks/engine` — os caminhos de suspensão e retoma estão testados; os
   tipos de passo menos usados não.
 
-### 5.4 Frontend — **feito na substância; falta vê-lo** (ver §4)
+### 5.4 Frontend — **compila e serve; falta vê-lo num navegador** (ver §4)
+
+> **Porta 5500, não 5173.** O Windows reserva intervalos de portas para o
+> Hyper-V/WSL e a 5173 cai dentro de um deles nesta máquina, o que fazia o
+> Vite rebentar com `EACCES: permission denied ::1:5173`. Confirmar com
+> `netsh interface ipv4 show excludedportrange protocol=tcp`.
+> Alterar com a variável `SHEISA_PORTA_UI`.
 12 páginas, as seis telas do §4.13 incluídas. `cd frontend && npm install &&
 npm run dev`.
 
@@ -407,10 +414,17 @@ Por fazer:
 - notificações (`/api/notifications`) e integrações (`/api/integrations`), que
   têm API e ainda não têm ecrã.
 
-### 5.5 Laboratório Wazuh (§26) — **não começado**
-`lab/` tem as pastas mas está vazio. Falta `lab/docker-compose.lab.yml` com
-Wazuh manager + agente, e o script `custom-sheisa` para o daemon *integrator*.
-Contrato real já estudado e documentado em `app/ingestion/wazuh.py`:
+### 5.5 Laboratório Wazuh (§26) — **escrito; falta correr**
+Os ficheiros existem: `lab/docker-compose.lab.yml`, `lab/preparar.sh`,
+`lab/gerar-alertas.sh`, `lab/agente/Dockerfile`, `lab/integrations/custom-sheisa`
+(+ `.py`) e `lab/config/ossec.conf.exemplo`.
+
+Por verificar: **nunca foi levantado**. Falta `bash lab/preparar.sh`, confirmar
+que o manager arranca, que o agente regista, e que um alerta real percorre
+`integrator → custom-sheisa → POST /api/ingest/wazuh → alerta na plataforma`.
+A imagem do Wazuh é pesada; conte com uma descarga demorada.
+
+Contrato do *integrator*, já documentado em `app/ingestion/wazuh.py`:
 `argv[1]`=ficheiro do alerta, `argv[2]`=api_key, `argv[3]`=hook_url.
 
 ### 5.6 Exportação PDF — opcional, degrada bem
@@ -428,7 +442,7 @@ Criadas na base de dados de desenvolvimento (**não** são segredos de produçã
 
 | Conta | Perfil | Palavra-passe |
 |---|---|---|
-| `admin@sheisa.local` | ADMINISTRADOR | `LaJdxJVBcQobCy42tSya` (gerada no `init` de 2026-09-15) |
+| `admin@sheisa.local` | ADMINISTRADOR | `gfvAXtXTHnSBgSKpTYM8` |
 | `gestor@sheisa.local` | GESTOR | `GestorSeguro2026` |
 | `analista@sheisa.local` | ANALISTA_SOC | `AnalistaSeguro2026` |
 
