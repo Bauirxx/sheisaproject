@@ -3,7 +3,7 @@
 > Documento de passagem de testemunho. Descreve o que está **feito e
 > verificado**, o que **falta**, e como retomar o trabalho sem repetir análise.
 >
-> Última actualização: 2026-09-15 (motor de recomendações e suite de testes concluídos)
+> Última actualização: 2026-09-15 (recomendações, testes e cenário de demonstração concluídos)
 
 ---
 
@@ -11,10 +11,10 @@
 
 | | |
 |---|---|
-| **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **suite de testes (5.3)** |
-| **A seguir** | **5.2 cenário de demonstração** → 5.4 frontend → 5.5 laboratório Wazuh → 5.7 documentação |
+| **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
+| **A seguir** | **5.4 frontend** → 5.5 laboratório Wazuh → 5.7 documentação |
 | **Backend** | 106 rotas, 21 domínios, ~19k linhas |
-| **Testes** | 211 a passar, 74% de cobertura |
+| **Testes** | 221 a passar, 75% de cobertura |
 | **Ambiente** | Python 3.13.7 · PostgreSQL 16 em Docker · API em :8099 |
 | **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
 
@@ -165,7 +165,38 @@ diagnóstico errado uma vez).
   `promote_alert`, `playbook_engine.start_execution`) — uma recomendação aceite
   tem exactamente o mesmo efeito que a acção feita à mão.
 
-### Suite de testes (§32) — 211 testes, 74% de cobertura
+### Cenário de demonstração — os dez passos do §4.14
+`app/services/demo_service.py`, invocado por `python -m scripts.manage demo
+[--reset]`. Percorre o guião da monografia **pelo fluxo real da aplicação**:
+ingestão pelo normalizador do Suricata, promoção por `promote_alert`,
+transições por `incident_service.transition`. Inserir linhas directamente seria
+muito mais curto e produziria uma demonstração de dados em vez do sistema — um
+incidente inserido à mão não tem observações, nem marcos, nem grafo, nem
+relatório.
+
+- **Fonte: Suricata**, como o §4.14 diz (as verificações manuais do
+  desenvolvimento usaram Wazuh, que é a fonte do laboratório).
+- **Dois sinais**: força bruta SSH (4 eventos → 1 alerta, demonstra a
+  deduplicação) e uma comunicação com infra-estrutura externa, ligada ao mesmo
+  incidente. O segundo existe porque um incidente com um só indicador dá um
+  grafo de 3 nós, que não demonstra investigação nenhuma; com ele são **8 nós e
+  7 arestas**.
+- **Ciclo de vida completo** segundo o §4.9: `NOVO → ABERTO → INVESTIGAÇÃO →
+  CONTENÇÃO → ERRADICAÇÃO → RECUPERAÇÃO → RESOLVIDO → ENCERRADO`. O guião de
+  dez passos resume "em resposta"; a plataforma decompõe, e é dessa decomposição
+  que saem os marcos temporais.
+- **Tudo marcado com `is_demo_data=True`** e removível com `--reset`, que apaga
+  os dados de demonstração e **só** esses — verificado por teste. A auditoria
+  não é apagada: a tabela é append-only por construção.
+- Domínio de C2 em `.invalid` (RFC 2606), que nunca poderá pertencer a ninguém.
+
+Duas coisas que o cenário **diz em vez de disfarçar**: quando a classificação
+automática já acertou, o relato diz "confirmada" e não finge uma alteração; e as
+métricas de resposta aparecem comprimidas porque o cenário corre em segundos —
+os marcos são reais, o intervalo entre eles não representa trabalho humano.
+Antedatá-los produziria números mais apresentáveis e falsos.
+
+### Suite de testes (§32) — 221 testes, 75% de cobertura
 `backend/tests/`, 17 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
 (a configuração está em `pytest.ini` e `.coveragerc`).
 
@@ -302,29 +333,13 @@ O mapa `GROUP_TO_TECHNIQUE` (15 entradas) é o sítio a alargar se se quiser
 cobrir mais grupos de regra: acrescentar uma linha chega, porque o
 identificador é sempre validado contra o catálogo antes de ser proposto.
 
-### 5.2 Cenário de demonstração — **por fazer, já desbloqueado**
-`app/services/demo_service.py` é referido por `scripts/manage.py demo` mas
-**não existe** (o comando falha). Deve percorrer os **10 passos do §4.14 da
-monografia** usando o **fluxo real** da aplicação (ingestão pela API, não
-inserções directas) e marcar tudo com `is_demo_data=True`.
+### 5.2 Cenário de demonstração — **feito** (ver §4)
+`python -m scripts.manage demo --reset`. Os dez passos do §4.14 da monografia,
+transcritos em [`MONOGRAFIA-CAP4.md`](MONOGRAFIA-CAP4.md#414-exemplo-de-cenário-para-demonstrar-o-protótipo).
 
-Os 10 passos, do documento:
-
-| Passo | Acção |
-|---|---|
-| 1 | O alerta é identificado (Suricata detecta actividade suspeita). |
-| 2 | O analista regista/converte o alerta num incidente. |
-| 3 | O sistema gera automaticamente o identificador. |
-| 4 | O analista classifica o incidente. |
-| 5 | Define a severidade como Alta. |
-| 6 | Atribui o incidente ao responsável. |
-| 7 | Adiciona comentários e evidências. |
-| 8 | O incidente passa a Em Investigação. |
-| 9 | Depois da resposta, passa a Resolvido. |
-| 10 | Após validação, passa a Encerrado. |
-
-O cenário deve usar **Suricata** como fonte, porque é essa a fonte do §4.14 —
-e não Wazuh, que foi a fonte usada nas verificações manuais até agora.
+Se quiser alargá-lo: `_eventos_suricata` e `_evento_c2` em
+`app/services/demo_service.py` são os dois sinais; acrescentar um terceiro é
+acrescentar uma função e uma chamada a `ingest_batch`.
 
 ### 5.3 Testes (§32) — **feito** (ver §4)
 211 testes, 74% de cobertura. O que a lista do §32 pede está coberto.
@@ -399,7 +414,8 @@ backend/app/
   integrations/base, wazuh_connector, siem_connectors (QRadar/NetScout), registry
   services/    auth, bootstrap, ingestion, incident, evidence, action,
                integration, mitre, seed, analytics, report, timeline,
-               recommendation (sincronizar / decidir / aplicar)
+               recommendation (sincronizar / decidir / aplicar),
+               demo (os dez passos do §4.14 pelo fluxo real)
   api/v1/      auth, ingest, alerts, incidents, investigation, catalog,
                response, recommendations, analytics, reports, admin
 
@@ -415,6 +431,6 @@ backend/tests/  conftest (migração, transacção por teste, contas), e por tem
 1. `docker compose up -d db db-test` e `./scripts/api.sh start`.
 2. Confirmar: `curl http://127.0.0.1:8099/api/health/ready`.
 3. Ler este ficheiro e a secção 5.
-4. Trabalhar pela ordem 5.2 → 5.5 (demo, frontend, lab); 5.1 e 5.3 estão feitos.
+4. Trabalhar pela ordem 5.4 → 5.5 (frontend, lab); 5.1, 5.2 e 5.3 estão feitos.
 5. Antes de cada commit: `./.venv/Scripts/python.exe -m ruff check app tests scripts`
    e `./.venv/Scripts/python.exe -m pytest`.
