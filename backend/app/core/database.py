@@ -23,8 +23,29 @@ from app.core.config import settings
 
 
 class Base(DeclarativeBase):
-    """Base declarativa de todos os modelos."""
+    """Base declarativa de todos os modelos.
 
+    `eager_defaults=True` não é uma afinação de desempenho — é uma correcção.
+
+    Colunas geradas pelo servidor (`created_at`, e sobretudo `updated_at`, que
+    tem `onupdate=func.now()`) são, por omissão, *expiradas* depois de um flush:
+    o SQLAlchemy sabe que o valor em memória ficou obsoleto e vai relê-lo do
+    servidor no próximo acesso. Esse acesso é síncrono, e numa aplicação
+    assíncrona acontece tipicamente já durante a serialização da resposta —
+    fora do contexto em que é possível fazer E/S. O resultado era um
+    `MissingGreenlet` a transformar-se num 500.
+
+    O sintoma era intermitente porque só surgia quando algo forçava um flush
+    entre a alteração e a resposta: marcar um incidente como falso positivo
+    consulta os alertas associados, e essa consulta faz autoflush. A mesma rota
+    com outro estado de destino funcionava.
+
+    Com `eager_defaults`, o PostgreSQL devolve os valores gerados na própria
+    instrução (RETURNING). Nada fica expirado, não há leitura tardia, e não há
+    viagem adicional à base de dados.
+    """
+
+    __mapper_args__: ClassVar[dict[str, Any]] = {"eager_defaults": True}
     type_annotation_map: ClassVar[dict[Any, Any]] = {}
 
 

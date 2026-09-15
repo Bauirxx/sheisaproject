@@ -625,6 +625,20 @@ async def assign(
         new_value={"responsavel": str(assignee_id) if assignee_id else None},
         changed_fields=["assignee_id"],
     )
+
+    # `assignee` e `team` são carregados com a consulta (`lazy="selectin"`), pelo
+    # que alterar a chave estrangeira não actualiza o objecto já em memória. Sem
+    # este refresh, a resposta à atribuição devolvia `assignee: null` logo a
+    # seguir a atribuir, e a interface mostraria "sem responsável" ao utilizador
+    # que acabara de o escolher.
+    #
+    # O refresh é total e não limitado a `["assignee", "team"]`: o flush emite o
+    # UPDATE, que dispara o `onupdate` de `updated_at` no servidor e deixa essa
+    # coluna expirada. Lê-la mais tarde, já durante a serialização da resposta,
+    # seria um acesso à base de dados fora do contexto assíncrono — o erro
+    # `MissingGreenlet`. Recarregar tudo de uma vez deixa o objecto completo.
+    await session.flush()
+    await session.refresh(incident)
     return incident
 
 

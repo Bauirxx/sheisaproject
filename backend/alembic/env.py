@@ -75,5 +75,14 @@ async def run_migrations_online() -> None:
 
 if context.is_offline_mode():
     run_migrations_offline()
+elif (injected := config.attributes.get("connection")) is not None:
+    # Ligação fornecida por quem chama (a suite de testes migra a base de dados
+    # de teste a partir de um ciclo de eventos já a correr). Sem este ramo,
+    # `asyncio.run` abaixo rebentaria com "cannot be called from a running
+    # event loop" e as migrações só seriam aplicáveis pela linha de comandos —
+    # o que obrigaria os testes a criar o esquema a partir dos metadados e a
+    # perder os gatilhos de imutabilidade da auditoria, que só existem nas
+    # migrações.
+    _do_run_migrations(injected)
 else:
     asyncio.run(run_migrations_online())

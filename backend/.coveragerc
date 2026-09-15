@@ -1,0 +1,19 @@
+# Configuracao de cobertura.
+#
+# `concurrency = greenlet` nao e opcional: o SQLAlchemy em modo assincrono
+# suspende as funcoes em greenlets a cada ida a base de dados. Sem esta linha,
+# o rastreador perde tudo o que se executa depois do primeiro `await` sobre a
+# base de dados, e modulos exaustivamente testados apareciam com 26% de
+# cobertura - um numero que levaria a escrever testes que ja existem.
+[run]
+source = app
+concurrency = greenlet
+omit =
+    app/__init__.py
+    */__pycache__/*
+
+[report]
+exclude_also =
+    if TYPE_CHECKING:
+    raise NotImplementedError
+    # pragma: no cover

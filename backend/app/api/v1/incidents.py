@@ -22,7 +22,7 @@ from app.core.enums import (
     Severity,
     TaskStatus,
 )
-from app.core.errors import NotFoundError, ValidationError
+from app.core.errors import AuthorizationError, NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, apply_sort, page_params, paginate
 from app.core.permissions import Permission
 from app.models.incident import Incident, IncidentRelation, IncidentTechnique
@@ -267,8 +267,26 @@ async def transition_incident(
     payload: IncidentTransition,
     session: SessionDep,
     ctx: AuditDep,
-    _: Annotated[object, Depends(require(Permission.INCIDENTS_TRANSITION))],
+    user: Annotated[object, Depends(require(Permission.INCIDENTS_TRANSITION))],
 ) -> IncidentRead:
+    # Encerrar não é uma transição como as outras: fecha o registo e retira o
+    # incidente das filas de trabalho. `incidents:close` existe precisamente
+    # para separar quem conduz de quem dá por terminado, e só é verificável
+    # aqui, porque o estado de destino vem no corpo do pedido e não na rota.
+    if payload.status is IncidentStatus.ENCERRADO:
+        detidas = {p.code for p in user.role.permissions} if user.role else set()
+        if Permission.INCIDENTS_CLOSE.value not in detidas:
+            await audit.record_denied(
+                session,
+                ctx,
+                action="ALTERAR_ESTADO",
+                resource_type="incidente",
+                resource_id=incident_id,
+                reason=f"permissão em falta: {Permission.INCIDENTS_CLOSE.value}",
+            )
+            await session.commit()
+            raise AuthorizationError(required=Permission.INCIDENTS_CLOSE.value)
+
     incident = await incident_service.get_incident(session, incident_id, with_details=True)
     await incident_service.transition(
         session, ctx,
