@@ -54,6 +54,10 @@ import {
   Vazio,
 } from "@/componentes/comuns";
 import { CarregarEvidencias } from "@/componentes/CarregarEvidencias";
+import {
+  BotaoEditarIncidente,
+  EditarIncidente,
+} from "@/componentes/EditarIncidente";
 import { GrafoInvestigativo } from "@/componentes/GrafoInvestigativo";
 import { Playbooks, Tarefas } from "@/componentes/TarefasEPlaybooks";
 
@@ -713,6 +717,7 @@ function Tecnicas({ incidente }: { incidente: Incidente }) {
 export function IncidenteDetalhe() {
   const { id = "" } = useParams();
   const [aba, definirAba] = useState<Aba>("visao");
+  const [aEditar, definirAEditar] = useState(false);
 
   const { data, isPending, error } = useQuery({
     queryKey: ["incidente", id],
@@ -758,7 +763,28 @@ export function IncidenteDetalhe() {
             {data.source_detail ? ` · ${data.source_detail}` : ""}
           </p>
         </div>
+        <div className="pagina__accoes">
+          <BotaoEditarIncidente
+            aberto={aEditar}
+            aoAlternar={() => definirAEditar((v) => !v)}
+          />
+        </div>
       </div>
+
+      {/* O formulário abre por baixo do cabeçalho, em largura inteira: os
+          campos de texto longo (descrição, lições aprendidas) não cabem na
+          coluna estreita das acções. */}
+      {aEditar ? (
+        <EditarIncidente
+          // `key` pelo instante de actualização: se o incidente mudar por
+          // outra via (transição, atribuição) enquanto o formulário está
+          // aberto, este remonta com os valores novos em vez de gravar por
+          // cima com os antigos.
+          key={data.updated_at}
+          incidente={data}
+          aoFechar={() => definirAEditar(false)}
+        />
+      ) : null}
 
       <div className="separadores" role="tablist">
         {ABAS.map((entrada) => (

@@ -175,6 +175,8 @@ export interface IncidenteResumo {
   due_at: string | null;
   is_demo_data: boolean;
   created_at: string;
+  /** Muda a cada alteração; serve para detectar edições concorrentes. */
+  updated_at: string;
 }
 
 export interface Incidente extends IncidenteResumo {
