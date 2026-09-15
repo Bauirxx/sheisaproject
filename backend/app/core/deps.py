@@ -108,22 +108,21 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 def get_audit_context(request: Request) -> AuditContext:
     """Contexto de auditoria do pedido actual.
 
-    Funciona com ou sem utilizador autenticado, para que tentativas de acesso
-    não autenticadas também possam ser registadas.
-    """
-    user: User | None = getattr(request.state, "user", None)
-    api_key: ApiKey | None = getattr(request.state, "api_key", None)
+    O `Request` é passado ao contexto em vez de se extrair já dele a
+    identidade. O FastAPI resolve as dependências pela ordem da assinatura, e
+    esta é habitualmente declarada antes da que autentica o utilizador — se a
+    identidade fosse lida aqui, estaria sempre vazia. O contexto resolve-a no
+    momento em que a auditoria é escrita, altura em que a autenticação já
+    ocorreu.
 
+    Funciona com ou sem utilizador autenticado, para que tentativas de acesso
+    não autenticadas também fiquem registadas.
+    """
     return AuditContext(
-        actor_id=user.id if user else None,
-        actor_email=user.email if user else ("chave-api" if api_key else "anonimo"),
-        actor_role=user.role.name if user and user.role else None,
-        api_key_id=api_key.id if api_key else None,
-        is_system=user is None,
-        origin="ingestao" if api_key else "aplicacao_web",
+        request=request,
+        origin="aplicacao_web",
         ip_address=client_ip(request),
         user_agent=(request.headers.get("user-agent") or "")[:255] or None,
-        request_id=getattr(request.state, "request_id", None),
     )
 
 
@@ -149,12 +148,19 @@ def require(*permissions: Permission, require_all: bool = True):
 
         if not ok:
             missing = sorted(set(codes) - held)
+            # `resource_type` é um tipo de recurso, não um caminho: a coluna
+            # tem 40 caracteres e um URL com identificadores excede-a, o que
+            # fazia a escrita da auditoria rebentar e transformava um 403
+            # legítimo num 500. O caminho concreto vai na descrição.
             await audit.record_denied(
                 session,
                 ctx,
                 action="ACESSO_NEGADO",
-                resource_type=request.url.path,
-                reason=f"permissões em falta: {', '.join(missing)}",
+                resource_type="endpoint",
+                reason=(
+                    f"permissões em falta ({', '.join(missing)}) em "
+                    f"{request.method} {request.url.path}"
+                ),
             )
             # Consolidamos o registo da negação: a excepção que se segue faz
             # rollback da transacção do pedido e levaria a auditoria com ela.

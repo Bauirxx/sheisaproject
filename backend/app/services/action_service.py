@@ -68,6 +68,7 @@ DEFAULT_RISK: dict[ActionKind, ActionRiskLevel] = {
     ActionKind.EXECUTAR_VARRIMENTO: ActionRiskLevel.BAIXO,
     ActionKind.RECOLHER_ARTEFACTOS: ActionRiskLevel.BAIXO,
     ActionKind.NOTIFICAR_EQUIPA: ActionRiskLevel.BAIXO,
+    ActionKind.AUTORIZAR_PROSSEGUIMENTO: ActionRiskLevel.CRITICO,
     ActionKind.ENRIQUECER_IOC: ActionRiskLevel.BAIXO,
     ActionKind.REGISTAR_NOTA: ActionRiskLevel.BAIXO,
 }
@@ -80,6 +81,13 @@ REVERSIBLE_BY: dict[ActionKind, ActionKind] = {
 
 #: Prazo por omissão de um pedido de aprovação.
 APPROVAL_TTL_HOURS = 24
+
+#: Acções que não actuam sobre nenhum sistema externo e, por isso, não exigem
+#: integração. A sua "execução" é a própria decisão humana.
+NO_INTEGRATION_REQUIRED: frozenset[ActionKind] = frozenset({
+    ActionKind.AUTORIZAR_PROSSEGUIMENTO,
+    ActionKind.REGISTAR_NOTA,
+})
 
 
 def resolve_risk_level(
@@ -353,6 +361,24 @@ async def execute_action(
         raise ConflictError(
             f"A acção {action.reference} está {action.status.value} e não pode ser executada."
         )
+
+    # Uma porta de autorização não contacta nenhum sistema: a decisão humana
+    # já registada *é* o seu resultado. Executá-la é apenas fechar o registo.
+    if action.action_kind in NO_INTEGRATION_REQUIRED:
+        action.status = ActionStatus.EXECUTADA
+        action.executed_at = datetime.now(UTC)
+        action.executed_by_id = ctx.actor_id
+        action.result = {
+            "sucesso": True,
+            "detalhe": "Autorização registada; não houve actuação sobre sistemas externos.",
+        }
+        await audit.record(
+            session, ctx,
+            action="EXECUTAR_ACCAO", resource_type="accao",
+            resource_id=action.id, resource_reference=action.reference,
+            description=f"Acção {action.reference} ({action.action_kind.value}) concluída.",
+        )
+        return action
 
     action.status = ActionStatus.EM_EXECUCAO
     await session.flush()

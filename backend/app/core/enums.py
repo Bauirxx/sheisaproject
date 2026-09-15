@@ -452,5 +452,11 @@ class ActionKind(StrEnum):
     EXECUTAR_VARRIMENTO = "EXECUTAR_VARRIMENTO"
     RECOLHER_ARTEFACTOS = "RECOLHER_ARTEFACTOS"
     NOTIFICAR_EQUIPA = "NOTIFICAR_EQUIPA"
+    #: Porta de autorizacao de um playbook. Nao actua sobre nenhum sistema:
+    #: existe para que a decisao humana tenha uma entidade real, aprovavel e
+    #: auditavel. Sem ela, um passo "solicitar aprovacao" suspenderia a
+    #: execucao sem nada que pudesse ser aprovado - e o playbook nunca mais
+    #: seria retomado.
+    AUTORIZAR_PROSSEGUIMENTO = "AUTORIZAR_PROSSEGUIMENTO"
     ENRIQUECER_IOC = "ENRIQUECER_IOC"
     REGISTAR_NOTA = "REGISTAR_NOTA"

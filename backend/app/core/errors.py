@@ -78,11 +78,18 @@ class AuthorizationError(SheisaError):
     code = "SEM_PERMISSAO"
     message = "Não tem permissão para executar esta operação."
 
-    def __init__(self, required: str | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, message: str | None = None, *, required: str | None = None, **kwargs: Any
+    ) -> None:
+        # `required` é palavra-chave para que o primeiro argumento posicional
+        # seja a mensagem, como em todos os outros erros. Antes era o contrário
+        # e uma explicação passada posicionalmente acabava no campo
+        # "permissao_necessaria", que passava a conter uma frase em vez do
+        # código da permissão em falta.
         details = kwargs.pop("details", {}) or {}
         if required:
             details["permissao_necessaria"] = required
-        super().__init__(details=details, **kwargs)
+        super().__init__(message, details=details, **kwargs)
 
 
 # ----------------------------------------------------------------- domínio

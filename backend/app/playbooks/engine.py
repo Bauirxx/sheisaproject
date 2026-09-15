@@ -402,12 +402,35 @@ async def _execute_step(
 
     # ------------------------------------------------- solicitar aprovação
     if kind == PlaybookStepType.SOLICITAR_APROVACAO:
-        # Marca de paragem explícita: o passo seguinte só corre depois de uma
-        # decisão humana registada.
+        # Cria uma porta de autorização real. Suspender a execução sem criar
+        # nada aprovável deixaria o playbook num estado do qual nunca poderia
+        # ser retomado.
+        motivo = step.parameters.get("motivo", "")
+        gate = await action_service.propose_action(
+            session, ctx,
+            incident=incident,
+            action_kind=ActionKind.AUTORIZAR_PROSSEGUIMENTO,
+            title=step.name,
+            rationale=(
+                f"Autorização necessária para prosseguir com a execução "
+                f"{execution.reference}, passo {step.ordering}."
+                + (f" Motivo: {motivo}" if motivo else "")
+            ),
+            target={"execucao": execution.reference, "passo": step.ordering},
+            parameters={"motivo": motivo},
+            risk_level=step.risk_level,
+            proposed_by_engine=True,
+            playbook_execution_id=execution.id,
+        )
+        record.action_id = gate.id
         return (
             {
-                "resumo": "Aprovação humana solicitada; execução suspensa.",
-                "motivo": step.parameters.get("motivo", ""),
+                "resumo": (
+                    f"Autorização {gate.reference} solicitada; execução suspensa "
+                    "até haver decisão."
+                ),
+                "accao_referencia": gate.reference,
+                "motivo": motivo,
             },
             True,
         )

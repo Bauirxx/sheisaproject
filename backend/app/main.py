@@ -192,10 +192,16 @@ async def readiness() -> JSONResponse:
 
 
 # ---------------------------------------------------------------------- rotas
+from app.api.v1 import admin as admin_routes  # noqa: E402
 from app.api.v1 import alerts as alert_routes  # noqa: E402
+from app.api.v1 import analytics as analytics_routes  # noqa: E402
 from app.api.v1 import auth as auth_routes  # noqa: E402
+from app.api.v1 import catalog as catalog_routes  # noqa: E402
 from app.api.v1 import incidents as incident_routes  # noqa: E402
 from app.api.v1 import ingest as ingest_routes  # noqa: E402
+from app.api.v1 import investigation as investigation_routes  # noqa: E402
+from app.api.v1 import reports as report_routes  # noqa: E402
+from app.api.v1 import response as response_routes  # noqa: E402
 
 for _router in (
     auth_routes.router,
@@ -203,5 +209,22 @@ for _router in (
     alert_routes.router,
     alert_routes.events_router,
     incident_routes.router,
+    investigation_routes.evidence_router,
+    investigation_routes.task_router,
+    catalog_routes.asset_router,
+    catalog_routes.ioc_router,
+    catalog_routes.mitre_router,
+    response_routes.action_router,
+    response_routes.approval_router,
+    response_routes.playbook_router,
+    analytics_routes.dashboard_router,
+    analytics_routes.soc_router,
+    analytics_routes.graph_router,
+    report_routes.router,
+    admin_routes.user_router,
+    admin_routes.role_router,
+    admin_routes.audit_router,
+    admin_routes.integration_router,
+    admin_routes.notification_router,
 ):
     app.include_router(_router, prefix=settings.api_prefix)
