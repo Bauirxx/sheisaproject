@@ -38,6 +38,7 @@ import type {
   Grafo,
   Observacao,
   Pagina,
+  UtilizadorResumo,
 } from "@/api/tipos";
 import { useSessao } from "@/autenticacao/contexto";
 import {
@@ -208,6 +209,76 @@ function Transicoes({ incidente }: { incidente: Incidente }) {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Atribuição de responsável.
+ *
+ * A lista de utilizadores exige `users:read`, que os perfis operacionais têm
+ * mas o OPERADOR não. Quando falta, mostramos o responsável actual sem o
+ * selector, em vez de deixar um controlo que produziria 403 ao ser usado.
+ */
+function Atribuicao({ incidente }: { incidente: Incidente }) {
+  const clienteDeDados = useQueryClient();
+  const { pode } = useSessao();
+  const podeAtribuir = pode("incidents:assign") && pode("users:read");
+
+  const utilizadores = useQuery({
+    queryKey: ["utilizadores-atribuiveis"],
+    queryFn: () =>
+      pedir<{ itens: UtilizadorResumo[] }>(
+        `/users${consulta({ apenas_activos: true, size: 200, sort: "full_name" })}`,
+      ),
+    enabled: podeAtribuir,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const atribuir = useMutation({
+    mutationFn: (assignee_id: string | null) =>
+      pedir(`/incidents/${incidente.id}/assign`, {
+        metodo: "POST",
+        corpo: { assignee_id },
+      }),
+    onSuccess: async () => {
+      await clienteDeDados.invalidateQueries({ queryKey: ["incidente", incidente.id] });
+      await clienteDeDados.invalidateQueries({ queryKey: ["linha", incidente.id] });
+    },
+  });
+
+  if (!podeAtribuir) {
+    return (
+      <p className="secundario">
+        {incidente.assignee?.nome ?? (
+          <span className="terciario">Sem responsável atribuído.</span>
+        )}
+      </p>
+    );
+  }
+
+  return (
+    <div className="pilha" style={{ gap: "var(--espaco-2)" }}>
+      <select
+        className="selector"
+        value={incidente.assignee?.id ?? ""}
+        disabled={atribuir.isPending || utilizadores.isPending}
+        onChange={(e) => atribuir.mutate(e.target.value || null)}
+      >
+        <option value="">— sem responsável —</option>
+        {utilizadores.data?.itens.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.full_name} ({u.role?.name ?? "?"})
+          </option>
+        ))}
+      </select>
+      {atribuir.isPending ? <span className="terciario">A atribuir…</span> : null}
+      {atribuir.error ? <Erro erro={atribuir.error} /> : null}
+      {utilizadores.error ? <Erro erro={utilizadores.error} /> : null}
+      <p className="terciario">
+        Atribuir marca o reconhecimento do incidente, que é o instante a partir
+        do qual o tempo de resposta passa a contar.
+      </p>
     </div>
   );
 }
@@ -442,7 +513,10 @@ function CarregarEvidencia({ incidenteId }: { incidenteId: string }) {
     },
     onSuccess: () => {
       clienteDeConsultas.invalidateQueries({ queryKey: ["evidencias", incidenteId] });
-      clienteDeConsultas.invalidateQueries({ queryKey: ["linha-temporal", incidenteId] });
+      // A chave da linha temporal é "linha" (ver `LinhaTemporal`); usar outro
+      // nome invalidaria uma consulta inexistente e a nova evidência só
+      // apareceria depois de recarregar a página.
+      clienteDeConsultas.invalidateQueries({ queryKey: ["linha", incidenteId] });
       definirFicheiro(null);
       definirDescricao("");
       definirAberto(false);
@@ -451,7 +525,7 @@ function CarregarEvidencia({ incidenteId }: { incidenteId: string }) {
 
   if (!aberto) {
     return (
-      <div className="barra-de-accoes">
+      <div className="linha">
         <button className="botao botao--pequeno" onClick={() => definirAberto(true)}>
           Carregar evidência
         </button>
@@ -461,15 +535,16 @@ function CarregarEvidencia({ incidenteId }: { incidenteId: string }) {
 
   return (
     <form
-      className="cartao cartao--compacto"
+      className="cartao pilha"
+      style={{ gap: "var(--espaco-3)" }}
       onSubmit={(e) => {
         e.preventDefault();
         enviar.mutate();
       }}
     >
-      <div className="campos-em-linha">
+      <div className="linha" style={{ gap: "var(--espaco-3)", flexWrap: "wrap" }}>
         <label className="campo">
-          <span>Ficheiro</span>
+          <span className="campo__etiqueta">Ficheiro</span>
           <input
             type="file"
             required
@@ -477,7 +552,7 @@ function CarregarEvidencia({ incidenteId }: { incidenteId: string }) {
           />
         </label>
         <label className="campo">
-          <span>Tipo</span>
+          <span className="campo__etiqueta">Tipo</span>
           <select value={tipo} onChange={(e) => definirTipo(e.target.value)}>
             <option value="LOG">Registo (log)</option>
             <option value="CAPTURA_ECRA">Captura de ecrã</option>
@@ -490,7 +565,7 @@ function CarregarEvidencia({ incidenteId }: { incidenteId: string }) {
         </label>
       </div>
       <label className="campo">
-        <span>Descrição</span>
+        <span className="campo__etiqueta">Descrição</span>
         <input
           type="text"
           value={descricao}
@@ -504,7 +579,7 @@ function CarregarEvidencia({ incidenteId }: { incidenteId: string }) {
         referência para verificações de integridade posteriores.
       </p>
       {enviar.error ? <Erro erro={enviar.error} /> : null}
-      <div className="barra-de-accoes">
+      <div className="linha">
         <button className="botao botao--primario" disabled={enviar.isPending}>
           {enviar.isPending ? "A carregar…" : "Carregar"}
         </button>
@@ -869,6 +944,11 @@ export function IncidenteDetalhe() {
           <div className="cartao">
             <h3 style={{ marginBottom: "var(--espaco-4)" }}>Estado</h3>
             <Transicoes incidente={data} />
+          </div>
+
+          <div className="cartao">
+            <h3 style={{ marginBottom: "var(--espaco-4)" }}>Responsável</h3>
+            <Atribuicao incidente={data} />
           </div>
 
           <div className="cartao">
