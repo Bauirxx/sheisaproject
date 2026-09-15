@@ -7,6 +7,38 @@
 
 ---
 
+## ONDE ESTAMOS
+
+| | |
+|---|---|
+| **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **suite de testes (5.3)** |
+| **A seguir** | **5.2 cenário de demonstração** → 5.4 frontend → 5.5 laboratório Wazuh → 5.7 documentação |
+| **Backend** | 106 rotas, 21 domínios, ~19k linhas |
+| **Testes** | 211 a passar, 74% de cobertura |
+| **Ambiente** | Python 3.13.7 · PostgreSQL 16 em Docker · API em :8099 |
+| **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
+
+**Documentos de referência, agora versionados:**
+
+- [`MONOGRAFIA-CAP4.md`](MONOGRAFIA-CAP4.md) — capítulo IV da monografia. É o que
+  vai ser defendido. **§4.14 é o cenário de demonstração.**
+- [`BRIEFING.md`](BRIEFING.md) — especificação técnica de 101 secções.
+- Este ficheiro — estado do código e como retomar.
+
+> **Numeração das secções no código.** Os comentários citam `§4`, `§12`, `§16`,
+> `§32`… Essa numeração vem de um briefing anterior que nunca foi versionado e
+> **não corresponde** a nenhum dos dois documentos acima. `BRIEFING.md` traz uma
+> tabela de equivalências. Na prática não é um problema: cada citação no código
+> vem acompanhada da frase que explica a regra, e essa frase é autossuficiente.
+
+> **Correcção ao que este documento dizia.** Até 2026-09-15 lia-se aqui "os 19
+> passos do §33". O cenário de demonstração tem **10 passos** e está em
+> [`MONOGRAFIA-CAP4.md` §4.14](MONOGRAFIA-CAP4.md#414-exemplo-de-cenário-para-demonstrar-o-protótipo).
+> O "§33" era uma citação do briefing antigo; os 19 passos não existem em
+> documento nenhum e eram provavelmente uma contagem errada.
+
+---
+
 ## 1. O que é
 
 Plataforma de gestão e resposta a incidentes cibernéticos (SOC/CSIRT), para
@@ -270,11 +302,29 @@ O mapa `GROUP_TO_TECHNIQUE` (15 entradas) é o sítio a alargar se se quiser
 cobrir mais grupos de regra: acrescentar uma linha chega, porque o
 identificador é sempre validado contra o catálogo antes de ser proposto.
 
-### 5.2 Cenário de demonstração (§33) — **não começado**
+### 5.2 Cenário de demonstração — **por fazer, já desbloqueado**
 `app/services/demo_service.py` é referido por `scripts/manage.py demo` mas
-**não existe** (o comando falha). Deve percorrer os 19 passos do §33 usando o
-**fluxo real** da aplicação (ingestão pela API, não inserções directas) e
-marcar tudo com `is_demo_data=True`.
+**não existe** (o comando falha). Deve percorrer os **10 passos do §4.14 da
+monografia** usando o **fluxo real** da aplicação (ingestão pela API, não
+inserções directas) e marcar tudo com `is_demo_data=True`.
+
+Os 10 passos, do documento:
+
+| Passo | Acção |
+|---|---|
+| 1 | O alerta é identificado (Suricata detecta actividade suspeita). |
+| 2 | O analista regista/converte o alerta num incidente. |
+| 3 | O sistema gera automaticamente o identificador. |
+| 4 | O analista classifica o incidente. |
+| 5 | Define a severidade como Alta. |
+| 6 | Atribui o incidente ao responsável. |
+| 7 | Adiciona comentários e evidências. |
+| 8 | O incidente passa a Em Investigação. |
+| 9 | Depois da resposta, passa a Resolvido. |
+| 10 | Após validação, passa a Encerrado. |
+
+O cenário deve usar **Suricata** como fonte, porque é essa a fonte do §4.14 —
+e não Wazuh, que foi a fonte usada nas verificações manuais até agora.
 
 ### 5.3 Testes (§32) — **feito** (ver §4)
 211 testes, 74% de cobertura. O que a lista do §32 pede está coberto.
@@ -366,7 +416,5 @@ backend/tests/  conftest (migração, transacção por teste, contas), e por tem
 2. Confirmar: `curl http://127.0.0.1:8099/api/health/ready`.
 3. Ler este ficheiro e a secção 5.
 4. Trabalhar pela ordem 5.2 → 5.5 (demo, frontend, lab); 5.1 e 5.3 estão feitos.
-   O 5.2 está **bloqueado**: o texto do §33 (os 19 passos) não está no
-   repositório e sem ele o cenário seria inventado, não reproduzido.
 5. Antes de cada commit: `./.venv/Scripts/python.exe -m ruff check app tests scripts`
    e `./.venv/Scripts/python.exe -m pytest`.
