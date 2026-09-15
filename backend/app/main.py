@@ -200,6 +200,7 @@ from app.api.v1 import catalog as catalog_routes  # noqa: E402
 from app.api.v1 import incidents as incident_routes  # noqa: E402
 from app.api.v1 import ingest as ingest_routes  # noqa: E402
 from app.api.v1 import investigation as investigation_routes  # noqa: E402
+from app.api.v1 import recommendations as recommendation_routes  # noqa: E402
 from app.api.v1 import reports as report_routes  # noqa: E402
 from app.api.v1 import response as response_routes  # noqa: E402
 
@@ -220,6 +221,7 @@ for _router in (
     analytics_routes.dashboard_router,
     analytics_routes.soc_router,
     analytics_routes.graph_router,
+    recommendation_routes.router,
     report_routes.router,
     admin_routes.user_router,
     admin_routes.role_router,

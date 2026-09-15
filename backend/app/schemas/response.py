@@ -236,3 +236,26 @@ class RecommendationDecide(ApiInput):
             "registar a concordância sem alterar nada."
         ),
     )
+
+
+class RecommendationDecision(ApiModel):
+    """Resultado de uma decisão sobre uma recomendação.
+
+    `efeito` é obrigatório e não decorativo: aceitar uma recomendação nem
+    sempre altera alguma coisa — pode não haver alteração aplicável, quem
+    decide pode não ter a permissão da operação, ou pode ter pedido para não
+    aplicar. Dizer apenas "aceite" deixaria o analista a supor o resto (§4).
+    """
+
+    recomendacao: RecommendationRead
+    efeito: str = Field(description="O que aconteceu de facto ao alvo.")
+
+
+class RecommendationSyncResult(ApiModel):
+    """Contagens de uma execução do motor sobre o trabalho em aberto."""
+
+    recomendacoes_de_alertas: int
+    recomendacoes_de_incidentes: int
+    retiradas_ou_expiradas: int
+    motor: str
+    versao: str
