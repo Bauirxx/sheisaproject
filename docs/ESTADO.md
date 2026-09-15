@@ -12,9 +12,9 @@
 | | |
 |---|---|
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
-| **A seguir** | 5.4 frontend (compila e serve; falta ver no ecrã e acrescentar upload/edição) → 5.5 levantar o laboratório Wazuh → 5.7 documentação |
+| **A seguir** | abrir a interface num navegador · edição (PATCH) de incidente/activo/IOC/utilizador · exportação PDF |
 | **Backend** | 106 rotas, 21 domínios, ~19k linhas |
-| **Testes** | 222 a passar, 75% de cobertura · `verificar_contrato.py` para o frontend |
+| **Testes** | 228 a passar · `verificar_contrato.py` para o frontend |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.13.7 · Node 22.20 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
 | **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -394,25 +394,42 @@ Onde a cobertura continua baixa, e porquê:
 - `playbooks/engine` — os caminhos de suspensão e retoma estão testados; os
   tipos de passo menos usados não.
 
-### 5.4 Frontend — **compila e serve; falta vê-lo num navegador** (ver §4)
+### 5.4 Frontend — **funcional; falta vê-lo num navegador**
+
+14 páginas, as seis telas do §4.13 incluídas.
+`cd frontend && npm install && npm run dev`.
 
 > **Porta 5500, não 5173.** O Windows reserva intervalos de portas para o
 > Hyper-V/WSL e a 5173 cai dentro de um deles nesta máquina, o que fazia o
 > Vite rebentar com `EACCES: permission denied ::1:5173`. Confirmar com
 > `netsh interface ipv4 show excludedportrange protocol=tcp`.
 > Alterar com a variável `SHEISA_PORTA_UI`.
-12 páginas, as seis telas do §4.13 incluídas. `cd frontend && npm install &&
-npm run dev`.
 
-Por fazer:
-- **abrir num navegador e corrigir o que estiver torto** — é o único passo que
-  não pôde ser dado;
-- upload de evidências pela interface (a API aceita `multipart/form-data`; a
-  página mostra e descarrega, mas ainda não carrega);
-- edição de incidente (`PATCH /incidents/{id}`) e atribuição a partir do
-  detalhe;
-- notificações (`/api/notifications`) e integrações (`/api/integrations`), que
-  têm API e ainda não têm ecrã.
+Acrescentado depois da primeira passagem:
+
+- **triagem de alertas** — promover a incidente, ligar a incidente existente,
+  descartar/falso positivo, recalcular pontuação (era o passo 2 do §4.14 e não
+  tinha botão);
+- **gráficos do painel** — o painel usava 1 dos 5 endpoints; passa a usar os
+  cinco, com tempos de resposta, série temporal, quatro distribuições e carga
+  por analista, em SVG sem dependência nova;
+- **tarefas** (§19, que não tinha ecrã nenhum) e **playbooks** no incidente;
+- **carregamento de evidências** e descarga autenticada;
+- **atribuição de responsável** no detalhe;
+- páginas de **integrações** e **notificações**.
+
+**Por fazer:**
+
+- **abrir num navegador e corrigir o que estiver torto** — continua a ser o
+  único passo que não pôde ser dado aqui (não há automação de navegador
+  disponível). O que *foi* verificado: compila sem erros de TypeScript, serve,
+  o proxy chega à API, e todos os caminhos e campos usados foram confrontados
+  com o OpenAPI e com respostas reais;
+- **edição** (`PATCH`) de incidente, activo, IOC e utilizador — a de tarefa já
+  existe. A API suporta as cinco;
+- relações entre incidentes, MITRE tácticas/cobertura, verificar integridade de
+  evidência, reverter acção, alterar a própria palavra-passe, criar chaves de
+  API — todas com API e sem ecrã.
 
 ### 5.5 Laboratório Wazuh (§26) — **verificado a correr**
 Os ficheiros existem: `lab/docker-compose.lab.yml`, `lab/preparar.sh`,
