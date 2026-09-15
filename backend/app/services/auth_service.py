@@ -29,7 +29,6 @@ from app.core.enums import AuditOutcome
 from app.core.errors import (
     AccountInactiveError,
     AccountLockedError,
-    AuthenticationError,
     InvalidCredentialsError,
     NotFoundError,
     SessionExpiredError,

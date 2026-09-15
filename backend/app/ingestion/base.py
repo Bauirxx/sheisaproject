@@ -12,6 +12,7 @@ porque "normalmente existe" corromperia a correlação e a investigação.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -132,7 +133,7 @@ def parse_timestamp(value: Any) -> datetime | None:
         return None
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=UTC)
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         # Heurística para distinguir segundos de milissegundos desde a época.
         seconds = value / 1000 if value > 1e11 else value
         return datetime.fromtimestamp(seconds, tz=UTC)
@@ -173,8 +174,6 @@ def classify_hash(value: str) -> IocType | None:
     length = len(value.strip())
     return {32: IocType.HASH_MD5, 40: IocType.HASH_SHA1, 64: IocType.HASH_SHA256}.get(length)
 
-
-import ipaddress
 
 #: Gamas consideradas *internas*: um endereço destes é contexto da própria
 #: organização, não um indicador de ameaça externa.

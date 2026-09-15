@@ -131,7 +131,7 @@ async def _alert_field_values(
     collected: dict[str, set[str]] = {f: set() for f in fields if hasattr(Event, f)}
     names = [f for f in fields if hasattr(Event, f)]
     for row in result.all():
-        for name, value in zip(names, row):
+        for name, value in zip(names, row, strict=False):
             if value:
                 collected[name].add(str(value))
     return collected
@@ -153,9 +153,8 @@ def _passes_conditions(alert: Alert, conditions: dict) -> bool:
         if not set(alert.tags).intersection(groups):
             return False
 
-    if sources := conditions.get("source_kinds"):
-        if alert.source_kind.value not in sources:
-            return False
+    if (sources := conditions.get("source_kinds")) and alert.source_kind.value not in sources:
+        return False
 
     if minimum_score := conditions.get("triage_score_min"):
         if alert.triage_score < int(minimum_score):
@@ -457,7 +456,7 @@ async def find_related_incidents(
             Observation, Observation.ioc_id == Ioc.id
         ).where(Observation.incident_id == incident.id)
     )
-    own_iocs = {ioc_id: value for ioc_id, value in own.all()}
+    own_iocs = dict(own.all())
     if not own_iocs:
         return []
 

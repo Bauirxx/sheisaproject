@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Request, status
 
 from app.core.deps import AuditDep, CurrentUser, SessionDep
 from app.schemas.auth import (

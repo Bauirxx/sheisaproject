@@ -161,33 +161,33 @@ class Incident(Base, TimestampMixin):
     is_demo_data: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
 
     # --- relações ---
-    assignee: Mapped["User | None"] = relationship(  # noqa: F821
+    assignee: Mapped["User | None"] = relationship(
         foreign_keys=[assignee_id], lazy="selectin"
     )
-    reporter: Mapped["User | None"] = relationship(  # noqa: F821
+    reporter: Mapped["User | None"] = relationship(
         foreign_keys=[reporter_id], lazy="selectin"
     )
-    team: Mapped["Team | None"] = relationship(lazy="selectin")  # noqa: F821
-    campaign: Mapped["Campaign | None"] = relationship(  # noqa: F821
+    team: Mapped["Team | None"] = relationship(lazy="selectin")
+    campaign: Mapped["Campaign | None"] = relationship(
         back_populates="incidents", lazy="selectin"
     )
-    assets: Mapped[list["Asset"]] = relationship(  # noqa: F821
+    assets: Mapped[list["Asset"]] = relationship(
         secondary=incident_assets, lazy="selectin"
     )
-    alerts: Mapped[list["Alert"]] = relationship(  # noqa: F821
+    alerts: Mapped[list["Alert"]] = relationship(
         back_populates="incident", lazy="noload",
         foreign_keys="Alert.incident_id",
     )
-    comments: Mapped[list["Comment"]] = relationship(  # noqa: F821
+    comments: Mapped[list["Comment"]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", lazy="noload"
     )
-    tasks: Mapped[list["Task"]] = relationship(  # noqa: F821
+    tasks: Mapped[list["Task"]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", lazy="noload"
     )
-    evidence: Mapped[list["Evidence"]] = relationship(  # noqa: F821
+    evidence: Mapped[list["Evidence"]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", lazy="noload"
     )
-    observations: Mapped[list["Observation"]] = relationship(  # noqa: F821
+    observations: Mapped[list["Observation"]] = relationship(
         back_populates="incident", cascade="all, delete-orphan", lazy="noload"
     )
     techniques: Mapped[list["IncidentTechnique"]] = relationship(
@@ -300,4 +300,4 @@ class IncidentTechnique(Base, TimestampMixin):
     )
 
     incident: Mapped[Incident] = relationship(back_populates="techniques", lazy="noload")
-    technique: Mapped["MitreTechnique"] = relationship(lazy="selectin")  # noqa: F821
+    technique: Mapped["MitreTechnique"] = relationship(lazy="selectin")

@@ -14,8 +14,9 @@ os valores antigos à mão — o que mais cedo ou mais tarde alguém esqueceria.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Any, Iterable
+from typing import Any
 
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,13 +34,13 @@ REDACTED_PLACEHOLDER = "[omitido]"
 
 def _serialise(value: Any) -> Any:
     """Converte um valor para algo representável em JSONB."""
-    if value is None or isinstance(value, (bool, int, float, str)):
+    if value is None or isinstance(value, bool | int | float | str):
         return value
-    if isinstance(value, (datetime,)):
+    if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, uuid.UUID):
         return str(value)
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return [_serialise(v) for v in value]
     if isinstance(value, dict):
         return {k: _serialise(v) for k, v in value.items()}
@@ -82,8 +83,15 @@ class AuditContext:
     """Identidade e origem de quem age. Preenchido pelas dependências da API."""
 
     __slots__ = (
-        "actor_id", "actor_email", "actor_role", "api_key_id",
-        "is_system", "origin", "ip_address", "user_agent", "request_id",
+        "actor_email",
+        "actor_id",
+        "actor_role",
+        "api_key_id",
+        "ip_address",
+        "is_system",
+        "origin",
+        "request_id",
+        "user_agent",
     )
 
     def __init__(
@@ -110,7 +118,7 @@ class AuditContext:
         self.request_id = request_id
 
     @classmethod
-    def system(cls, origin: str = "motor") -> "AuditContext":
+    def system(cls, origin: str = "motor") -> AuditContext:
         """Contexto para acções sem actor humano (motores, playbooks)."""
         return cls(actor_email="sistema", is_system=True, origin=origin)
 

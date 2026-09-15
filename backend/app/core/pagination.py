@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Generic, Sequence, TypeVar
+from collections.abc import Sequence
+from typing import Annotated, Any, Generic, TypeVar
 
 from fastapi import Query
 from pydantic import BaseModel, Field
@@ -47,7 +48,7 @@ class Page(BaseModel, Generic[T]):
     total_paginas: int
 
     @classmethod
-    def build(cls, items: Sequence[T], total: int, params: PageParams) -> "Page[T]":
+    def build(cls, items: Sequence[T], total: int, params: PageParams) -> Page[T]:
         total_pages = (total + params.size - 1) // params.size if total else 0
         return cls(
             itens=list(items),

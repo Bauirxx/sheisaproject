@@ -6,6 +6,13 @@ importação segue as dependências entre módulos.
 """
 
 from app.models.base import Base
+from app.models.catalog import (
+    Asset,
+    Campaign,
+    Ioc,
+    MitreTactic,
+    MitreTechnique,
+)
 from app.models.identity import (
     ApiKey,
     Permission,
@@ -15,26 +22,13 @@ from app.models.identity import (
     UserSession,
     role_permissions,
 )
-from app.models.catalog import (
-    Asset,
-    Campaign,
-    Ioc,
-    MitreTactic,
-    MitreTechnique,
-)
-from app.models.system import (
-    AuditLog,
-    Integration,
-    Notification,
-    Report,
-)
-from app.models.telemetry import Alert, CorrelationRule, Event
 from app.models.incident import (
     Incident,
     IncidentRelation,
     IncidentTechnique,
     incident_assets,
 )
+from app.models.intelligence import Recommendation
 from app.models.investigation import (
     Comment,
     Evidence,
@@ -42,7 +36,6 @@ from app.models.investigation import (
     Task,
     task_dependencies,
 )
-from app.models.intelligence import Recommendation
 from app.models.response import (
     Action,
     ActionApproval,
@@ -51,6 +44,13 @@ from app.models.response import (
     PlaybookStep,
     PlaybookStepExecution,
 )
+from app.models.system import (
+    AuditLog,
+    Integration,
+    Notification,
+    Report,
+)
+from app.models.telemetry import Alert, CorrelationRule, Event
 
 __all__ = [
     "Action",

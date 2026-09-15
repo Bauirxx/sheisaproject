@@ -20,7 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, PGUUID, TimestampMixin, uuid_pk
+from app.models.base import PGUUID, Base, TimestampMixin, uuid_pk
 
 if TYPE_CHECKING:
     pass
@@ -218,6 +218,6 @@ class ApiKey(Base, TimestampMixin):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     use_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    integration: Mapped["Integration | None"] = relationship(  # noqa: F821
+    integration: Mapped["Integration | None"] = relationship(
         back_populates="api_keys", lazy="selectin"
     )

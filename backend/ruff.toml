@@ -1,0 +1,32 @@
+# Configuracao de analise estatica.
+line-length = 100
+target-version = "py311"
+exclude = [".venv", "alembic/versions", "var"]
+
+[lint]
+select = [
+    "F",    # Pyflakes: nomes indefinidos, imports nao usados
+    "E",    # pycodestyle
+    "W",
+    "I",    # ordenacao de imports
+    "B",    # bugbear: armadilhas comuns
+    "UP",   # sintaxe moderna
+    "C4",   # comprehensions
+    "SIM",  # simplificacoes
+    "BLE",  # excepcoes demasiado amplas (as nossas sao deliberadas e comentadas)
+    "RUF",
+]
+ignore = [
+    "E501",    # comprimento de linha: ja controlado por line-length no formatador
+    "B008",    # chamadas em valores por omissao: e o padrao do FastAPI (Depends)
+    "RUF001",  # caracteres ambiguos: o codigo e em portugues, com acentos
+    "RUF002",
+    "RUF003",
+    # Guardas encadeadas: cada nivel testa uma condicao distinta e leva o seu
+    # proprio comentario. Fundi-las com `and` juntaria criterios sem relacao.
+    "SIM102",
+]
+
+[lint.per-file-ignores]
+"app/models/*.py" = ["F821", "UP037"]  # referencias adiadas entre modelos, resolvidas pelo SQLAlchemy
+"__init__.py" = ["F401"]

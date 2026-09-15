@@ -20,7 +20,7 @@ from pathlib import Path
 # Permite correr o módulo a partir da raiz de `backend/`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core.database import dispose_engine, get_sessionmaker  # noqa: E402
+from app.core.database import dispose_engine, get_sessionmaker
 
 
 def _banner(text: str) -> None:

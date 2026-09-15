@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from datetime import datetime
 from typing import Annotated, Any
@@ -76,10 +77,10 @@ import email_validator as _email_validator  # noqa: E402
 _DOMINIOS_INTERNOS_PERMITIDOS = ("local", "internal", "lan", "intranet", "corp", "home")
 
 for _nome in _DOMINIOS_INTERNOS_PERMITIDOS:
-    try:
+    # `suppress` porque a lista varia entre versoes da biblioteca: um nome
+    # ausente nao e erro, apenas significa que ja era permitido.
+    with contextlib.suppress(ValueError):
         _email_validator.SPECIAL_USE_DOMAIN_NAMES.remove(_nome)
-    except ValueError:
-        pass  # já não estava na lista nesta versão da biblioteca
 
 
 def _normalise_email(value: str) -> str:

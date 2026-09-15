@@ -358,4 +358,4 @@ class ActionApproval(Base, TimestampMixin):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     action: Mapped[Action] = relationship(back_populates="approvals", lazy="noload")
-    decided_by: Mapped["User | None"] = relationship(lazy="selectin")  # noqa: F821
+    decided_by: Mapped["User | None"] = relationship(lazy="selectin")

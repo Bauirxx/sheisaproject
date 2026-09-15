@@ -465,7 +465,7 @@ async def ingest_batch(
                         is_demo=is_demo,
                     )
                 )
-        except Exception as exc:  # noqa: BLE001 - isolamento deliberado
+        except Exception as exc:
             # O ponto de salvaguarda já reverteu; a sessão volta a estar utilizável.
             logger.exception("Falha ao ingerir o elemento %d do lote", index)
             await audit.record(

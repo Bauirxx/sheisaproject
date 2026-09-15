@@ -110,11 +110,11 @@ class Observation(Base, TimestampMixin):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    incident: Mapped["Incident"] = relationship(  # noqa: F821
+    incident: Mapped["Incident"] = relationship(
         back_populates="observations", lazy="noload"
     )
-    ioc: Mapped["Ioc"] = relationship(lazy="selectin")  # noqa: F821
-    asset: Mapped["Asset | None"] = relationship(lazy="selectin")  # noqa: F821
+    ioc: Mapped["Ioc"] = relationship(lazy="selectin")
+    asset: Mapped["Asset | None"] = relationship(lazy="selectin")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Observation {self.role} ioc={self.ioc_id}>"
@@ -146,10 +146,10 @@ class Comment(Base, TimestampMixin):
 
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    incident: Mapped["Incident"] = relationship(  # noqa: F821
+    incident: Mapped["Incident"] = relationship(
         back_populates="comments", lazy="noload"
     )
-    author: Mapped["User | None"] = relationship(lazy="selectin")  # noqa: F821
+    author: Mapped["User | None"] = relationship(lazy="selectin")
 
 
 class Task(Base, TimestampMixin):
@@ -197,10 +197,10 @@ class Task(Base, TimestampMixin):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    incident: Mapped["Incident"] = relationship(  # noqa: F821
+    incident: Mapped["Incident"] = relationship(
         back_populates="tasks", lazy="noload"
     )
-    assignee: Mapped["User | None"] = relationship(  # noqa: F821
+    assignee: Mapped["User | None"] = relationship(
         foreign_keys=[assignee_id], lazy="selectin"
     )
     depends_on: Mapped[list["Task"]] = relationship(
@@ -274,10 +274,10 @@ class Evidence(Base, TimestampMixin):
         PGUUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
     )
 
-    incident: Mapped["Incident"] = relationship(  # noqa: F821
+    incident: Mapped["Incident"] = relationship(
         back_populates="evidence", lazy="noload"
     )
-    uploaded_by: Mapped["User | None"] = relationship(lazy="selectin")  # noqa: F821
+    uploaded_by: Mapped["User | None"] = relationship(lazy="selectin")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Evidence {self.name} sha256={self.sha256[:12]}>"

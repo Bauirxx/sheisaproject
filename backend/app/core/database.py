@@ -9,7 +9,7 @@ contrário a auditoria deixaria de ser fiável (§16).
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -25,7 +25,7 @@ from app.core.config import settings
 class Base(DeclarativeBase):
     """Base declarativa de todos os modelos."""
 
-    type_annotation_map: dict[Any, Any] = {}
+    type_annotation_map: ClassVar[dict[Any, Any]] = {}
 
 
 _engine: AsyncEngine | None = None

@@ -31,7 +31,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import (
     AlertStatus,
     AssetCriticality,
-    IncidentStatus,
     IocReputation,
     IocType,
     Severity,
@@ -309,7 +308,7 @@ async def _factor_false_positive_history(
         )
         .group_by(Alert.status)
     )
-    counts = {status: count for status, count in result.all()}
+    counts = dict(result.all())
     total = sum(counts.values())
 
     if total < MIN_HISTORY_FOR_FP:

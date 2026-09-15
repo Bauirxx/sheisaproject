@@ -211,7 +211,7 @@ class Alert(Base, TimestampMixin):
     events: Mapped[list[Event]] = relationship(
         back_populates="alert", lazy="noload", foreign_keys=[Event.alert_id]
     )
-    incident: Mapped["Incident | None"] = relationship(  # noqa: F821
+    incident: Mapped["Incident | None"] = relationship(
         back_populates="alerts", lazy="noload", foreign_keys=[incident_id]
     )
 

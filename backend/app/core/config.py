@@ -10,9 +10,7 @@ from __future__ import annotations
 import secrets
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
-
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -109,7 +107,7 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def _validate_secrets(self) -> "Settings":
+    def _validate_secrets(self) -> Settings:
         if not self.jwt_secret:
             if self.environment == "production":
                 raise RuntimeError(

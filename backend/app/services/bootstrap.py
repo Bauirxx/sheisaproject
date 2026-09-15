@@ -23,8 +23,10 @@ from app.core.permissions import (
     PERMISSION_DESCRIPTIONS,
     ROLE_DESCRIPTIONS,
     ROLE_PERMISSIONS,
-    Permission as PermissionCode,
     RoleName,
+)
+from app.core.permissions import (
+    Permission as PermissionCode,
 )
 from app.core.security import hash_password
 from app.models.identity import Permission, Role, Team, User

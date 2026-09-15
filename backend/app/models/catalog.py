@@ -229,6 +229,6 @@ class Campaign(Base, TimestampMixin):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    incidents: Mapped[list["Incident"]] = relationship(  # noqa: F821
+    incidents: Mapped[list["Incident"]] = relationship(
         back_populates="campaign", lazy="noload"
     )

@@ -85,7 +85,7 @@ def coerce_severity(value: Any) -> Severity:
             value = int(text)
         except ValueError:
             return Severity.MEDIA
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         number = int(value)
         if number > 5:
             from app.ingestion.wazuh import map_wazuh_level
@@ -122,7 +122,7 @@ class GenericNormalizer:
 
         severity_raw = _pick(payload, "severity")
         severity = coerce_severity(severity_raw)
-        if isinstance(severity_raw, (int, float)) and int(severity_raw) > 5:
+        if isinstance(severity_raw, int | float) and int(severity_raw) > 5:
             avisos.append("severidade numérica interpretada na escala 0-15")
 
         description = str(_pick(payload, "description") or "")

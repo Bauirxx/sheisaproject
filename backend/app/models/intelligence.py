@@ -87,7 +87,7 @@ class Recommendation(Base, TimestampMixin):
 
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    decided_by: Mapped["User | None"] = relationship(lazy="selectin")  # noqa: F821
+    decided_by: Mapped["User | None"] = relationship(lazy="selectin")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Recommendation {self.kind} conf={self.confidence}>"

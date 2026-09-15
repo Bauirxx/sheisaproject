@@ -151,7 +151,7 @@ class Integration(Base, TimestampMixin):
     #: integração só recebe dados.
     supported_actions: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
 
-    api_keys: Mapped[list["ApiKey"]] = relationship(  # noqa: F821
+    api_keys: Mapped[list["ApiKey"]] = relationship(
         back_populates="integration", lazy="noload"
     )
 
@@ -231,7 +231,7 @@ class Report(Base, TimestampMixin):
     #: Contagem de registos que sustentam o relatório, para verificação rápida.
     record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    generated_by: Mapped["User | None"] = relationship(lazy="selectin")  # noqa: F821
+    generated_by: Mapped["User | None"] = relationship(lazy="selectin")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Report {self.reference} {self.kind}>"
