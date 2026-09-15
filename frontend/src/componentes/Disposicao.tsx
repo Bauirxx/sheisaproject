@@ -70,6 +70,15 @@ const NAVEGACAO: Grupo[] = [
       { para: "/relatorios", rotulo: "Relatórios", icone: "▦", permissoes: ["reports:read"] },
       { para: "/auditoria", rotulo: "Auditoria", icone: "⊟", permissoes: ["audit:read"] },
       {
+        para: "/integracoes",
+        rotulo: "Integrações",
+        icone: "⇄",
+        permissoes: ["integrations:read"],
+      },
+      // Sem `permissoes`: as notificações são as do próprio utilizador e a API
+      // filtra-as por sessão, pelo que não há nada a esconder na navegação.
+      { para: "/notificacoes", rotulo: "Notificações", icone: "◉" },
+      {
         para: "/administracao",
         rotulo: "Administração",
         icone: "⚙",

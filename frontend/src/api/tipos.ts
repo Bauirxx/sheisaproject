@@ -422,3 +422,48 @@ export interface Relatorio {
 export interface RelatorioDetalhado extends Relatorio {
   content: Record<string, unknown>;
 }
+
+// ------------------------------------------------------------- integrações
+/**
+ * Integração com um sistema externo (§26).
+ *
+ * `status` reflecte verificação real, não declaração: só passa a `ACTIVA`
+ * depois de um teste de ligação bem-sucedido ou de ter recebido eventos.
+ * `variaveis_em_falta` lista os nomes das variáveis de ambiente esperadas que
+ * não estão definidas — os valores nunca são expostos pela API.
+ */
+export interface Integracao {
+  id: string;
+  name: string;
+  kind: string;
+  direction: string;
+  description: string;
+  status: string;
+  is_enabled: boolean;
+  config: Record<string, unknown>;
+  secret_env_vars: string[];
+  variaveis_em_falta: string[];
+  last_check_at: string | null;
+  last_check_ok: boolean | null;
+  last_check_detail: string | null;
+  last_error: string | null;
+  events_received: number;
+  last_event_at: string | null;
+  actions_executed: number;
+  actions_failed: number;
+  supported_actions: string[];
+  chaves_activas: number;
+}
+
+export interface Notificacao {
+  id: string;
+  kind: string;
+  severity: string;
+  title: string;
+  body: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  resource_reference: string | null;
+  read_at: string | null;
+  created_at: string;
+}

@@ -22,6 +22,7 @@ import { Entrada } from "@/paginas/Entrada";
 import { IncidenteDetalhe } from "@/paginas/IncidenteDetalhe";
 import { IncidenteNovo } from "@/paginas/IncidenteNovo";
 import { Incidentes } from "@/paginas/Incidentes";
+import { Integracoes, Notificacoes } from "@/paginas/Integracoes";
 import { Painel } from "@/paginas/Painel";
 import { Recomendacoes } from "@/paginas/Recomendacoes";
 import { Relatorios } from "@/paginas/Relatorios";
@@ -72,6 +73,8 @@ function Encaminhamento() {
         <Route path="/activos" element={<Activos />} />
         <Route path="/mitre" element={<Mitre />} />
         <Route path="/auditoria" element={<Auditoria />} />
+        <Route path="/integracoes" element={<Integracoes />} />
+        <Route path="/notificacoes" element={<Notificacoes />} />
         <Route path="/administracao" element={<Administracao />} />
         <Route path="/playbooks" element={<PaginaDePlaybooks />} />
       </Route>
