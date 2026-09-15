@@ -16,8 +16,20 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { pedir } from "@/api/cliente";
-import type { Painel as DadosDoPainel } from "@/api/tipos";
+import type {
+  CargaDeAnalista,
+  Distribuicao,
+  MetricasDeResposta,
+  Painel as DadosDoPainel,
+  PontoDaTendencia,
+} from "@/api/tipos";
 import { Carregando, Erro } from "@/componentes/comuns";
+import {
+  BarrasCategoricas,
+  corDaSeveridade,
+  duracaoLegivel,
+  SerieTemporal,
+} from "@/componentes/graficos";
 
 function Indicador({
   rotulo,
@@ -59,6 +71,29 @@ export function Painel() {
     // Uma sala de operações quer números frescos; 30 segundos é o compromisso
     // entre estar actualizado e não martelar a base de dados.
     refetchInterval: 30_000,
+  });
+
+  // Consultas separadas de propósito: cada uma é uma agregação distinta e
+  // falhar uma não deve deixar o painel inteiro em branco.
+  const distribuicao = useQuery({
+    queryKey: ["painel-distribuicao"],
+    queryFn: () => pedir<Distribuicao>("/dashboard/distribution"),
+    refetchInterval: 60_000,
+  });
+  const tendencia = useQuery({
+    queryKey: ["painel-tendencia"],
+    queryFn: () => pedir<PontoDaTendencia[]>("/dashboard/trend"),
+    refetchInterval: 60_000,
+  });
+  const metricas = useQuery({
+    queryKey: ["painel-metricas"],
+    queryFn: () => pedir<MetricasDeResposta>("/dashboard/response-metrics"),
+    refetchInterval: 60_000,
+  });
+  const carga = useQuery({
+    queryKey: ["painel-carga"],
+    queryFn: () => pedir<CargaDeAnalista[]>("/dashboard/workload"),
+    refetchInterval: 60_000,
   });
 
   if (isPending) return <Carregando />;
@@ -189,6 +224,120 @@ export function Painel() {
               valor={resposta.tarefas_pendentes}
             />
           </div>
+        </section>
+
+        <section className="pilha">
+          <h2>Tempos de resposta</h2>
+          {metricas.error ? <Erro erro={metricas.error} /> : null}
+          {metricas.isPending ? (
+            <Carregando />
+          ) : metricas.data ? (
+            <>
+              <div className="grelha grelha--4">
+                <Indicador
+                  rotulo="Reconhecimento (médio)"
+                  valor={duracaoLegivel(metricas.data.tempo_medio_reconhecimento_segundos)}
+                  nota={`${metricas.data.incidentes_reconhecidos} incidentes`}
+                />
+                <Indicador
+                  rotulo="Reconhecimento (mediano)"
+                  valor={duracaoLegivel(metricas.data.tempo_mediano_reconhecimento_segundos)}
+                  nota="Menos sensível a casos extremos"
+                />
+                <Indicador
+                  rotulo="Resolução (médio)"
+                  valor={duracaoLegivel(metricas.data.tempo_medio_resolucao_segundos)}
+                  nota={`${metricas.data.incidentes_resolvidos} incidentes`}
+                />
+                <Indicador
+                  rotulo="Dentro do prazo"
+                  valor={
+                    metricas.data.cumprimento_prazo.percentagem === null
+                      ? "—"
+                      : `${metricas.data.cumprimento_prazo.percentagem}%`
+                  }
+                  nota={`${metricas.data.cumprimento_prazo.dentro_do_prazo} de ${metricas.data.cumprimento_prazo.avaliados}`}
+                  aspecto={
+                    metricas.data.cumprimento_prazo.percentagem !== null &&
+                    metricas.data.cumprimento_prazo.percentagem < 80
+                      ? "alerta"
+                      : undefined
+                  }
+                />
+              </div>
+              {/* A API explica o que fica de fora das médias; repeti-lo aqui
+                  evita que alguém leia um "—" como se fosse zero. */}
+              <p className="terciario">{metricas.data.nota}</p>
+            </>
+          ) : null}
+        </section>
+
+        <section className="pilha">
+          <h2>Tendência e distribuição</h2>
+          {tendencia.error ? <Erro erro={tendencia.error} /> : null}
+          {tendencia.data ? <SerieTemporal dados={tendencia.data} /> : null}
+
+          {distribuicao.error ? <Erro erro={distribuicao.error} /> : null}
+          {distribuicao.data ? (
+            <div className="grelha grelha--2">
+              <BarrasCategoricas
+                titulo="Incidentes por severidade"
+                nota={`Últimos ${distribuicao.data.periodo_dias} dias`}
+                dados={distribuicao.data.incidentes_por_severidade}
+                colorir={corDaSeveridade}
+              />
+              <BarrasCategoricas
+                titulo="Incidentes por categoria"
+                nota={`Últimos ${distribuicao.data.periodo_dias} dias`}
+                dados={distribuicao.data.incidentes_por_categoria}
+              />
+              <BarrasCategoricas
+                titulo="Incidentes por estado"
+                dados={distribuicao.data.incidentes_por_estado}
+              />
+              <BarrasCategoricas
+                titulo="Alertas por fonte"
+                nota="De onde vem a detecção"
+                dados={distribuicao.data.alertas_por_fonte}
+              />
+            </div>
+          ) : null}
+        </section>
+
+        <section className="pilha">
+          <h2>Carga por analista</h2>
+          {carga.error ? <Erro erro={carga.error} /> : null}
+          {carga.isPending ? (
+            <Carregando />
+          ) : carga.data && carga.data.length > 0 ? (
+            <div className="tabela-envolvente">
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th>Analista</th>
+                    <th>Incidentes activos</th>
+                    <th>Graves</th>
+                    <th>Tarefas pendentes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {carga.data.map((a) => (
+                    <tr key={a.utilizador_id}>
+                      <td>
+                        {a.nome}
+                        <span className="terciario mono"> · {a.email}</span>
+                      </td>
+                      <td className="mono">{a.incidentes_activos}</td>
+                      <td className="mono">{a.incidentes_graves}</td>
+                      <td className="mono">{a.tarefas_pendentes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="terciario">Sem incidentes atribuídos.</p>
+          )}
         </section>
       </div>
     </>

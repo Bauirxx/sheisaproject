@@ -25,6 +25,7 @@ import {
   MarcaDeDemonstracao,
   Vazio,
 } from "@/componentes/comuns";
+import { TriagemDeAlerta } from "@/componentes/TriagemDeAlerta";
 import {
   CampoDeSelecao,
   ESTADOS_DO_ALERTA,
@@ -322,6 +323,10 @@ export function Alertas() {
               </button>
             </div>
             <DetalheDaPontuacao id={aberto.id} />
+
+            <div className="separador" style={{ margin: "var(--espaco-5) 0" }} />
+            <h3 style={{ marginBottom: "var(--espaco-3)" }}>Triagem</h3>
+            <TriagemDeAlerta alertaId={aberto.id} />
           </div>
         </div>
       ) : null}
