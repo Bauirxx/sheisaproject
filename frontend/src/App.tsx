@@ -13,7 +13,10 @@ import { ErroDaApi } from "@/api/cliente";
 import { ProvedorDeSessao, useSessao } from "@/autenticacao/contexto";
 import { Carregando } from "@/componentes/comuns";
 import { Disposicao } from "@/componentes/Disposicao";
+import { Administracao, PaginaDePlaybooks } from "@/paginas/Administracao";
 import { Alertas } from "@/paginas/Alertas";
+import { Auditoria } from "@/paginas/Auditoria";
+import { Activos, Indicadores, Mitre } from "@/paginas/Catalogo";
 import { Aprovacoes } from "@/paginas/Aprovacoes";
 import { Entrada } from "@/paginas/Entrada";
 import { IncidenteDetalhe } from "@/paginas/IncidenteDetalhe";
@@ -65,6 +68,12 @@ function Encaminhamento() {
         <Route path="/recomendacoes" element={<Recomendacoes />} />
         <Route path="/aprovacoes" element={<Aprovacoes />} />
         <Route path="/relatorios" element={<Relatorios />} />
+        <Route path="/indicadores" element={<Indicadores />} />
+        <Route path="/activos" element={<Activos />} />
+        <Route path="/mitre" element={<Mitre />} />
+        <Route path="/auditoria" element={<Auditoria />} />
+        <Route path="/administracao" element={<Administracao />} />
+        <Route path="/playbooks" element={<PaginaDePlaybooks />} />
       </Route>
       <Route path="*" element={<Navigate to="/painel" replace />} />
     </Routes>

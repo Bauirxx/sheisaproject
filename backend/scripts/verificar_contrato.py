@@ -238,6 +238,49 @@ if grafo.get("nos"):
 if grafo.get("arestas"):
     conferir("ArestaDoGrafo", grafo["arestas"][0], ["origem", "destino"])
 
+print("\n== catalogo e administracao ==")
+for caminho, nome, campos in [
+    ("/iocs?size=2", "Indicador",
+     ["id", "ioc_type", "value", "reputation", "confidence", "risk_score",
+      "sighting_count", "first_seen", "last_seen", "source", "is_allowlisted",
+      "allowlist_reason", "tags"]),
+    ("/assets?size=2", "Activo",
+     ["id", "identifier", "name", "asset_type", "criticality", "hostname",
+      "ip_address", "owner", "is_active"]),
+    ("/mitre/techniques?size=2", "Tecnica",
+     ["id", "technique_id", "name", "description", "url", "is_subtechnique",
+      "parent_technique_id", "tactic_shortnames", "platforms", "attack_version"]),
+    ("/audit?size=2", "RegistoDeAuditoria",
+     ["id", "created_at", "actor_email", "actor_role", "is_system_actor",
+      "action", "resource_type", "resource_id", "resource_reference",
+      "description", "old_value", "new_value", "changed_fields", "origin",
+      "ip_address", "outcome", "failure_reason", "request_id"]),
+    ("/users?size=2", "UtilizadorResumo",
+     ["id", "email", "full_name", "is_active", "must_change_password", "role",
+      "team", "last_login_at", "created_at"]),
+    ("/roles", "PerfilDetalhado",
+     ["id", "name", "description", "permissions"]),
+    ("/playbooks", "Playbook",
+     ["id", "name", "description", "is_enabled", "version", "auto_execute",
+      "trigger_category", "trigger_min_severity", "execution_count",
+      "success_count", "last_executed_at", "steps"]),
+]:
+    estado, corpo = pedir(caminho, token)
+    if estado != 200:
+        falhas.append(f"{nome}: HTTP {estado} em {caminho}")
+        continue
+    itens = corpo if isinstance(corpo, list) else corpo.get("itens", [])
+    if itens:
+        conferir(nome, itens[0], campos)
+    else:
+        print(f"  --  {nome}: sem registos para verificar")
+
+estado, accoes_auditadas = pedir("/audit/actions", token)
+if estado == 200 and isinstance(accoes_auditadas, list):
+    print(f"  ok  /audit/actions ({len(accoes_auditadas)} accoes distintas)")
+else:
+    falhas.append(f"/audit/actions: HTTP {estado}")
+
 print()
 if falhas:
     print("DIVERGENCIAS ENTRE OS TIPOS E A API:")

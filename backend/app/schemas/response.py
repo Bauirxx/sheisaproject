@@ -74,6 +74,9 @@ class ActionRead(ApiModel):
     target: dict = Field(default_factory=dict)
     parameters: dict = Field(default_factory=dict)
     integration_id: uuid.UUID | None = None
+    #: Quem propôs. É o que permite à interface explicar a separação de funções
+    #: (§13) antes de o utilizador tentar aprovar e levar 403.
+    proposed_by: UserSummary | None = None
     proposed_by_engine: bool
     recommendation_id: uuid.UUID | None = None
     playbook_execution_id: uuid.UUID | None = None

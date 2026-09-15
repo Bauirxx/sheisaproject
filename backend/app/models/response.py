@@ -311,6 +311,13 @@ class Action(Base, TimestampMixin):
     approvals: Mapped[list["ActionApproval"]] = relationship(
         back_populates="action", cascade="all, delete-orphan", lazy="selectin"
     )
+    #: Quem propôs. Exposto na API porque a separação de funções (§13) compara
+    #: o proponente com o decisor: sem este dado, a interface não consegue
+    #: explicar a quem está a ver a fila porque é que não pode aprovar uma
+    #: acção — só o descobriria ao levar 403.
+    proposed_by: Mapped["User | None"] = relationship(
+        foreign_keys=[proposed_by_id], lazy="selectin"
+    )
 
     @property
     def requires_approval(self) -> bool:

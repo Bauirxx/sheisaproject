@@ -236,3 +236,28 @@ async def test_accao_sem_integracao_diz_que_nao_e_executavel(
     assert accao["motivo_nao_executavel"], (
         "a acção diz-se não executável sem explicar porquê"
     )
+
+
+async def test_a_accao_diz_quem_a_propos(cliente, token_analista):
+    """A API expõe o proponente, e não só se foi o motor.
+
+    Sem isto, a interface não consegue explicar a separação de funções a quem
+    está a olhar para a fila: o utilizador só descobriria que não pode aprovar
+    ao carregar no botão e levar 403. O servidor continua a ser quem recusa —
+    isto é o que permite avisar antes.
+    """
+    incidente = await _incidente(cliente, token_analista)
+    accao = (await _propor(cliente, token_analista, incidente["id"])).json()
+
+    assert accao["proposed_by"] is not None
+    assert accao["proposed_by"]["email"] == "analista@teste.local"
+    assert accao["proposed_by_engine"] is False
+
+    # E continua exposto na fila de aprovação, que é onde importa.
+    from tests.conftest import autenticar
+
+    gestor = await autenticar(cliente, "gestor")
+    fila = await cliente.get("/api/approvals", headers=cabecalho(gestor))
+    assert fila.status_code == 200
+    entrada = next(a for a in fila.json()["itens"] if a["id"] == accao["id"])
+    assert entrada["proposed_by"]["email"] == "analista@teste.local"
