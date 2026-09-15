@@ -82,31 +82,48 @@ export interface RespostaEntrada {
 }
 
 // ---------------------------------------------------------------- alertas
-export interface Alerta {
+/**
+ * O que a **listagem** devolve.
+ *
+ * Deliberadamente sem a decomposição da triagem: um dicionário de factores por
+ * cada uma de 25 linhas multiplicaria o tamanho da resposta para dados que só
+ * se leem quando alguém abre um alerta em concreto. A decomposição vem em
+ * `Alerta`, pedida ao detalhe.
+ */
+export interface AlertaResumo {
   id: string;
   reference: string;
   title: string;
-  description: string;
   source_kind: string;
   source_name: string;
   severity: Severidade;
   status: EstadoAlerta;
+  triage_score: number;
+  false_positive_score: number;
   event_count: number;
   first_event_at: string;
   last_event_at: string;
-  triage_score: number;
-  false_positive_score: number;
-  triage_rationale: string;
-  triage_factors: FactoresDeTriagem | null;
-  scored_at: string | null;
-  correlation_outcome: string;
-  correlation_rationale: string | null;
-  incident_id: string | null;
   rule_id: string | null;
   rule_name: string | null;
-  tags: string[];
+  incident_id: string | null;
+  correlation_outcome: string;
+  asset: { id: string; identifier: string; name: string } | null;
   is_demo_data: boolean;
+  tags: string[];
   created_at: string;
+}
+
+/** O que o **detalhe** devolve: tudo o do resumo, mais a explicação. */
+export interface Alerta extends AlertaResumo {
+  description: string;
+  dedup_key: string;
+  triage_factors: FactoresDeTriagem | Record<string, never>;
+  triage_rationale: string;
+  scored_at: string | null;
+  correlation_rationale: string | null;
+  correlated_at: string | null;
+  incident_reference: string | null;
+  transicoes_permitidas: string[];
 }
 
 /** Decomposição que o motor determinístico publica. A soma confere com o total. */
@@ -154,7 +171,8 @@ export interface Incidente extends IncidenteResumo {
   origin: string;
   source_kind: string;
   source_detail: string | null;
-  team: { id: string; name: string } | null;
+  /** A API devolve o identificador da equipa, não o objecto. */
+  team_id: string | null;
   reporter: ResumoUtilizador | null;
   acknowledged_at: string | null;
   contained_at: string | null;
@@ -227,11 +245,12 @@ export interface Evidencia {
   name: string;
   description: string;
   evidence_type: string;
-  filename: string;
-  mime_type: string | null;
+  original_filename: string;
+  content_type: string;
   size_bytes: number;
   sha256: string;
-  md5: string | null;
+  integrity_verified_at: string | null;
+  integrity_ok: boolean | null;
   source: string;
   collected_at: string | null;
   uploaded_by: ResumoUtilizador | null;

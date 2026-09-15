@@ -85,6 +85,10 @@ async def list_alerts(
     fonte: Annotated[list[SourceKind] | None, Query()] = None,
     por_triar: Annotated[bool, Query(description="Apenas NOVO e EM_TRIAGEM.")] = False,
     sem_incidente: Annotated[bool, Query()] = False,
+    incidente_id: Annotated[
+        uuid.UUID | None,
+        Query(description="Apenas os alertas ligados a este incidente."),
+    ] = None,
     pontuacao_minima: Annotated[int | None, Query(ge=0, le=100)] = None,
     desde: Annotated[datetime | None, Query()] = None,
     ate: Annotated[datetime | None, Query()] = None,
@@ -111,6 +115,11 @@ async def list_alerts(
         stmt = stmt.where(Alert.status.in_([AlertStatus.NOVO, AlertStatus.EM_TRIAGEM]))
     if sem_incidente:
         stmt = stmt.where(Alert.incident_id.is_(None))
+    if incidente_id is not None:
+        # Complementa `sem_incidente`: permite reconstituir a composição de um
+        # incidente a partir dos alertas que o originaram, que é o que a página
+        # de detalhe precisa de mostrar.
+        stmt = stmt.where(Alert.incident_id == incidente_id)
     if pontuacao_minima is not None:
         stmt = stmt.where(Alert.triage_score >= pontuacao_minima)
     if desde:

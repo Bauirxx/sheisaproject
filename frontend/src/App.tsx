@@ -13,7 +13,10 @@ import { ErroDaApi } from "@/api/cliente";
 import { ProvedorDeSessao, useSessao } from "@/autenticacao/contexto";
 import { Carregando } from "@/componentes/comuns";
 import { Disposicao } from "@/componentes/Disposicao";
+import { Alertas } from "@/paginas/Alertas";
 import { Entrada } from "@/paginas/Entrada";
+import { IncidenteDetalhe } from "@/paginas/IncidenteDetalhe";
+import { Incidentes } from "@/paginas/Incidentes";
 import { Painel } from "@/paginas/Painel";
 
 const clienteDeDados = new QueryClient({
@@ -51,6 +54,9 @@ function Encaminhamento() {
         }
       >
         <Route path="/painel" element={<Painel />} />
+        <Route path="/alertas" element={<Alertas />} />
+        <Route path="/incidentes" element={<Incidentes />} />
+        <Route path="/incidentes/:id" element={<IncidenteDetalhe />} />
       </Route>
       <Route path="*" element={<Navigate to="/painel" replace />} />
     </Routes>

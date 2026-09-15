@@ -262,3 +262,234 @@
     display: none;
   }
 }
+
+/* ------------------------------------------------------- painel lateral */
+/*
+ * Usado para detalhe que não justifica mudar de página: a decomposição de uma
+ * pontuação, a explicação de uma recomendação. O analista mantém a fila
+ * visível por trás, que é o que lhe permite comparar sem perder o contexto.
+ */
+.sobreposicao {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 6, 23, 0.6);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.painel-lateral {
+  width: min(680px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  background: var(--superficie);
+  border-left: 1px solid var(--contorno);
+  padding: var(--espaco-5);
+  box-shadow: var(--sombra-elevada);
+}
+
+/* ------------------------------------------------------------- separadores */
+.separadores {
+  display: flex;
+  gap: var(--espaco-1);
+  border-bottom: 1px solid var(--contorno);
+  margin-bottom: var(--espaco-5);
+  overflow-x: auto;
+}
+
+.separador {
+  padding: 9px var(--espaco-4);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--texto-secundario);
+  font-family: inherit;
+  font-size: var(--texto-base);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transicao), border-color var(--transicao);
+}
+.separador:hover {
+  color: var(--texto);
+}
+.separador--activo {
+  color: var(--primaria);
+  border-bottom-color: var(--primaria);
+}
+
+.separador__contador {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--superficie-elevada);
+  font-size: var(--texto-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------- detalhe do incidente */
+.detalhe {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--espaco-5);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .detalhe {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.propriedades {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-3);
+}
+
+.propriedade {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.propriedade__rotulo {
+  font-size: var(--texto-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texto-terciario);
+}
+
+.propriedade__valor {
+  font-size: var(--texto-base);
+}
+
+/* ---------------------------------------------------------- linha temporal */
+.linha-temporal {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.evento {
+  display: grid;
+  grid-template-columns: 132px 16px minmax(0, 1fr);
+  gap: var(--espaco-3);
+  padding-bottom: var(--espaco-4);
+}
+
+.evento__instante {
+  font-size: var(--texto-sm);
+  color: var(--texto-terciario);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding-top: 1px;
+}
+
+.evento__marca {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+.evento__ponto {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--primaria);
+  margin-top: 5px;
+  flex: none;
+  z-index: 1;
+}
+.evento__linha {
+  position: absolute;
+  top: 14px;
+  bottom: -16px;
+  width: 1px;
+  background: var(--contorno);
+}
+.evento:last-child .evento__linha {
+  display: none;
+}
+
+.evento__corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.evento__titulo {
+  font-weight: 600;
+}
+.evento__detalhe {
+  color: var(--texto-secundario);
+  overflow-wrap: anywhere;
+}
+.evento__autor {
+  font-size: var(--texto-sm);
+  color: var(--texto-terciario);
+}
+
+/* ------------------------------------------------------------ recomendação */
+.recomendacao {
+  background: var(--superficie);
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-grande);
+  padding: var(--espaco-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-3);
+}
+
+.recomendacao__topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espaco-3);
+}
+
+.confianca {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+}
+.confianca__valor {
+  font-size: var(--texto-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.confianca__rotulo {
+  font-size: var(--texto-xs);
+  color: var(--texto-terciario);
+}
+
+.barra {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--superficie-elevada);
+  overflow: hidden;
+}
+.barra__preenchimento {
+  height: 100%;
+  background: var(--primaria);
+  border-radius: 999px;
+}
+
+/* ------------------------------------------------------------------ grafo */
+.grafo {
+  width: 100%;
+  height: 460px;
+  background: var(--fundo);
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-grande);
+}
+.grafo__no {
+  cursor: pointer;
+}
+.grafo__rotulo {
+  font-size: 10px;
+  fill: var(--texto-secundario);
+  pointer-events: none;
+}
