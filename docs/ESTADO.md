@@ -414,15 +414,39 @@ Por fazer:
 - notificações (`/api/notifications`) e integrações (`/api/integrations`), que
   têm API e ainda não têm ecrã.
 
-### 5.5 Laboratório Wazuh (§26) — **escrito; falta correr**
+### 5.5 Laboratório Wazuh (§26) — **verificado a correr**
 Os ficheiros existem: `lab/docker-compose.lab.yml`, `lab/preparar.sh`,
 `lab/gerar-alertas.sh`, `lab/agente/Dockerfile`, `lab/integrations/custom-sheisa`
 (+ `.py`) e `lab/config/ossec.conf.exemplo`.
 
-Por verificar: **nunca foi levantado**. Falta `bash lab/preparar.sh`, confirmar
-que o manager arranca, que o agente regista, e que um alerta real percorre
-`integrator → custom-sheisa → POST /api/ingest/wazuh → alerta na plataforma`.
-A imagem do Wazuh é pesada; conte com uma descarga demorada.
+Levantado e verificado em 2026-09-15. Gestor saudável, agente `srv-web-lab`
+registado (ID 001), `wazuh-integratord` a correr, e a cadeia completa provada:
+
+```
+log real → agente → gestor → regra 5710/5712/40112 → integrator
+        → custom-sheisa → POST /api/ingest/wazuh → alerta na plataforma
+```
+
+O Wazuh chegou a disparar a regra **40112** ("Multiple authentication failures
+followed by a success"), que é a assinatura de um comprometimento efectivo — e
+a correlação da SHEISA agrupou os alertas em dois incidentes, um por limiar e
+outro por origem comum (o IP do atacante, não o host da vítima).
+
+A imagem do Wazuh ronda os 600 MB; conte com uma descarga demorada no primeiro
+arranque.
+
+**Dois defeitos corrigidos ao levantá-lo**, ambos silenciosos:
+
+1. `agent-auth -F 1` — a opção `-F` **não existe** no Wazuh 4.12 (existia em
+   versões antigas). O comando imprimia o texto de ajuda e saía, e como a saída
+   não continha "Valid key" o ciclo repetia-se para sempre com uma mensagem que
+   parecia de rede. A substituição de agentes com nome repetido é decidida pelo
+   gestor, em `<auth><force><enabled>yes`, que já estava configurado.
+2. O gerador datava as linhas com a hora do **anfitrião** (CAT, UTC+2) enquanto
+   os contentores correm em UTC. Os registos apareciam no ficheiro, o colector
+   dizia analisá-lo, a regra correspondia no `wazuh-logtest` — e não nascia
+   alerta nenhum, sem um único erro em lado nenhum. A hora passa a vir do
+   contentor.
 
 Contrato do *integrator*, já documentado em `app/ingestion/wazuh.py`:
 `argv[1]`=ficheiro do alerta, `argv[2]`=api_key, `argv[3]`=hook_url.

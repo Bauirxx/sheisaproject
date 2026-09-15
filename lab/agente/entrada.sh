@@ -55,15 +55,30 @@ FIM
   echo "Registos do laboratorio acrescentados a configuracao do agente."
 fi
 
-# `-F 1` substitui um agente ja registado com o mesmo nome.
+# Substituicao de um agente ja registado com o mesmo nome.
 #
-# Sem isto, o gestor recusa com "Duplicate agent name" sempre que o contentor e
-# recriado — e o laboratorio e para ser levantado e derrubado a vontade. Num
-# ambiente real nao se usaria: la, dois agentes com o mesmo nome sao um erro de
-# inventario que deve ser visto, nao resolvido em silencio.
+# O laboratorio e para ser levantado e derrubado a vontade, pelo que o gestor
+# tem de aceitar um nome que ja conhece. Em Wazuh 4.x isso e decidido **do lado
+# do gestor**, pelo bloco <auth><force><enabled>yes</enabled> (ver
+# lab/config/ossec.conf.exemplo), e nao por uma opcao do agente.
+#
+# NAO acrescentar `-F` aqui: o `agent-auth` do Wazuh 4.12 nao tem essa opcao
+# (existia em versoes antigas). Passa-la faz o comando imprimir o texto de
+# ajuda e sair, sem nunca tentar registar-se — e como a saida nao contem
+# "Valid key", o ciclo abaixo repete-se indefinidamente com um erro que parece
+# de rede mas e de argumentos. Confirmar com `agent-auth -h`.
 echo "A registar o agente '${NOME}' no gestor '${GESTOR}'..."
-until /var/ossec/bin/agent-auth -m "${GESTOR}" -A "${NOME}" -F 1 2>&1 | tee /tmp/registo.log | grep -q "Valid key"; do
-  echo "  o gestor ainda nao aceita registos; nova tentativa em 10s"
+TENTATIVA=0
+until /var/ossec/bin/agent-auth -m "${GESTOR}" -A "${NOME}" 2>&1 | tee /tmp/registo.log | grep -q "Valid key"; do
+  TENTATIVA=$((TENTATIVA + 1))
+  echo "  registo falhou (tentativa ${TENTATIVA}); nova tentativa em 10s"
+  # Mostra o erro real em vez de o esconder no ficheiro. Sem isto, um erro de
+  # argumentos e um gestor indisponivel produzem exactamente a mesma mensagem.
+  if [ $((TENTATIVA % 3)) -eq 1 ]; then
+    echo "  --- resposta do agent-auth ---"
+    sed 's/^/  | /' /tmp/registo.log | head -12
+    echo "  ------------------------------"
+  fi
   sleep 10
 done
 

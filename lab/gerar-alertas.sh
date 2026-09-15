@@ -57,7 +57,24 @@ escrever() {
 
 instante() {
   # Formato do syslog: "Sep 15 13:05:09".
-  date "+%b %d %H:%M:%S"
+  #
+  # A hora vem do **contentor**, não do anfitrião.
+  #
+  # Os contentores correm em UTC e o anfitrião está em CAT (UTC+2). Usar
+  # `date` do anfitrião datava cada linha duas horas no futuro em relação ao
+  # relógio do Wazuh, e o logcollector descartava-as: os registos apareciam no
+  # ficheiro, o colector dizia estar a analisá-lo, a regra correspondia no
+  # `wazuh-logtest`, e mesmo assim não nascia alerta nenhum — sem uma única
+  # mensagem de erro em lado nenhum. Custou uma hora a diagnosticar.
+  #
+  # `%e` em vez de `%d` porque o syslog usa dia sem zero à esquerda.
+  docker exec "$ALVO" date "+%b %e %H:%M:%S"
+}
+
+instante_apache() {
+  # Formato do Apache: "15/Sep/2026:13:05:09 +0000". Mesma razao para vir do
+  # contentor: ver `instante`.
+  docker exec "$ALVO" date "+%d/%b/%Y:%H:%M:%S %z"
 }
 
 forca_bruta() {
@@ -90,7 +107,7 @@ web() {
   )
   for caminho in "${caminhos[@]}"; do
     escrever "$REGISTO_WEB" \
-      "$ATACANTE - - [$(date '+%d/%b/%Y:%H:%M:%S %z')] \"GET $caminho HTTP/1.1\" 404 162 \"-\" \"sqlmap/1.7\""
+      "$ATACANTE - - [$(instante_apache)] \"GET $caminho HTTP/1.1\" 404 162 \"-\" \"sqlmap/1.7\""
     sleep 1
   done
   echo "  ${#caminhos[@]} pedidos escritos."
@@ -129,4 +146,4 @@ echo "O gestor demora alguns segundos a analisar. Para acompanhar:"
 echo "  docker exec sheisa-wazuh-manager tail -f /var/ossec/logs/alerts/alerts.json"
 echo "  docker exec sheisa-wazuh-manager tail -f /var/ossec/logs/integrations.log"
 echo
-echo "E na plataforma: http://localhost:5173/alertas"
+echo "E na plataforma: http://127.0.0.1:5500/alertas"
