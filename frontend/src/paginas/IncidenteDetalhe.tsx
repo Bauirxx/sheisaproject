@@ -55,6 +55,7 @@ import {
   Vazio,
 } from "@/componentes/comuns";
 import { GrafoInvestigativo } from "@/componentes/GrafoInvestigativo";
+import { Playbooks, Tarefas } from "@/componentes/TarefasEPlaybooks";
 
 type Aba =
   | "visao"
@@ -62,6 +63,8 @@ type Aba =
   | "alertas"
   | "observacoes"
   | "evidencias"
+  | "tarefas"
+  | "playbooks"
   | "accoes"
   | "tecnicas"
   | "grafo";
@@ -72,6 +75,8 @@ const ABAS: { chave: Aba; rotulo: string }[] = [
   { chave: "alertas", rotulo: "Alertas" },
   { chave: "observacoes", rotulo: "Observações" },
   { chave: "evidencias", rotulo: "Evidências" },
+  { chave: "tarefas", rotulo: "Tarefas" },
+  { chave: "playbooks", rotulo: "Playbooks" },
   { chave: "accoes", rotulo: "Acções" },
   { chave: "tecnicas", rotulo: "Técnicas" },
   { chave: "grafo", rotulo: "Grafo" },
@@ -931,6 +936,8 @@ export function IncidenteDetalhe() {
           {aba === "alertas" ? <AlertasDoIncidente incidenteId={data.id} /> : null}
           {aba === "observacoes" ? <Observacoes incidenteId={data.id} /> : null}
           {aba === "evidencias" ? <Evidencias incidenteId={data.id} /> : null}
+          {aba === "tarefas" ? <Tarefas incidenteId={data.id} /> : null}
+          {aba === "playbooks" ? <Playbooks incidenteId={data.id} /> : null}
           {aba === "accoes" ? <Accoes incidenteId={data.id} /> : null}
           {aba === "tecnicas" ? <Tecnicas incidente={data} /> : null}
           {aba === "grafo" ? (

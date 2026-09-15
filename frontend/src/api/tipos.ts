@@ -510,3 +510,88 @@ export interface CargaDeAnalista {
   incidentes_graves: number;
   tarefas_pendentes: number;
 }
+
+// ------------------------------------------------------- tarefas e playbooks
+export interface Tarefa {
+  id: string;
+  incident_id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  ordering: number;
+  assignee: ResumoUtilizador | null;
+  due_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  /** Uma tarefa concluída sem resultado não contribui para o relatório. */
+  outcome: string | null;
+  created_at: string;
+}
+
+export interface PassoDePlaybook {
+  id: string;
+  ordering: number;
+  name: string;
+  description: string;
+  step_type: string;
+  action_kind: string | null;
+  risk_level: string;
+  requires_approval: boolean;
+  abort_on_failure: boolean;
+  is_enabled: boolean;
+}
+
+export interface Playbook {
+  id: string;
+  name: string;
+  description: string;
+  version: number;
+  is_enabled: boolean;
+  trigger_category: string | null;
+  trigger_min_severity: string;
+  auto_execute: boolean;
+  success_criteria: string;
+  rollback_criteria: string;
+  execution_count: number;
+  success_count: number;
+  last_executed_at: string | null;
+  steps: PassoDePlaybook[];
+  created_at: string;
+}
+
+export interface SugestaoDePlaybook {
+  playbook: Playbook;
+  /** Porque é que este playbook é aplicável a este incidente. */
+  motivo: string;
+}
+
+export interface ExecucaoDePasso {
+  id: string;
+  ordering: number;
+  step_name: string;
+  step_type: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  output: Record<string, unknown> & { resumo?: string };
+  error: string | null;
+  action_id: string | null;
+}
+
+export interface ExecucaoDePlaybook {
+  id: string;
+  reference: string;
+  playbook_id: string;
+  incident_id: string;
+  /** AGUARDA_APROVACAO significa suspensa à espera de decisão humana. */
+  status: string;
+  playbook_version: number;
+  started_at: string | null;
+  finished_at: string | null;
+  triggered_automatically: boolean;
+  result_summary: string;
+  error: string | null;
+  step_executions: ExecucaoDePasso[];
+  created_at: string;
+}

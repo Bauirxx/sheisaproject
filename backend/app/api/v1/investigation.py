@@ -261,7 +261,6 @@ async def create_task(
         resource_id=task.id, resource_reference=incident.reference,
         description=f"Tarefa '{task.title}' criada em {incident.reference}.",
     )
-    await session.refresh(task, ["assignee"])
     return TaskRead.model_validate(task)
 
 
@@ -275,7 +274,19 @@ async def update_task(
 ) -> TaskRead:
     from datetime import UTC
 
-    task = await session.get(Task, task_id)
+    # `depends_on` e `assignee` são carregados explicitamente com a tarefa.
+    #
+    # `session.get()` não aplica o carregamento antecipado destas relações, e
+    # aceder a `task.depends_on` mais abaixo dispararia IO fora do contexto
+    # assíncrono — que o SQLAlchemy recusa com `MissingGreenlet` e a API
+    # devolve como 500. A verificação de dependências precisa mesmo da lista,
+    # pelo que a alternativa não é não a carregar: é carregá-la aqui.
+    result = await session.execute(
+        select(Task)
+        .where(Task.id == task_id)
+        .options(selectinload(Task.depends_on), selectinload(Task.assignee))
+    )
+    task = result.scalar_one_or_none()
     if task is None:
         raise NotFoundError("Tarefa", task_id)
 
@@ -310,7 +321,6 @@ async def update_task(
     if entry is None:
         raise ValidationError("Nenhuma alteração foi submetida.", code="SEM_ALTERACOES")
 
-    await session.refresh(task, ["assignee"])
     return TaskRead.model_validate(task)
 
 
