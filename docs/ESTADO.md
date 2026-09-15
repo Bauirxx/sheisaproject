@@ -432,9 +432,12 @@ Contrato do *integrator*, já documentado em `app/ingestion/wazuh.py`:
 com explicação. `reportlab` está em `requirements-reports.txt` (falhou a
 instalar por causa do Pillow e da rede).
 
-### 5.7 Documentação
-Falta `docs/ARQUITECTURA.md` (a análise de FASE 1/2 está só no histórico da
-conversa) e um `README.md`.
+### 5.7 Documentação — **feita**
+- [`README.md`](../README.md) — porta de entrada: o que é, como arrancar, como
+  demonstrar, como testar.
+- [`ARQUITECTURA.md`](ARQUITECTURA.md) — análise crítica do RTIR, TheHive e
+  Wazuh, as decisões de modelação que daí resultaram, e a tabela dos erros
+  encontrados em execução.
 
 ## 6. Contas e credenciais do ambiente local
 
