@@ -1,6 +1,14 @@
 # Exportacao de relatorios em PDF.
-# Opcional: a plataforma gera sempre relatorios em JSON e HTML a partir dos
-# dados reais; o reportlab acrescenta apenas a exportacao PDF. Se nao estiver
-# instalado, a API responde 503 nesse formato em vez de fingir que produziu um
-# ficheiro (§4 / §34).
+#
+# Opcional: a plataforma gera sempre relatorios em JSON a partir dos dados
+# reais; o reportlab acrescenta apenas a exportacao em PDF. Sem ele, a rota
+# /api/reports/{id}/pdf responde 503 com explicacao em vez de fingir que
+# produziu um ficheiro (§4 / §34).
+#
+# O reportlab arrasta o Pillow (~7 MB) e o chardet, ambos obrigatorios: o
+# `reportlab.lib.utils` importa `PIL.Image` logo no arranque, pelo que instalar
+# com --no-deps produz um pacote que nao chega a importar. Ficam declarados
+# explicitamente para que uma instalacao de raiz seja reproduzivel.
 reportlab==4.2.5
+pillow>=11,<13
+chardet>=5

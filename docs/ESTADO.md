@@ -12,9 +12,9 @@
 | | |
 |---|---|
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
-| **A seguir** | abrir a interface num navegador · exportação PDF (opcional) |
+| **A seguir** | abrir a interface num navegador |
 | **Backend** | 106 rotas, 21 domínios, ~19k linhas |
-| **Testes** | 231 a passar · `verificar_contrato.py` para o frontend |
+| **Testes** | 236 a passar · `verificar_contrato.py` para o frontend |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.13.7 · Node 22.20 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
 | **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -476,10 +476,19 @@ arranque.
 Contrato do *integrator*, já documentado em `app/ingestion/wazuh.py`:
 `argv[1]`=ficheiro do alerta, `argv[2]`=api_key, `argv[3]`=hook_url.
 
-### 5.6 Exportação PDF — opcional, degrada bem
-`app/reporting/pdf.py` não existe; a rota `/api/reports/{id}/pdf` devolve 503
-com explicação. `reportlab` está em `requirements-reports.txt` (falhou a
-instalar por causa do Pillow e da rede).
+### 5.6 Exportação PDF — **feita**
+`app/reporting/pdf.py`. As dez secções do relatório de incidente e o relatório
+de período, com os hashes SHA-256 das evidências por extenso.
+
+Continua opcional: `pip install -r requirements-reports.txt`. Sem o pacote, a
+rota responde 503 com explicação e o relatório continua disponível em JSON.
+
+> O `reportlab` importa `PIL.Image` no arranque, pelo que instalar com
+> `--no-deps` produz um pacote que não chega a importar. O Pillow e o chardet
+> ficaram declarados explicitamente em `requirements-reports.txt`.
+
+Cinco testes, incluindo um que extrai o texto efectivamente desenhado nas
+páginas — um PDF válido mas vazio passaria num teste de assinatura.
 
 ### 5.7 Documentação — **feita**
 - [`README.md`](../README.md) — porta de entrada: o que é, como arrancar, como

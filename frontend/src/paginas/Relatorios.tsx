@@ -16,7 +16,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { consulta, pedir } from "@/api/cliente";
+import { consulta, descarregar, ErroDaApi, pedir } from "@/api/cliente";
 import type {
   IncidenteResumo,
   Pagina,
@@ -90,24 +90,22 @@ function Visualizador({ id, aoFechar }: { id: string; aoFechar: () => void }) {
   const exportar = async () => {
     definirErroPdf(null);
     try {
-      const resposta = await fetch(`/api/reports/${id}/pdf`);
-      if (!resposta.ok) {
-        const corpo = (await resposta.json()) as { erro?: { mensagem?: string } };
-        definirErroPdf(
-          corpo.erro?.mensagem ??
-            "A exportação em PDF não está disponível neste servidor.",
-        );
-        return;
-      }
-      const ficheiro = await resposta.blob();
-      const endereco = URL.createObjectURL(ficheiro);
-      const ligacao = document.createElement("a");
-      ligacao.href = endereco;
-      ligacao.download = `${data?.reference ?? "relatorio"}.pdf`;
-      ligacao.click();
-      URL.revokeObjectURL(endereco);
-    } catch {
-      definirErroPdf("Não foi possível contactar o servidor.");
+      // `descarregar` e não `fetch`: a rota exige `reports:read` e o token de
+      // acesso vive em memória, pelo que um pedido sem o cabeçalho
+      // `Authorization` recebia sempre 401 — e o utilizador via "não
+      // disponível neste servidor" quando o problema era autenticação.
+      await descarregar(
+        `/reports/${id}/pdf`,
+        `${data?.reference ?? "relatorio"}.pdf`,
+      );
+    } catch (erro) {
+      // A API responde 503 com explicação quando o `reportlab` não está
+      // instalado. Mostrar essa mensagem é mais útil do que um genérico.
+      definirErroPdf(
+        erro instanceof ErroDaApi
+          ? erro.message
+          : "Não foi possível contactar o servidor.",
+      );
     }
   };
 
