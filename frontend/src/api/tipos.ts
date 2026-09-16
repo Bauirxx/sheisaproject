@@ -226,10 +226,23 @@ export interface Activo {
   id: string;
   identifier: string;
   name: string;
+  /** Opcional porque o resumo embutido num incidente não o traz. */
   asset_type?: string;
   criticality: string;
   hostname: string | null;
   ip_address: string | null;
+  mac_address?: string | null;
+  operating_system?: string | null;
+  owner?: string | null;
+  location?: string | null;
+  business_service?: string | null;
+  description?: string;
+  /** Liga um alerta recebido a este activo sem depender do endereço. */
+  wazuh_agent_id?: string | null;
+  is_active?: boolean;
+  tags?: string[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Comentario {
@@ -596,4 +609,29 @@ export interface ExecucaoDePlaybook {
   error: string | null;
   step_executions: ExecucaoDePasso[];
   created_at: string;
+}
+
+
+// ---------------------------------------------------------------- indicadores
+/**
+ * Indicador de compromisso: entidade global, única por (tipo, valor).
+ *
+ * `first_seen`, `last_seen` e `sighting_count` são derivados de avistamentos
+ * reais pelo servidor — não são editáveis.
+ */
+export interface Indicador {
+  id: string;
+  ioc_type: string;
+  value: string;
+  reputation: string;
+  confidence: string;
+  risk_score: number;
+  sighting_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  source: string | null;
+  context?: string;
+  is_allowlisted: boolean;
+  allowlist_reason: string | null;
+  tags: string[];
 }

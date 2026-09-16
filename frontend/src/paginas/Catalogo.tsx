@@ -12,29 +12,16 @@
  */
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { consulta, pedir } from "@/api/cliente";
-import type { Activo, Pagina } from "@/api/tipos";
+import { CoberturaMitre } from "@/componentes/CoberturaMitre";
+import { EditarActivo, EditarIndicador } from "@/componentes/EditarCatalogo";
+import type { Activo, Indicador, Pagina } from "@/api/tipos";
 import { Carregando, Erro, instante, legivel, Vazio } from "@/componentes/comuns";
 import { CampoDeSelecao, Paginacao, useFiltros } from "@/componentes/listagem";
 
 // ------------------------------------------------------------- indicadores
-interface Indicador {
-  id: string;
-  ioc_type: string;
-  value: string;
-  reputation: string;
-  confidence: string;
-  risk_score: number;
-  sighting_count: number;
-  first_seen: string | null;
-  last_seen: string | null;
-  source: string | null;
-  is_allowlisted: boolean;
-  allowlist_reason: string | null;
-  tags: string[];
-}
-
 const ASPECTO_DA_REPUTACAO: Record<string, string> = {
   MALICIOSA: "distintivo--perigo",
   SUSPEITA: "distintivo--aviso",
@@ -44,6 +31,7 @@ const ASPECTO_DA_REPUTACAO: Record<string, string> = {
 
 export function Indicadores() {
   const { ler, definir, limpar } = useFiltros();
+  const [aEditar, definirAEditar] = useState<Indicador | null>(null);
 
   const parametros = {
     q: ler("q"),
@@ -147,6 +135,7 @@ export function Indicadores() {
                 <th>Avistamentos</th>
                 <th>Primeiro visto</th>
                 <th>Último visto</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -178,11 +167,51 @@ export function Indicadores() {
                   <td className="mono">{indicador.sighting_count}</td>
                   <td className="secundario">{instante(indicador.first_seen)}</td>
                   <td className="secundario">{instante(indicador.last_seen)}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="botao botao--pequeno"
+                      onClick={() => definirAEditar(indicador)}
+                    >
+                      Editar
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <Paginacao pagina={data} aoMudar={(n) => definir({ page: n })} />
+        </div>
+      ) : null}
+
+      {aEditar ? (
+        <div
+          className="sobreposicao"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Editar ${aEditar.value}`}
+          onClick={() => definirAEditar(null)}
+        >
+          <div className="painel-lateral" onClick={(e) => e.stopPropagation()}>
+            <div className="linha linha--espalhada" style={{ marginBottom: "var(--espaco-4)" }}>
+              <div className="pilha" style={{ gap: 0 }}>
+                <h2>Editar indicador</h2>
+                <span className="terciario mono">{aEditar.value}</span>
+              </div>
+              <button
+                type="button"
+                className="botao botao--discreto"
+                onClick={() => definirAEditar(null)}
+              >
+                Fechar
+              </button>
+            </div>
+            <EditarIndicador
+              key={aEditar.id}
+              indicador={aEditar}
+              aoFechar={() => definirAEditar(null)}
+            />
+          </div>
         </div>
       ) : null}
     </>
@@ -198,6 +227,7 @@ const ASPECTO_DA_CRITICIDADE: Record<string, string> = {
 };
 
 export function Activos() {
+  const [activoAEditar, definirActivoAEditar] = useState<Activo | null>(null);
   const { ler, definir } = useFiltros();
 
   const parametros = {
@@ -275,6 +305,7 @@ export function Activos() {
                 <th>Anfitrião</th>
                 <th>Endereço</th>
                 <th>Responsável</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -295,11 +326,51 @@ export function Activos() {
                   <td className="secundario mono">{activo.hostname ?? "—"}</td>
                   <td className="secundario mono">{activo.ip_address ?? "—"}</td>
                   <td className="secundario">{activo.owner ?? "—"}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="botao botao--pequeno"
+                      onClick={() => definirActivoAEditar(activo)}
+                    >
+                      Editar
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <Paginacao pagina={data} aoMudar={(n) => definir({ page: n })} />
+        </div>
+      ) : null}
+
+      {activoAEditar ? (
+        <div
+          className="sobreposicao"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Editar ${activoAEditar.identifier}`}
+          onClick={() => definirActivoAEditar(null)}
+        >
+          <div className="painel-lateral" onClick={(e) => e.stopPropagation()}>
+            <div className="linha linha--espalhada" style={{ marginBottom: "var(--espaco-4)" }}>
+              <div className="pilha" style={{ gap: 0 }}>
+                <h2>Editar activo</h2>
+                <span className="terciario mono">{activoAEditar.identifier}</span>
+              </div>
+              <button
+                type="button"
+                className="botao botao--discreto"
+                onClick={() => definirActivoAEditar(null)}
+              >
+                Fechar
+              </button>
+            </div>
+            <EditarActivo
+              key={activoAEditar.id}
+              activo={activoAEditar}
+              aoFechar={() => definirActivoAEditar(null)}
+            />
+          </div>
         </div>
       ) : null}
     </>
@@ -322,6 +393,9 @@ interface Tecnica {
 
 export function Mitre() {
   const { ler, definir } = useFiltros();
+  // A cobertura observada é o que interessa ao dia-a-dia; o catálogo completo
+  // (709 técnicas) serve para consulta. Por isso a cobertura vem primeiro.
+  const vista = ler("vista", "cobertura");
 
   const parametros = {
     q: ler("q"),
@@ -355,6 +429,30 @@ export function Mitre() {
         </div>
       </div>
 
+      <div className="separadores" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={vista === "cobertura"}
+          className={`separador${vista === "cobertura" ? " separador--activo" : ""}`}
+          onClick={() => definir({ vista: "cobertura" })}
+        >
+          Cobertura observada
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={vista === "catalogo"}
+          className={`separador${vista === "catalogo" ? " separador--activo" : ""}`}
+          onClick={() => definir({ vista: "catalogo" })}
+        >
+          Catálogo completo
+        </button>
+      </div>
+
+      {vista === "cobertura" ? <CoberturaMitre /> : null}
+
+      <div hidden={vista !== "catalogo"}>
       <div className="filtros">
         <div className="campo campo--pesquisa">
           <label className="campo__etiqueta" htmlFor="pesquisa-mitre">
@@ -435,6 +533,7 @@ export function Mitre() {
           <Paginacao pagina={data} aoMudar={(n) => definir({ page: n })} />
         </div>
       ) : null}
+      </div>
     </>
   );
 }
