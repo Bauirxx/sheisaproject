@@ -59,6 +59,7 @@ import {
   EditarIncidente,
 } from "@/componentes/EditarIncidente";
 import { GrafoInvestigativo } from "@/componentes/GrafoInvestigativo";
+import { RelacoesDeIncidente } from "@/componentes/RelacoesDeIncidente";
 import { Playbooks, Tarefas } from "@/componentes/TarefasEPlaybooks";
 
 type Aba =
@@ -71,6 +72,7 @@ type Aba =
   | "playbooks"
   | "accoes"
   | "tecnicas"
+  | "relacoes"
   | "grafo";
 
 const ABAS: { chave: Aba; rotulo: string }[] = [
@@ -83,6 +85,7 @@ const ABAS: { chave: Aba; rotulo: string }[] = [
   { chave: "playbooks", rotulo: "Playbooks" },
   { chave: "accoes", rotulo: "Acções" },
   { chave: "tecnicas", rotulo: "Técnicas" },
+  { chave: "relacoes", rotulo: "Relacionados" },
   { chave: "grafo", rotulo: "Grafo" },
 ];
 
@@ -500,6 +503,110 @@ function Observacoes({ incidenteId }: { incidenteId: string }) {
   );
 }
 
+/**
+ * Verificação de integridade e eliminação de uma evidência (§15).
+ *
+ * A verificação recalcula o hash do ficheiro em disco e compara-o com o que
+ * foi registado na recepção. Um resultado negativo é uma conclusão válida e
+ * importante — significa que a evidência foi alterada ou perdida — e por isso
+ * é apresentada a vermelho em vez de ser tratada como erro da operação.
+ *
+ * Eliminar exige `evidence:delete`, que nenhum perfil operacional tem por
+ * omissão. O nome e o hash do conteúdo removido ficam preservados na auditoria:
+ * é o que permite, mais tarde, saber que a evidência existiu e o que continha.
+ */
+function AccoesDaEvidencia({
+  evidencia,
+  incidenteId,
+}: {
+  evidencia: Evidencia;
+  incidenteId: string;
+}) {
+  const clienteDeDados = useQueryClient();
+  const { pode } = useSessao();
+  const [veredicto, definirVeredicto] = useState<{
+    integra: boolean;
+    detalhe: string;
+  } | null>(null);
+  const [aConfirmar, definirAConfirmar] = useState(false);
+
+  const verificar = useMutation({
+    mutationFn: () =>
+      pedir<{ integra: boolean; detalhe: string }>(
+        `/evidence/${evidencia.id}/verify`,
+        { metodo: "POST" },
+      ),
+    onSuccess: async (r) => {
+      definirVeredicto(r);
+      await clienteDeDados.invalidateQueries({ queryKey: ["evidencias", incidenteId] });
+    },
+  });
+
+  const eliminar = useMutation({
+    mutationFn: () =>
+      pedir(`/evidence/${evidencia.id}`, { metodo: "DELETE" }),
+    onSuccess: async () => {
+      await clienteDeDados.invalidateQueries({ queryKey: ["evidencias", incidenteId] });
+      await clienteDeDados.invalidateQueries({ queryKey: ["linha", incidenteId] });
+    },
+  });
+
+  return (
+    <>
+      <button
+        type="button"
+        className="botao botao--pequeno"
+        disabled={verificar.isPending}
+        onClick={() => verificar.mutate()}
+        title="Recalcula o hash do ficheiro e compara-o com o registado na recepção."
+      >
+        {verificar.isPending ? "A verificar…" : "Verificar"}
+      </button>
+
+      {pode("evidence:delete") ? (
+        aConfirmar ? (
+          <>
+            <button
+              type="button"
+              className="botao botao--perigo botao--pequeno"
+              disabled={eliminar.isPending}
+              onClick={() => eliminar.mutate()}
+            >
+              {eliminar.isPending ? "A eliminar…" : "Confirmar"}
+            </button>
+            <button
+              type="button"
+              className="botao botao--discreto botao--pequeno"
+              onClick={() => definirAConfirmar(false)}
+            >
+              Não
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="botao botao--discreto botao--pequeno"
+            onClick={() => definirAConfirmar(true)}
+          >
+            Eliminar
+          </button>
+        )
+      ) : null}
+
+      {veredicto ? (
+        <span
+          className="terciario"
+          style={{ color: veredicto.integra ? undefined : "var(--perigo)" }}
+        >
+          {veredicto.integra ? "✓ íntegra" : "✗ alterada"}
+        </span>
+      ) : null}
+      {verificar.error ? <Erro erro={verificar.error} /> : null}
+      {eliminar.error ? <Erro erro={eliminar.error} /> : null}
+    </>
+  );
+}
+
 function Evidencias({ incidenteId }: { incidenteId: string }) {
   const { pode } = useSessao();
   const [erroDeDescarga, definirErroDeDescarga] = useState<unknown>(null);
@@ -565,18 +672,24 @@ function Evidencias({ incidenteId }: { incidenteId: string }) {
                   uma navegação do navegador não leva o cabeçalho
                   `Authorization`, pelo que a descarga daria 401.
                 */}
-                <button
-                  className="botao botao--pequeno"
-                  onClick={() => {
-                    definirErroDeDescarga(null);
-                    descarregar(
-                      `/evidence/${evidencia.id}/download`,
-                      evidencia.original_filename,
-                    ).catch(definirErroDeDescarga);
-                  }}
-                >
-                  Descarregar
-                </button>
+                <div className="linha" style={{ gap: "var(--espaco-2)" }}>
+                  <button
+                    className="botao botao--pequeno"
+                    onClick={() => {
+                      definirErroDeDescarga(null);
+                      descarregar(
+                        `/evidence/${evidencia.id}/download`,
+                        evidencia.original_filename,
+                      ).catch(definirErroDeDescarga);
+                    }}
+                  >
+                    Descarregar
+                  </button>
+                  <AccoesDaEvidencia
+                    evidencia={evidencia}
+                    incidenteId={incidenteId}
+                  />
+                </div>
               </td>
             </tr>
           ))}
@@ -975,6 +1088,7 @@ export function IncidenteDetalhe() {
           {aba === "playbooks" ? <Playbooks incidenteId={data.id} /> : null}
           {aba === "accoes" ? <Accoes incidenteId={data.id} /> : null}
           {aba === "tecnicas" ? <Tecnicas incidente={data} /> : null}
+          {aba === "relacoes" ? <RelacoesDeIncidente incidente={data} /> : null}
           {aba === "grafo" ? (
             <div className="cartao">
               <GrafoDoIncidente incidenteId={data.id} />

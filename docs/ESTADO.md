@@ -12,9 +12,9 @@
 | | |
 |---|---|
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
-| **A seguir** | abrir a interface num navegador · edição (PATCH) de incidente/activo/IOC/utilizador · exportação PDF |
+| **A seguir** | abrir a interface num navegador · exportação PDF (opcional) |
 | **Backend** | 106 rotas, 21 domínios, ~19k linhas |
-| **Testes** | 228 a passar · `verificar_contrato.py` para o frontend |
+| **Testes** | 231 a passar · `verificar_contrato.py` para o frontend |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.13.7 · Node 22.20 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
 | **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -416,20 +416,28 @@ Acrescentado depois da primeira passagem:
 - **tarefas** (§19, que não tinha ecrã nenhum) e **playbooks** no incidente;
 - **carregamento de evidências** e descarga autenticada;
 - **atribuição de responsável** no detalhe;
-- páginas de **integrações** e **notificações**.
+- páginas de **integrações** e **notificações**;
+- **cobertura MITRE** ao longo da cadeia de ataque, separando técnicas
+  afirmadas de hipóteses do motor;
+- **edição** de incidente, indicador, activo e utilizador, mais reposição e
+  alteração de palavra-passe;
+- **relações entre incidentes** (§20) e **reversão de acções** (§14);
+- **verificação de integridade** e eliminação de evidências.
+
+Das 106 operações da API, **3 continuam sem ecrã** (sessões próprias, criação
+de chaves de API e listagem de equipas) — eram 35 no início desta passagem.
 
 **Por fazer:**
 
 - **abrir num navegador e corrigir o que estiver torto** — continua a ser o
   único passo que não pôde ser dado aqui (não há automação de navegador
   disponível). O que *foi* verificado: compila sem erros de TypeScript, serve,
-  o proxy chega à API, e todos os caminhos e campos usados foram confrontados
-  com o OpenAPI e com respostas reais;
-- **edição** (`PATCH`) de incidente, activo, IOC e utilizador — a de tarefa já
-  existe. A API suporta as cinco;
-- relações entre incidentes, MITRE tácticas/cobertura, verificar integridade de
-  evidência, reverter acção, alterar a própria palavra-passe, criar chaves de
-  API — todas com API e sem ecrã.
+  o proxy chega à API, e cada caminho e campo usado foi confrontado com o
+  OpenAPI e com respostas reais.
+- Três operações continuam sem ecrã, todas marginais:
+  `GET /auth/sessions` (as próprias sessões do utilizador),
+  `POST /integrations/api-keys` (criar chaves; existe na linha de comandos com
+  `manage create-api-key`) e `GET /roles/teams`.
 
 ### 5.5 Laboratório Wazuh (§26) — **verificado a correr**
 Os ficheiros existem: `lab/docker-compose.lab.yml`, `lab/preparar.sh`,
