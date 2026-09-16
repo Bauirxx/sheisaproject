@@ -323,6 +323,13 @@ export interface Accao {
   /** §4: a API diz se a acção é mesmo executável, e porque não, se não for. */
   executavel: boolean;
   motivo_nao_executavel: string | null;
+  /** Reverter cria a acção inversa; não desfaz nada em silêncio. */
+  is_reversible: boolean;
+  reverted_at: string | null;
+  executed_at: string | null;
+  /** Resposta efectiva do sistema alvo. Vazio significa que nada correu. */
+  result: Record<string, unknown>;
+  error: string | null;
   created_at: string;
 }
 

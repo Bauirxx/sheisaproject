@@ -587,6 +587,107 @@ function Evidencias({ incidenteId }: { incidenteId: string }) {
   );
 }
 
+/**
+ * Reversão de uma acção executada (§14 — critérios de rollback).
+ *
+ * Não desfaz nada directamente: **cria a acção inversa** (desbloquear reverte
+ * bloquear, remover isolamento reverte isolar), que passa pelo mesmo regime de
+ * aprovação. Desfazer em silêncio uma acção disruptiva seria tão perigoso como
+ * executá-la em silêncio, e deixaria o registo sem explicação de porquê.
+ */
+function ReverterAccao({
+  accao,
+  incidenteId,
+}: {
+  accao: Accao;
+  incidenteId: string;
+}) {
+  const clienteDeDados = useQueryClient();
+  const { pode } = useSessao();
+  const [aberto, definirAberto] = useState(false);
+  const [justificacao, definirJustificacao] = useState("");
+
+  const reverter = useMutation({
+    mutationFn: () =>
+      pedir<Accao>(`/actions/${accao.id}/revert`, {
+        metodo: "POST",
+        corpo: { rationale: justificacao },
+      }),
+    onSuccess: async () => {
+      await clienteDeDados.invalidateQueries({ queryKey: ["accoes", incidenteId] });
+      await clienteDeDados.invalidateQueries({ queryKey: ["linha", incidenteId] });
+      definirAberto(false);
+      definirJustificacao("");
+    },
+  });
+
+  // Só faz sentido para acções executadas, reversíveis e ainda não revertidas.
+  if (
+    !pode("actions:propose") ||
+    accao.status !== "EXECUTADA" ||
+    !accao.is_reversible ||
+    accao.reverted_at
+  ) {
+    return null;
+  }
+
+  if (!aberto) {
+    return (
+      <div className="linha" style={{ marginTop: "var(--espaco-3)" }}>
+        <button
+          type="button"
+          className="botao botao--pequeno"
+          onClick={() => definirAberto(true)}
+        >
+          Reverter
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="pilha"
+      style={{ gap: "var(--espaco-2)", marginTop: "var(--espaco-3)" }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        reverter.mutate();
+      }}
+    >
+      <label className="campo">
+        <span className="campo__etiqueta">Motivo da reversão</span>
+        <textarea
+          className="area-texto"
+          value={justificacao}
+          minLength={5}
+          maxLength={4000}
+          placeholder="Porque é que esta acção deve ser desfeita."
+          onChange={(e) => definirJustificacao(e.target.value)}
+        />
+        <span className="campo__ajuda">
+          Cria a acção inversa, que passa pelo mesmo regime de aprovação.
+        </span>
+      </label>
+      {reverter.error ? <Erro erro={reverter.error} /> : null}
+      <div className="linha" style={{ gap: "var(--espaco-2)" }}>
+        <button
+          className="botao botao--primario botao--pequeno"
+          disabled={reverter.isPending || justificacao.trim().length < 5}
+        >
+          {reverter.isPending ? "A propor…" : "Propor reversão"}
+        </button>
+        <button
+          type="button"
+          className="botao botao--discreto botao--pequeno"
+          onClick={() => definirAberto(false)}
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function Accoes({ incidenteId }: { incidenteId: string }) {
   const { data, isPending, error } = useQuery({
     queryKey: ["accoes", incidenteId],
@@ -634,6 +735,14 @@ function Accoes({ incidenteId }: { incidenteId: string }) {
               Não executável: {accao.motivo_nao_executavel}
             </div>
           ) : null}
+
+          {accao.reverted_at ? (
+            <p className="terciario" style={{ marginTop: "var(--espaco-3)" }}>
+              Revertida em {instante(accao.reverted_at)}.
+            </p>
+          ) : (
+            <ReverterAccao accao={accao} incidenteId={incidenteId} />
+          )}
 
           {accao.approvals.length > 0 ? (
             <div className="pilha" style={{ gap: 2, marginTop: "var(--espaco-3)" }}>
