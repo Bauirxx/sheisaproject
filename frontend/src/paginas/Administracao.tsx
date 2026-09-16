@@ -14,18 +14,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
 import { consulta, pedir } from "@/api/cliente";
-import type { Pagina, UtilizadorResumo } from "@/api/tipos";
+import type {
+  Pagina,
+  PerfilDetalhado,
+  UtilizadorResumo,
+} from "@/api/tipos";
 import { useSessao } from "@/autenticacao/contexto";
+import {
+  AlterarMinhaPalavraPasse,
+  EditarUtilizador,
+} from "@/componentes/EditarUtilizador";
 import { Carregando, Erro, instante, legivel, Vazio } from "@/componentes/comuns";
 import { CampoDeSelecao, Paginacao, useFiltros } from "@/componentes/listagem";
-
-interface PerfilDetalhado {
-  id: string;
-  name: string;
-  description: string;
-  is_system: boolean;
-  permissions: { code: string; description: string }[];
-}
 
 interface Playbook {
   id: string;
@@ -179,6 +179,7 @@ function NovoUtilizador({ aoCriar }: { aoCriar: () => void }) {
 }
 
 function Utilizadores() {
+  const [aEditar, definirAEditar] = useState<UtilizadorResumo | null>(null);
   const { ler, definir } = useFiltros();
   const clienteDeDados = useQueryClient();
   const { pode } = useSessao();
@@ -245,6 +246,7 @@ function Utilizadores() {
                 <th>Perfil</th>
                 <th>Estado</th>
                 <th>Último acesso</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -271,11 +273,56 @@ function Utilizadores() {
                     ) : null}
                   </td>
                   <td className="secundario">{instante(utilizador.last_login_at)}</td>
+                  <td>
+                    {pode("users:manage") ? (
+                      <button
+                        type="button"
+                        className="botao botao--pequeno"
+                        onClick={() => definirAEditar(utilizador)}
+                      >
+                        Editar
+                      </button>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <Paginacao pagina={data} aoMudar={(n) => definir({ page: n })} />
+        </div>
+      ) : null}
+
+      <div className="separador" style={{ margin: "var(--espaco-5) 0" }} />
+      <AlterarMinhaPalavraPasse />
+
+      {aEditar ? (
+        <div
+          className="sobreposicao"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Editar ${aEditar.full_name}`}
+          onClick={() => definirAEditar(null)}
+        >
+          <div className="painel-lateral" onClick={(e) => e.stopPropagation()}>
+            <div className="linha linha--espalhada" style={{ marginBottom: "var(--espaco-4)" }}>
+              <div className="pilha" style={{ gap: 0 }}>
+                <h2>Editar utilizador</h2>
+                <span className="terciario mono">{aEditar.email}</span>
+              </div>
+              <button
+                type="button"
+                className="botao botao--discreto"
+                onClick={() => definirAEditar(null)}
+              >
+                Fechar
+              </button>
+            </div>
+            <EditarUtilizador
+              key={aEditar.id}
+              utilizador={aEditar}
+              aoFechar={() => definirAEditar(null)}
+            />
+          </div>
         </div>
       ) : null}
     </div>

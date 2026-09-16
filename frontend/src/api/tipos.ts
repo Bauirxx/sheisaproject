@@ -635,3 +635,13 @@ export interface Indicador {
   allowlist_reason: string | null;
   tags: string[];
 }
+
+
+/** Perfil com as permissões efectivas, tal como `GET /roles` o devolve. */
+export interface PerfilDetalhado {
+  id: string;
+  name: string;
+  description: string;
+  is_system: boolean;
+  permissions: { code: string; description: string }[];
+}
