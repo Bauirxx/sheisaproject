@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 389 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 393 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 389 a passar, 88% de cobertura |
+| Testes | 393 a passar, 88% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -159,8 +159,8 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 **Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
 cobertos, e com eles os conectores, a ingestão genérica, o catálogo, os
 middlewares, o arranque e as rotas de recomendações e de alertas. Escrever os
-testes revelou **vinte e quatro defeitos reais**, todos corrigidos e verificados
-por reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 38. Nenhum dava erro; todos deixavam o sistema num estado
+testes revelou **vinte e seis defeitos reais**, todos corrigidos e verificados
+por reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 40. Nenhum dava erro; todos deixavam o sistema num estado
 plausível e errado. O mais grave: aprovar um bloqueio num playbook **não o
 executava**, e o incidente registava "Bloqueio aplicado".
 
@@ -198,14 +198,15 @@ middlewares trouxeram o de segurança: o limite contra força bruta no login
 Os alertas repetiram um padrão que vale a pena procurar noutros sítios: **uma
 regra aplicada numa porta e esquecida nas outras**. A triagem cumpria o ciclo de
 vida do alerta; a promoção e a ligação não o consultavam. Ver a armadilha 5.15.
+Aplicá-la ao resto do código encontrou logo mais um caso: os playbooks mudavam o
+estado do incidente sem passar pela transição (defeito 39).
 
-**Próximos candidatos**, medidos com a suite completa (389 testes, 88%):
+**Próximos candidatos**, medidos com a suite completa (393 testes, 88%):
 
 | Módulo | Cobertura | Porque importa |
 |---|---|---|
 | `correlation/engine.py` | 72% | a conclusão "é a mesma actividade" |
 | `api/v1/admin.py` | 73% | utilizadores, perfis, auditoria |
-| `playbooks/engine.py` | 74% | tipos de passo menos usados |
 | `services/auth_service.py` | 74% | sessões, bloqueio de conta, mudança de palavra-passe |
 
 `core/database.py` (45%) e `siem_connectors` (56%) não são candidatos: o
@@ -218,7 +219,7 @@ para o `analytics_service`, que estava a 76%:
 ./.venv/Scripts/python.exe -m pytest --cov=app --cov-report=term
 ```
 
-> **Pendente de decisão do autor — três achados que não foram corrigidos**, por
+> **Pendente de decisão do autor — quatro achados que não foram corrigidos**, por
 > exigirem uma escolha e não uma correcção:
 >
 > 1. **Os playbooks semeados pedem duas aprovações para a mesma decisão**: um
@@ -245,6 +246,14 @@ para o `analytics_service`, que estava a 76%:
 >    (a API devolve o erro 1106), e o agente `001 srv-web-lab` está
 >    **desligado** — pelo que nada disto pôde ser confrontado. Os testes não
 >    afirmam os nomes dos comandos, para não os fixar.
+> 4. **Um playbook pode encerrar um incidente sem `incidents:close`.** A
+>    verificação dessa permissão vive na rota `POST /incidents/{id}/transition`
+>    e não no serviço, e o motor de playbooks chama o serviço. Um playbook com
+>    estado final ENCERRADO, definido por quem tem `playbooks:manage`, fecha o
+>    incidente quando corrido por um analista. Pode ser intencional — quem
+>    definiu o playbook tinha autoridade para encerrar —, ou a separação entre
+>    quem conduz e quem dá por terminado deve valer também aqui. Nenhum
+>    playbook da base de desenvolvimento usa estado final.
 
 ### 4.4 Ideias que foram deixadas de fora deliberadamente
 
