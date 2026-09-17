@@ -275,6 +275,113 @@ for caminho, nome, campos in [
     else:
         print(f"  --  {nome}: sem registos para verificar")
 
+# ------------------------------------------------ acrescentado em 2026-09-17
+# Estas seis vistas foram as ultimas a ganhar interface. Cinco delas nunca
+# tinham sido chamadas por nenhum ecra, e uma (a criacao de chaves) devolvia
+# 500 em qualquer pedido valido sem que nada o tivesse revelado.
+
+print("\n== eventos brutos ==")
+estado, eventos = pedir("/events?size=1", token)
+if estado != 200:
+    falhas.append(f"Evento: HTTP {estado} em /events")
+elif eventos.get("itens"):
+    conferir("Evento", eventos["itens"][0],
+             ["id", "source_kind", "source_name", "source_event_id",
+              "occurred_at", "received_at", "severity", "source_severity",
+              "event_type", "description", "source_ip", "destination_ip",
+              "source_port", "destination_port", "protocol", "host",
+              "username", "process", "file_hash", "rule_id", "rule_name",
+              "rule_groups", "reported_techniques", "normalized_extra",
+              "alert_id", "created_at"])
+    estado, detalhe = pedir(f"/events/{eventos['itens'][0]['id']}", token)
+    if estado != 200:
+        falhas.append(f"EventoDetalhado: HTTP {estado}")
+    else:
+        conferir("EventoDetalhado", detalhe, ["raw_payload"])
+        # O payload e a prova de origem: um dicionario vazio nao prova nada.
+        if not detalhe.get("raw_payload"):
+            falhas.append(
+                "EventoDetalhado: raw_payload vazio - sem ele nenhum campo "
+                "apresentado pode ser confrontado com a fonte"
+            )
+else:
+    print("  --  Evento: sem registos para verificar")
+
+print("\n== centro de operacoes ==")
+estado, centro = pedir("/soc?limite=3", token)
+if estado != 200:
+    falhas.append(f"VistaDoCentroDeOperacoes: HTTP {estado} em /soc")
+else:
+    conferir("VistaDoCentroDeOperacoes", centro,
+             ["incidentes_activos", "alertas_recentes", "aprovacoes_pendentes",
+              "playbooks_em_execucao", "indicadores_frequentes",
+              "activos_afectados", "tarefas_pendentes"])
+    for fila, campos in [
+        ("incidentes_activos",
+         ["id", "referencia", "titulo", "severidade", "estado", "prioridade",
+          "pontuacao_risco", "responsavel", "detectado_em", "prazo"]),
+        ("alertas_recentes",
+         ["id", "referencia", "titulo", "severidade", "pontuacao", "fonte",
+          "eventos", "ultimo_evento", "probabilidade_falso_positivo"]),
+        ("aprovacoes_pendentes",
+         ["id", "referencia", "titulo", "tipo", "risco", "alvo",
+          "justificacao", "solicitado_em"]),
+        ("playbooks_em_execucao",
+         ["id", "referencia", "playbook", "estado", "iniciado_em"]),
+        ("indicadores_frequentes",
+         ["id", "tipo", "valor", "reputacao", "avistamentos",
+          "ultima_observacao"]),
+        ("activos_afectados",
+         ["id", "identificador", "nome", "criticidade", "incidentes_activos"]),
+        ("tarefas_pendentes",
+         ["id", "titulo", "estado", "prioridade", "responsavel", "prazo"]),
+    ]:
+        itens = centro.get(fila) or []
+        if itens:
+            conferir(f"centro.{fila}", itens[0], campos)
+        else:
+            print(f"  --  centro.{fila}: fila vazia")
+
+print("\n== sessoes, equipas e motor ==")
+estado, sessoes = pedir("/auth/sessions", token)
+if estado != 200:
+    falhas.append(f"Sessao: HTTP {estado} em /auth/sessions")
+elif sessoes:
+    conferir("Sessao", sessoes[0],
+             ["id", "created_at", "expires_at", "last_used_at", "ip_address",
+              "user_agent", "revoked_at"])
+else:
+    falhas.append("Sessao: a sessao usada nesta verificacao devia constar")
+
+estado, equipas = pedir("/roles/teams", token)
+if estado != 200:
+    falhas.append(f"Equipa: HTTP {estado} em /roles/teams")
+elif equipas:
+    conferir("Equipa", equipas[0], ["id", "name", "description", "is_active"])
+else:
+    print("  --  Equipa: sem equipas para verificar")
+
+estado, motor = pedir("/recommendations/meta/tipos", token)
+if estado != 200:
+    falhas.append(f"MetaDoMotor: HTTP {estado}")
+else:
+    conferir("MetaDoMotor", motor, ["motor", "versao", "tipos", "estados",
+                                    "limiares"])
+    # A pagina explica cada limiar por nome; um limiar novo sem explicacao
+    # apareceria na interface sem sentido, e um removido deixaria de aparecer.
+    esperados = {"confianca_minima_para_levantar",
+                 "confianca_maxima_de_inferencia", "taxa_de_falso_positivo",
+                 "pontuacao_minima_para_promover",
+                 "validade_por_omissao_em_dias"}
+    obtidos = set(motor.get("limiares", {}))
+    if obtidos != esperados:
+        falhas.append(
+            "MetaDoMotor.limiares mudou -> acrescentar/remover a explicacao em "
+            f"SENTIDO_DO_LIMIAR (Recomendacoes.tsx): {obtidos ^ esperados}"
+        )
+    else:
+        print(f"  ok  MetaDoMotor.limiares ({len(obtidos)} limiares explicados)")
+
 estado, accoes_auditadas = pedir("/audit/actions", token)
 if estado == 200 and isinstance(accoes_auditadas, list):
     print(f"  ok  /audit/actions ({len(accoes_auditadas)} accoes distintas)")

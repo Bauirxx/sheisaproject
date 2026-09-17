@@ -9,15 +9,14 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
+from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from sqlalchemy import pool
-
-from app.core.config import settings
 
 # Importar o pacote de modelos regista todas as tabelas no metadata.
 import app.models  # noqa: F401
+from alembic import context
+from app.core.config import settings
 from app.models import Base
 
 config = context.config
@@ -31,9 +30,7 @@ target_metadata = Base.metadata
 
 def _include_object(obj, name, type_, reflected, compare_to) -> bool:
     """Ignora objectos que não pertencem ao esquema da aplicação."""
-    if type_ == "table" and name in {"spatial_ref_sys"}:
-        return False
-    return True
+    return not (type_ == "table" and name in {"spatial_ref_sys"})
 
 
 def run_migrations_offline() -> None:

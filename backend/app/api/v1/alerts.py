@@ -338,6 +338,7 @@ async def list_events(
     _: Annotated[object, Depends(require(Permission.EVENTS_READ))],
     params: Annotated[PageParams, Depends(page_params)],
     fonte: Annotated[list[SourceKind] | None, Query()] = None,
+    severidade: Annotated[list[Severity] | None, Query()] = None,
     alerta_id: Annotated[uuid.UUID | None, Query()] = None,
     ip: Annotated[str | None, Query(description="IP de origem ou destino.")] = None,
     host: Annotated[str | None, Query()] = None,
@@ -347,6 +348,8 @@ async def list_events(
     stmt = select(Event)
     if fonte:
         stmt = stmt.where(Event.source_kind.in_(fonte))
+    if severidade:
+        stmt = stmt.where(Event.severity.in_(severidade))
     if alerta_id:
         stmt = stmt.where(Event.alert_id == alerta_id)
     if ip:

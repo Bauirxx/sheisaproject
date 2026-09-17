@@ -29,7 +29,7 @@ from app.schemas.auth import (
     UserRead,
     UserUpdate,
 )
-from app.schemas.common import ApiModel, MessageResponse
+from app.schemas.common import ApiInput, ApiModel, MessageResponse
 from app.services import auth_service, integration_service
 
 user_router = APIRouter(prefix="/users", tags=["Utilizadores"])
@@ -396,10 +396,19 @@ async def test_integration(
     return await integration_service.test_connection(session, integration, ctx)
 
 
-class ApiKeyCreate(ApiModel):
-    name: str
+class ApiKeyCreate(ApiInput):
+    """Corpo de entrada, e por isso herda `ApiInput` e não `ApiModel`.
+
+    A distinção não é cosmética: `ApiModel` existe para respostas e traz
+    `use_enum_values=True`, que substitui o membro do enum pela string. Um
+    corpo de pedido validado por essa base chegaria ao código como `str`, e
+    qualquer leitura de `.kind.value` falharia — foi o que acontecia aqui.
+    `ApiInput` preserva o membro e recusa campos desconhecidos em voz alta.
+    """
+
+    name: str = Field(min_length=1, max_length=80)
     kind: SourceKind
-    description: str = ""
+    description: str = Field(default="", max_length=500)
 
 
 @integration_router.post(
