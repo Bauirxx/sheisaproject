@@ -121,9 +121,11 @@ async def authenticate(
             outcome=AuditOutcome.NEGADO, failure_reason="conta bloqueada",
         )
         await session.commit()
+        # A hora vai marcada como UTC: sem isso, quem está em Maputo (UTC+2)
+        # lia "até 08:15", voltava às 08:15 locais e continuava bloqueado.
         raise AccountLockedError(
             "Conta bloqueada até "
-            f"{user.locked_until.strftime('%H:%M')} por tentativas falhadas."
+            f"{user.locked_until.strftime('%H:%M')} UTC por tentativas falhadas."
         )
 
     if not verify_password(password, user.password_hash):
@@ -302,12 +304,29 @@ async def change_password(
     current_session_id: uuid.UUID | None = None,
 ) -> None:
     if not verify_password(current_password, user.password_hash):
+        # Esta verificação é uma porta para adivinhar a palavra-passe tão boa
+        # como o login, e não contava tentativas: com um token de acesso roubado
+        # tentava-se até acertar, e depois trocava-se a palavra-passe. Conta como
+        # no login e, ao bloquear, termina as sessões — incluindo a que tentava.
+        user.failed_login_count += 1
+        reason = "palavra-passe actual incorrecta"
+        locked = user.failed_login_count >= settings.max_failed_logins
+        if locked:
+            user.locked_until = datetime.now(UTC) + timedelta(minutes=settings.lockout_minutes)
+            reason = (
+                f"palavra-passe actual incorrecta ({user.failed_login_count} falhas) "
+                "- conta bloqueada e sessões terminadas"
+            )
         await audit.record(
             session, ctx,
             action="ALTERAR_PALAVRA_PASSE", resource_type="utilizador", resource_id=user.id,
             description="Tentativa falhada de alteração de palavra-passe.",
-            outcome=AuditOutcome.FALHA, failure_reason="palavra-passe actual incorrecta",
+            outcome=AuditOutcome.FALHA, failure_reason=reason,
         )
+        if locked:
+            await revoke_all_sessions(
+                session, ctx, user_id=user.id, reason="bloqueio_por_tentativas_falhadas"
+            )
         await session.commit()
         raise InvalidCredentialsError("A palavra-passe actual está incorrecta.")
 
@@ -317,6 +336,7 @@ async def change_password(
     user.password_hash = hash_password(new_password)
     user.password_changed_at = datetime.now(UTC)
     user.must_change_password = False
+    user.failed_login_count = 0
 
     # Alterar a palavra-passe invalida as outras sessões: se a alteração foi
     # motivada por suspeita de compromisso, deixar sessões antigas abertas
