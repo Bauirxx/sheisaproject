@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 438 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 460 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 438 a passar, 91% de cobertura |
+| Testes | 460 a passar, 92% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr — 48 quando a fila de aprovação está vazia, porque três só se verificam com pedidos pendentes |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -159,8 +159,8 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 **Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
 cobertos, e com eles os conectores, a ingestão genérica, o catálogo, os
 middlewares, o arranque e as rotas de recomendações e de alertas. Escrever os
-testes revelou **trinta e sete defeitos reais**, todos corrigidos e verificados
-por reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 51. Nenhum dava erro; todos deixavam o sistema num estado
+testes revelou **trinta e nove defeitos reais**, todos corrigidos e verificados
+por reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 53. Nenhum dava erro; todos deixavam o sistema num estado
 plausível e errado. O mais grave: aprovar um bloqueio num playbook **não o
 executava**, e o incidente registava "Bloqueio aplicado".
 
@@ -184,6 +184,8 @@ executava**, e o incidente registava "Bloqueio aplicado".
 | `api/v1/response.py` | 76% | 90% |
 | `services/action_service.py` | 78% | 92% |
 | `services/analytics_service.py` | 76% | 95% |
+| `services/evidence_service.py` | 78% | 99% |
+| `api/v1/incidents.py` | 77% | 99% |
 
 A lição de método: os testes que encontraram defeitos não verificavam que as
 linhas eram criadas, mas que o módulo fazia aquilo para que existe — a linha
@@ -207,14 +209,13 @@ vida do alerta; a promoção e a ligação não o consultavam. Ver a armadilha 5
 Aplicá-la ao resto do código encontrou logo mais um caso: os playbooks mudavam o
 estado do incidente sem passar pela transição (defeito 39).
 
-**Próximos candidatos**, medidos com a suite completa (438 testes, 91%):
+**Próximos candidatos**, medidos com a suite completa (460 testes, 92%). Tudo o
+resto está acima de 85%, excepto o que fica fora pelas razões já ditas:
 
 | Módulo | Cobertura | Porque importa |
 |---|---|---|
 | `reporting/pdf.py` | 77% | o relatório exportado |
 | `services/recommendation_service.py` | 77% | aplicação das recomendações aceites |
-| `services/evidence_service.py` | 78% | integridade das evidências |
-| `api/v1/incidents.py` | 79% | |
 | `api/v1/reports.py` | 80% | |
 
 `core/database.py`, `siem_connectors`, `integrations/base.py` e `main.py` ficam
@@ -230,7 +231,7 @@ para o `analytics_service`, que estava a 76%:
 ./.venv/Scripts/python.exe -m pytest --cov=app --cov-report=term
 ```
 
-> **Pendente de decisão do autor — cinco achados que não foram corrigidos**, por
+> **Pendente de decisão do autor — seis achados que não foram corrigidos**, por
 > exigirem uma escolha e não uma correcção:
 >
 > 1. **Os playbooks semeados pedem duas aprovações para a mesma decisão**: um
@@ -274,6 +275,13 @@ para o `analytics_service`, que estava a 76%:
 >    uma migração e, depois, uma migração por cada estado novo (como `CADUCADA`,
 >    acrescentado agora sem migração nenhuma). A docstring foi corrigida; a
 >    decisão de as criar fica por tomar.
+> 6. **Um incidente ENCERRADO continua editável.** O ciclo de vida diz que
+>    ENCERRADO é terminal e que reabrir exige um incidente relacionado, "para
+>    preservar a integridade do registo histórico". Mas só as transições e a
+>    ligação de alertas o respeitam: campos, comentários, tarefas, observações e
+>    evidências (incluindo eliminá-las) continuam a poder ser alterados. Decidir
+>    o que deve ficar fechado — e se as notas posteriores ao encerramento são
+>    permitidas — é uma escolha de processo, não uma correcção.
 
 ### 4.4 Ideias que foram deixadas de fora deliberadamente
 
@@ -408,6 +416,16 @@ auditoria, que regista em que pedido cada coisa aconteceu.
 
 E **aprovar não é executar**: `decide_action` só muda o estado para APROVADA. Se
 nada executar a acção, o passo seguinte corre sobre algo que não aconteceu.
+
+### 5.16 Um identificador vindo do cliente não prova que o registo existe
+
+`assignee_id`, `team_id`, `asset_id`: se não existir, a chave estrangeira recusa-o
+e a rota responde **500** a um erro do cliente. E numa consulta por lista
+(`Model.id.in_(ids)`) é pior — os inexistentes são ignorados em silêncio e a
+operação parece ter corrido bem. Acontecia em oito portas. **Numa rota nova que
+receba identificadores de outros registos, use `require_existing` ou
+`require_all_existing` de `app/core/lookups.py`**, de preferência no serviço, para
+valer para todos os chamadores. A interface não o apanha: só escolhe de listas.
 
 ### 5.15 Uma regra de estado vale em todas as portas, não só na que a verificou
 
