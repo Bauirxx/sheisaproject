@@ -36,10 +36,13 @@ async def cmd_init(args: argparse.Namespace) -> int:
         _banner("Inicialização da plataforma SHEISA")
 
         created, updated = await bootstrap.sync_permissions(session)
-        print(f"  Permissões: {created} criada(s), {updated} actualizada(s).")
+        print(f"  Permissões: {len(created)} criada(s), {updated} actualizada(s).")
 
-        roles_created, roles_kept = await bootstrap.sync_roles(session)
-        print(f"  Perfis: {roles_created} criado(s), {roles_kept} já existente(s).")
+        roles_created, roles_kept, granted = await bootstrap.sync_roles(session, created)
+        print(
+            f"  Perfis: {roles_created} criado(s), {roles_kept} já existente(s); "
+            f"{granted} permissão(ões) nova(s) atribuída(s)."
+        )
 
         team = await bootstrap.ensure_default_team(session)
         print(f"  Equipa por omissão: {team.name}")
