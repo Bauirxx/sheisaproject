@@ -49,7 +49,7 @@ from app.integrations.registry import connectors_supporting, get_connector
 from app.models.identity import User
 from app.models.incident import Incident
 from app.models.investigation import Comment
-from app.models.response import Action, ActionApproval
+from app.models.response import Action, ActionApproval, PlaybookExecution
 from app.models.system import Integration, Notification
 
 #: Nível de risco por omissão de cada tipo de acção.
@@ -157,6 +157,16 @@ async def propose_action(
     integration = await find_integration_for(session, action_kind)
     reference = await next_reference(session, ReferenceKind.ACTION)
 
+    # A proposta de um playbook é de quem o iniciou, não de quem fez o pedido em
+    # que ela calhou ser criada. A retoma corre no pedido de quem aprovou o passo
+    # anterior: atribuir-lhe a proposta impedia-o de decidir a seguinte, e a
+    # separação de funções passava a proteger a pessoa errada.
+    proposer_id = ctx.actor_id
+    if playbook_execution_id is not None:
+        execution = await session.get(PlaybookExecution, playbook_execution_id)
+        if execution is not None:
+            proposer_id = execution.triggered_by_id
+
     action = Action(
         reference=reference,
         incident_id=incident.id,
@@ -168,7 +178,7 @@ async def propose_action(
         target=target,
         parameters=parameters or {},
         integration_id=integration.id if integration else None,
-        proposed_by_id=ctx.actor_id,
+        proposed_by_id=proposer_id,
         proposed_by_engine=proposed_by_engine,
         recommendation_id=recommendation_id,
         playbook_execution_id=playbook_execution_id,

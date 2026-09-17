@@ -288,3 +288,159 @@ async def test_analista_nao_gere_playbooks(cliente, token_analista):
     )
     # O analista tem `playbooks:execute` mas não `playbooks:manage`.
     assert resposta.status_code == 403
+
+
+# ----------------------------------------------- depois da decisão humana
+# Os quatro testes seguintes nasceram ao correr os playbooks semeados de ponta a
+# ponta (ver `test_configuracao_inicial.py`). Nenhum dos defeitos dava erro: a
+# execução ficava num estado plausível e errado.
+def _porta(ordem: int, nome: str) -> dict:
+    return {
+        "ordering": ordem,
+        "name": nome,
+        "step_type": "SOLICITAR_APROVACAO",
+        "parameters": {"motivo": "Confirmar."},
+        "requires_approval": True,
+        "risk_level": "CRITICO",
+    }
+
+
+async def _pendente(cliente, token, titulo) -> dict:
+    fila = (await cliente.get("/api/approvals", headers=cabecalho(token))).json()
+    return next(i for i in fila["itens"] if i["title"] == titulo)
+
+
+async def _decidir(cliente, token, accao_id, *, aprovar=True):
+    return await cliente.post(
+        f"/api/approvals/{accao_id}/decide",
+        json={"approved": aprovar, "justification": "Decisão fundamentada."},
+        headers=cabecalho(token),
+    )
+
+
+async def _execucao(cliente, token, execucao_id) -> dict:
+    listagem = (
+        await cliente.get("/api/playbooks/executions/list", headers=cabecalho(token))
+    ).json()
+    itens = listagem["itens"] if isinstance(listagem, dict) else listagem
+    return next(e for e in itens if e["id"] == execucao_id)
+
+
+async def test_rejeitar_termina_a_execucao_em_vez_de_a_deixar_suspensa(
+    cliente, token_admin, token_analista, token_gestor
+):
+    """Regressão: rejeitada a aprovação, a execução ficava AGUARDA_APROVACAO para sempre.
+
+    Sem nada na fila de quem aprova, o painel mostrava um playbook à espera de
+    uma decisão que já tinha sido tomada.
+    """
+    incidente = await _incidente(cliente, token_analista)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook rejeitável",
+        passos=[_porta(1, "Autorizar contenção"), {**PASSO_NOTA, "ordering": 2}],
+    )
+    execucao = (
+        await cliente.post(
+            f"/api/playbooks/{playbook['id']}/run",
+            json={"incident_id": incidente["id"]},
+            headers=cabecalho(token_analista),
+        )
+    ).json()
+
+    porta = await _pendente(cliente, token_gestor, "Autorizar contenção")
+    decisao = await _decidir(cliente, token_gestor, porta["id"], aprovar=False)
+    assert decisao.status_code == 200, decisao.text
+
+    actual = await _execucao(cliente, token_analista, execucao["id"])
+    assert actual["status"] == PlaybookExecutionStatus.CANCELADA.value
+    assert porta["reference"] in (actual["error"] or "")
+    assert actual["finished_at"] is not None
+    assert [p["step_name"] for p in actual["step_executions"]] == ["Autorizar contenção"], (
+        "um passo posterior à rejeição foi executado"
+    )
+
+
+async def test_quem_aprova_um_passo_pode_decidir_o_seguinte(
+    cliente, token_admin, token_gestor
+):
+    """Regressão: a proposta do passo seguinte era atribuída a quem aprovou o anterior.
+
+    A retoma corre no pedido do aprovador, e a proposta ficava em nome dele — que
+    passava a não a poder decidir. A proposta é de quem iniciou o playbook, e a
+    separação de funções continua a valer para essa pessoa.
+    """
+    incidente = await _incidente(cliente, token_admin)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook com duas portas",
+        passos=[_porta(1, "Primeira autorização"), _porta(2, "Segunda autorização")],
+    )
+    await cliente.post(
+        f"/api/playbooks/{playbook['id']}/run",
+        json={"incident_id": incidente["id"]},
+        headers=cabecalho(token_admin),
+    )
+
+    primeira = await _pendente(cliente, token_gestor, "Primeira autorização")
+    assert (await _decidir(cliente, token_gestor, primeira["id"])).status_code == 200
+
+    segunda = await _pendente(cliente, token_gestor, "Segunda autorização")
+    assert segunda["proposed_by"]["email"] == "admin@teste.local"
+
+    # Quem iniciou continua a não poder aprovar o que o seu playbook propôs...
+    assert (await _decidir(cliente, token_admin, segunda["id"])).status_code == 403
+    # ...e quem aprovou o passo anterior pode decidir este.
+    decisao = await _decidir(cliente, token_gestor, segunda["id"])
+    assert decisao.status_code == 200, decisao.text
+
+
+async def test_a_autorizacao_aprovada_fica_fechada(
+    cliente, token_admin, token_analista, token_gestor
+):
+    """Regressão: a porta aprovada ficava APROVADA para sempre, como se faltasse executá-la."""
+    incidente = await _incidente(cliente, token_analista)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook com porta que fecha",
+        passos=[_porta(1, "Autorizar e fechar"), {**PASSO_NOTA, "ordering": 2}],
+    )
+    await cliente.post(
+        f"/api/playbooks/{playbook['id']}/run",
+        json={"incident_id": incidente["id"]},
+        headers=cabecalho(token_analista),
+    )
+    porta = await _pendente(cliente, token_gestor, "Autorizar e fechar")
+    await _decidir(cliente, token_gestor, porta["id"])
+
+    accao = (
+        await cliente.get(f"/api/actions/{porta['id']}", headers=cabecalho(token_analista))
+    ).json()
+    assert accao["status"] == "EXECUTADA"
+
+
+async def test_o_resumo_final_inclui_os_passos_anteriores_a_suspensao(
+    cliente, token_admin, token_analista, token_gestor
+):
+    """Regressão: a retoma recomeçava o resumo e apagava o que correra antes da pausa."""
+    incidente = await _incidente(cliente, token_analista)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook com resumo completo",
+        passos=[
+            PASSO_NOTA,
+            _porta(2, "Autorizar a meio"),
+            {**PASSO_NOTA, "ordering": 3, "name": "Registar fecho"},
+        ],
+    )
+    execucao = (
+        await cliente.post(
+            f"/api/playbooks/{playbook['id']}/run",
+            json={"incident_id": incidente["id"]},
+            headers=cabecalho(token_analista),
+        )
+    ).json()
+    porta = await _pendente(cliente, token_gestor, "Autorizar a meio")
+    await _decidir(cliente, token_gestor, porta["id"])
+
+    actual = await _execucao(cliente, token_analista, execucao["id"])
+    assert actual["status"] == PlaybookExecutionStatus.CONCLUIDA.value
+    resumo = actual["result_summary"]
+    for linha in ("1. Registar nota de abertura", "2. Autorizar a meio", "3. Registar fecho"):
+        assert linha in resumo, f"falta '{linha}' no resumo:\n{resumo}"

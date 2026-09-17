@@ -6,7 +6,8 @@ ordem, registando o resultado de cada um.
 A decisão central: **um passo que exija aprovação suspende a execução.** O
 motor não espera activamente nem executa a acção em segundo plano; muda o
 estado da execução para `AGUARDA_APROVACAO` e termina. Quando a aprovação for
-concedida, `resume_execution` retoma a partir do passo seguinte.
+concedida, `resume_execution` executa a acção aprovada e retoma a partir do
+passo seguinte; se for recusada, `cancel_after_rejection` termina a execução.
 
 Isto é deliberado. A alternativa — manter a execução viva à espera de um
 humano — torna a automação dependente de um processo que pode morrer, e obriga
@@ -38,12 +39,13 @@ from app.core.enums import (
     Severity,
     TaskStatus,
 )
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import ConflictError, NotFoundError, SheisaError, ValidationError
 from app.core.references import ReferenceKind, next_reference
 from app.models.catalog import Ioc
 from app.models.incident import Incident
 from app.models.investigation import Comment, Observation, Task
 from app.models.response import (
+    Action,
     Playbook,
     PlaybookExecution,
     PlaybookStep,
@@ -145,7 +147,9 @@ async def start_execution(
         ),
     )
 
-    return await _run_from(session, ctx, execution, playbook, incident, start_index=0)
+    return await _run_from(
+        session, ctx, execution, playbook, incident, start_index=0, outcomes=[]
+    )
 
 
 async def resume_execution(
@@ -177,7 +181,142 @@ async def resume_execution(
         resource_id=execution.id, resource_reference=execution.reference,
         description=f"Execução {execution.reference} retomada após aprovação.",
     )
-    return await _run_from(session, ctx, execution, playbook, incident, start_index)
+
+    # O resumo continua o que já estava escrito. Recomeçá-lo apagava do registo
+    # final todos os passos que correram antes da pausa.
+    outcomes = execution.result_summary.splitlines()
+
+    paused = next(
+        (s for s in execution.step_executions if s.ordering == start_index), None
+    )
+    if paused is not None and paused.action_id is not None:
+        if await _execute_approved_action(session, ctx, execution, paused, outcomes):
+            return execution
+
+    return await _run_from(
+        session, ctx, execution, playbook, incident, start_index, outcomes
+    )
+
+
+async def _execute_approved_action(
+    session: AsyncSession,
+    ctx: AuditContext,
+    execution: PlaybookExecution,
+    paused: PlaybookStepExecution,
+    outcomes: list[str],
+) -> bool:
+    """Executa a acção que o passo suspenso deixou à espera de aprovação.
+
+    Devolve `True` se a execução do playbook tiver de parar aqui.
+
+    A aprovação autoriza; não executa. Sem isto o playbook retomava com a acção
+    parada em APROVADA e seguia como se ela tivesse corrido: no playbook de
+    bloqueio de IP, o passo seguinte escrevia "Bloqueio aplicado" num incidente
+    cujo endereço nunca foi bloqueado.
+
+    Quem executa é o playbook, iniciado por quem tinha `playbooks:execute`; o
+    controlo humano é a aprovação que acabou de ser dada. É o mesmo critério pelo
+    qual o motor já executa de imediato as acções de risco baixo.
+    """
+    action = await session.get(Action, paused.action_id)
+    if action is None or action.status != ActionStatus.APROVADA:
+        raise ConflictError(
+            f"A execução {execution.reference} só pode ser retomada depois de "
+            f"aprovada a acção do passo {paused.ordering}."
+        )
+
+    failure: str | None = None
+    try:
+        await action_service.execute_action(session, ctx, action=action)
+    except SheisaError as exc:
+        failure = action.error or exc.message
+    else:
+        if action.status != ActionStatus.EXECUTADA:
+            failure = action.error or f"a acção terminou em {action.status.value}"
+
+    if failure is None:
+        resumo = (
+            f"Autorização {action.reference} concedida."
+            if action.action_kind in action_service.NO_INTEGRATION_REQUIRED
+            else f"Acção {action.reference} executada após aprovação."
+        )
+        paused.output = {**paused.output, "resumo": resumo, "resultado": action.result}
+        outcomes.append(f"{paused.ordering}. {paused.step_name}: {resumo}")
+        return False
+
+    paused.status = TaskStatus.CANCELADA
+    paused.error = f"Acção {action.reference} aprovada mas não executada: {failure}"[:2000]
+    outcomes.append(f"{paused.ordering}. {paused.step_name}: FALHOU — {failure}")
+    await audit.record(
+        session, ctx,
+        action="PASSO_PLAYBOOK", resource_type="execucao_playbook",
+        resource_id=execution.id, resource_reference=execution.reference,
+        description=f"Passo '{paused.step_name}' falhou: {failure}",
+        outcome=AuditOutcome.FALHA,
+        failure_reason=failure[:500],
+    )
+
+    step = await session.get(PlaybookStep, paused.step_id) if paused.step_id else None
+    if step is not None and not step.abort_on_failure:
+        return False
+
+    execution.status = PlaybookExecutionStatus.FALHADA
+    execution.error = f"Interrompido no passo '{paused.step_name}': {failure}"
+    execution.finished_at = datetime.now(UTC)
+    execution.result_summary = "\n".join(outcomes)
+    await session.flush()
+    return True
+
+
+async def cancel_after_rejection(
+    session: AsyncSession,
+    ctx: AuditContext,
+    *,
+    execution: PlaybookExecution,
+    action: Action,
+) -> PlaybookExecution:
+    """Termina a execução cuja aprovação foi recusada.
+
+    Sem isto a execução ficava em AGUARDA_APROVACAO para sempre: o painel mostrava
+    um playbook à espera de uma decisão que já tinha sido tomada, e a fila de
+    quem aprova não tinha nada que o pudesse desbloquear.
+
+    CANCELADA e não FALHADA: nada falhou. Quem tinha autoridade para decidir
+    decidiu que os passos seguintes não deviam correr.
+    """
+    if execution.status != PlaybookExecutionStatus.AGUARDA_APROVACAO:
+        raise ConflictError(
+            f"A execução {execution.reference} não está suspensa "
+            f"(estado: {execution.status.value})."
+        )
+
+    motivo = (
+        f"A acção {action.reference} ('{action.title}') foi rejeitada; os passos "
+        "seguintes não foram executados."
+    )
+    execution.status = PlaybookExecutionStatus.CANCELADA
+    execution.error = motivo
+    execution.finished_at = datetime.now(UTC)
+    execution.result_summary = "\n".join([*execution.result_summary.splitlines(), motivo])
+
+    session.add(
+        Comment(
+            incident_id=execution.incident_id,
+            body=f"Execução {execution.reference} interrompida. {motivo}",
+            is_system=True,
+        )
+    )
+    await audit.record(
+        session, ctx,
+        action="INTERROMPER_PLAYBOOK", resource_type="execucao_playbook",
+        resource_id=execution.id, resource_reference=execution.reference,
+        description=f"Execução {execution.reference} interrompida. {motivo}",
+        old_value={"estado": PlaybookExecutionStatus.AGUARDA_APROVACAO.value},
+        new_value={"estado": PlaybookExecutionStatus.CANCELADA.value},
+        changed_fields=["status"],
+    )
+    await session.flush()
+    return execution
 
 
 async def _run_from(
@@ -187,12 +326,15 @@ async def _run_from(
     playbook: Playbook,
     incident: Incident,
     start_index: int,
+    outcomes: list[str],
 ) -> PlaybookExecution:
-    """Corre os passos a partir de `start_index` (ordering baseado em 1)."""
+    """Corre os passos a partir de `start_index` (ordering baseado em 1).
+
+    `outcomes` traz as linhas de resumo já escritas; os passos acrescentam-lhe as suas.
+    """
     steps = sorted(
         [s for s in playbook.steps if s.is_enabled], key=lambda s: s.ordering
     )
-    outcomes: list[str] = []
 
     for step in steps:
         if step.ordering <= start_index:

@@ -234,14 +234,20 @@ async def decide(
         justification=payload.justification,
     )
 
-    # Se a acção pertencia a um playbook suspenso, a aprovação retoma-o.
-    if payload.approved and action.playbook_execution_id:
+    # Se a acção pertencia a um playbook suspenso, a decisão é também a do
+    # playbook: aprovada, retoma-o; rejeitada, termina-o.
+    if action.playbook_execution_id:
         from app.playbooks import engine as playbook_engine
 
         execution = await session.get(PlaybookExecution, action.playbook_execution_id)
         if execution is not None and execution.status == PlaybookExecutionStatus.AGUARDA_APROVACAO:
-            await session.refresh(execution, ["step_executions"])
-            await playbook_engine.resume_execution(session, ctx, execution=execution)
+            if payload.approved:
+                await session.refresh(execution, ["step_executions"])
+                await playbook_engine.resume_execution(session, ctx, execution=execution)
+            else:
+                await playbook_engine.cancel_after_rejection(
+                    session, ctx, execution=execution, action=action
+                )
 
     await session.refresh(action, ["approvals"])
     return await _to_action_read(session, action)
