@@ -19,7 +19,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 393 a passar, 88% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
+| **Testes** | 413 a passar, 89% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -302,8 +302,8 @@ métricas de resposta aparecem comprimidas porque o cenário corre em segundos �
 os marcos são reais, o intervalo entre eles não representa trabalho humano.
 Antedatá-los produziria números mais apresentáveis e falsos.
 
-### Suite de testes (§32) — 393 testes
-`backend/tests/`, 31 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
+### Suite de testes (§32) — 413 testes
+`backend/tests/`, 33 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
 (a configuração está em `pytest.ini` e `.coveragerc`).
 
 Cobre tudo o que o §32 enumera: autenticação, autorização, CRUD, filtros,
@@ -467,7 +467,7 @@ ficasse ela mesma auditada.
 Escrever testes para os módulos com cobertura baixa (`timeline_service`,
 `seed_service`, `mitre_service`, `integration_service`, conectores, ingestão
 genérica, catálogo, middlewares, arranque e rotas de recomendações e de
-alertas) revelou vinte e seis defeitos. Os testes não verificam que as linhas são criadas: exercem
+alertas, correlação e administração) revelou vinte e nove defeitos. Os testes não verificam que as linhas são criadas: exercem
 aquilo para que cada módulo existe — contar a história do incidente pela ordem
 certa, e pôr a configuração semeada a funcionar nos motores reais.
 
@@ -614,9 +614,23 @@ certa, e pôr a configuração semeada a funcionar nos motores reais.
     execução era gravado antes do bloco do estado final — nem a transição
     bem-sucedida lá ficava. Ambos passam a ficar registados.
 
+41. **A sequência temporal juntava alertas sem relação nenhuma.** Os candidatos
+    eram todos os alertas da janela: uma falha de autenticação num servidor, uma
+    execução noutro e um trojan num terceiro, de três origens diferentes,
+    formavam uma "cadeia de ataque em progressão" — e a regra semeada com esta
+    estratégia tem a prioridade mais alta e dá severidade CRITICA. Passa a exigir
+    que os alertas partilhem o activo ou algum artefacto observado.
+42. **Na convergência num activo, um alerta sem regra contava como detecção
+    distinta**: `None` entrava no conjunto de regras distintas.
+43. **Um administrador podia retirar a si próprio o perfil que gere contas.** A
+    rota impedia a auto-desactivação, para não perder o acesso, mas trocar o
+    próprio perfil tem o mesmo efeito. Agora 422 `AUTO_DESPROMOCAO`; confirmado
+    na API reiniciada, com o perfil do administrador de desenvolvimento intacto.
+
 Todos verificados por reversão. Desfazer a correcção faz falhar: 15, um teste;
 16, dois; 17, dois; 18, 19, 20 e 21, um cada; 22, cinco; 23, dois; 24, um; 25 e
-26, quatro cada; 27, nove; 28, cinco; 29 a 38, um cada; 39, dois; 40, um. Os defeitos 27 a 30, 32 e
+26, quatro cada; 27, nove; 28, cinco; 29 a 38, um cada; 39, dois; 40 a 43, um
+cada. Os defeitos 27 a 30, 32 e
 34 foram também confirmados na API reiniciada, e o 31 com `manage init` na base
 de desenvolvimento, que correu sem alterar nada. A base de desenvolvimento não
 tinha alertas inconsistentes (0 de 27 PROMOVIDO ou CORRELACIONADO sem incidente). `verificar_contrato.py`
@@ -661,7 +675,7 @@ Se quiser alargá-lo: `_eventos_suricata` e `_evento_c2` em
 acrescentar uma função e uma chamada a `ingest_batch`.
 
 ### 5.3 Testes (§32) — **feito** (ver §4)
-393 testes, 88% de cobertura (medido em 2026-09-17). O que a lista do §32
+413 testes, 89% de cobertura (medido em 2026-09-17). O que a lista do §32
 pede está coberto.
 
 Onde a cobertura continua baixa, e porquê (remedido em 2026-09-17 — os valores
@@ -672,11 +686,12 @@ anteriores, que este documento afirmava, estavam desactualizados: o
   94%, `api/v1/recommendations.py` 95%, `services/bootstrap.py` 92%,
   `api/v1/catalog.py` 91%, `api/v1/alerts.py` 89%, `wazuh_connector` 87% —
   todos subidos em 2026-09-17 (estavam entre 0% e 67%); os testes revelaram os
-  defeitos 15 a 40 do §4;
+  defeitos 15 a 43 do §4 (também `correlation/engine.py` 91% e
+  `api/v1/admin.py` 96%);
 - `siem_connectors` 56% e `integrations/base` 73% — o que falta é código que
   nada na aplicação chama (`fetch_offenses`, `fetch_alerts`, `required_env`);
-- os mais baixos agora são `correlation/engine.py` (72%), `api/v1/admin.py`
-  (73%) e `services/auth_service.py` (74%); `playbooks/engine.py` subiu para 85%;
+- os mais baixos agora são `api/v1/response.py` e `services/analytics_service.py`
+  (76%), `api/v1/incidents.py` (77%) e `services/evidence_service.py` (78%);
 - `playbooks/engine` 74% — suspensão, retoma, rejeição e execução da acção
   aprovada estão testados; os tipos de passo menos usados não.
 
