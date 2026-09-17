@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from app.core.enums import IocType, ObservationRole, Severity, SourceKind
@@ -127,8 +127,40 @@ class Normalizer(Protocol):
 
 
 # ------------------------------------------------------------------ auxiliares
-def parse_timestamp(value: Any) -> datetime | None:
-    """Interpreta os formatos de instante mais comuns nas fontes de segurança."""
+#: Formatos sem ano — o do syslog clássico, "Sep 17 08:15:30".
+_FORMATS_WITHOUT_YEAR: tuple[str, ...] = ("%b %d %H:%M:%S",)
+
+#: Quanto um instante pode estar no futuro antes de se concluir que pertence ao
+#: ano anterior. Cobre relógios de fontes ligeiramente adiantados.
+_FUTURE_TOLERANCE = timedelta(days=1)
+
+
+def _with_inferred_year(text: str, fmt: str, now: datetime) -> datetime | None:
+    """Interpreta um instante sem ano, atribuindo-lhe o ano mais recente plausível.
+
+    Deixar o `strptime` decidir dava 1900: um evento com esse instante fica fora
+    de qualquer janela de correlação e no fundo da linha temporal, sem erro. O
+    ano escolhido é o mais recente em que o instante não fica no futuro — o que
+    resolve a passagem de ano ("Dec 31" recebido a 1 de Janeiro) e o 29 de
+    Fevereiro, que só existe em anos bissextos.
+    """
+    for year in range(now.year, now.year - 8, -1):
+        try:
+            # O ano entra no texto em vez de ser substituído depois: o Python 3.13
+            # avisa que interpretar um dia do mês sem ano vai mudar no 3.15.
+            parsed = datetime.strptime(f"{year} {text}", f"%Y {fmt}").replace(tzinfo=UTC)
+        except ValueError:
+            continue
+        if parsed <= now + _FUTURE_TOLERANCE:
+            return parsed
+    return None
+
+
+def parse_timestamp(value: Any, *, agora: datetime | None = None) -> datetime | None:
+    """Interpreta os formatos de instante mais comuns nas fontes de segurança.
+
+    `agora` só serve para os formatos sem ano; por omissão é o instante actual.
+    """
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -151,13 +183,15 @@ def parse_timestamp(value: Any) -> datetime | None:
             "%Y-%m-%dT%H:%M:%S.%f%z",
             "%Y-%m-%dT%H:%M:%S%z",
             "%Y-%m-%d %H:%M:%S",
-            "%b %d %H:%M:%S",
         ):
             try:
                 parsed = datetime.strptime(text, fmt)
                 return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
             except ValueError:
                 continue
+        for fmt in _FORMATS_WITHOUT_YEAR:
+            if parsed := _with_inferred_year(text, fmt, agora or datetime.now(UTC)):
+                return parsed
     return None
 
 

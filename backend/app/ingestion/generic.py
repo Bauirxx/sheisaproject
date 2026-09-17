@@ -13,6 +13,8 @@ seria pior — por isso o aviso fica no registo.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -40,7 +42,9 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "destination_port": ("destination_port", "dest_port", "dstport", "dst_port"),
     "protocol": ("protocol", "proto", "protocolo"),
     "host": ("host", "hostname", "computer", "agent_name", "maquina"),
-    "username": ("username", "user", "account", "utilizador", "srcuser", "dstuser"),
+    # `srcuser` e `dstuser` não entram aqui: dizem de que lado está a conta, e
+    # juntá-las a um nome neutro perdia essa informação (ver `normalize`).
+    "username": ("username", "user", "account", "utilizador"),
     "process": ("process", "process_name", "image", "processo"),
     "file_hash": ("file_hash", "hash", "sha256", "md5", "sha1"),
     "rule_id": ("rule_id", "signature_id", "ruleid", "sid", "regra_id"),
@@ -64,6 +68,32 @@ def _pick(payload: dict[str, Any], field: str) -> Any:
         if alias in payload and payload[alias] not in (None, ""):
             return payload[alias]
     return None
+
+
+def _as_level(value: Any) -> int | None:
+    """Nível numérico, venha como número ou como texto ("12")."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _severity_warning(value: Any) -> str | None:
+    """O aviso que acompanha uma severidade interpretada ou assumida."""
+    if value is None:
+        return "severidade não fornecida; assumida MEDIA"
+    level = _as_level(value)
+    if level is not None:
+        return "severidade numérica interpretada na escala 0-15" if level > 5 else None
+    if isinstance(value, str) and value.strip().lower() in SEVERITY_ALIASES:
+        return None
+    return f"severidade '{value}' não reconhecida; assumida MEDIA"
 
 
 def coerce_severity(value: Any) -> Severity:
@@ -98,6 +128,24 @@ def coerce_severity(value: Any) -> Severity:
     return Severity.MEDIA
 
 
+def _fallback_event_id(payload: dict[str, Any], occurred_at: datetime) -> str:
+    """Identificador para um evento que não traz o seu.
+
+    Resume o payload inteiro, e não só o instante e a descrição: duas falhas de
+    autenticação no mesmo segundo, de origens diferentes, tinham o mesmo
+    identificador e a segunda era descartada como duplicada. E usa um resumo
+    estável — `hash()` é aleatorizado por processo, e o mesmo evento reenviado
+    depois de reiniciar a API deixava de ser reconhecido.
+
+    O instante entra também: quando o payload não o traz é o de recepção, e sem
+    ele um reenvio e uma nova ocorrência seriam indistinguíveis. Perder uma
+    ocorrência real é pior do que contar um reenvio duas vezes.
+    """
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    digest = hashlib.sha256(f"{occurred_at.isoformat()}|{canonical}".encode()).hexdigest()
+    return f"generico-{digest[:40]}"
+
+
 class GenericNormalizer:
     source_kind = SourceKind.API_GENERICA
 
@@ -112,18 +160,23 @@ class GenericNormalizer:
         source_kind: SourceKind | None = None,
     ) -> NormalizedEvent:
         occurred_raw = _pick(payload, "occurred_at")
-        occurred_at = parse_timestamp(occurred_raw) or datetime.now(UTC)
+        parsed_at = parse_timestamp(occurred_raw)
+        occurred_at = parsed_at or datetime.now(UTC)
 
         avisos: list[str] = []
         if occurred_raw is None:
             avisos.append(
                 "instante não fornecido pela fonte; usado o instante de recepção"
             )
+        elif parsed_at is None:
+            avisos.append(
+                f"instante '{occurred_raw}' não reconhecido; usado o instante de recepção"
+            )
 
         severity_raw = _pick(payload, "severity")
         severity = coerce_severity(severity_raw)
-        if isinstance(severity_raw, int | float) and int(severity_raw) > 5:
-            avisos.append("severidade numérica interpretada na escala 0-15")
+        if aviso := _severity_warning(severity_raw):
+            avisos.append(aviso)
 
         description = str(_pick(payload, "description") or "")
         if not description:
@@ -141,7 +194,7 @@ class GenericNormalizer:
             payload.get("id")
             or payload.get("event_id")
             or payload.get("uuid")
-            or f"generico-{occurred_at.timestamp()}-{abs(hash(description)) % 10**8}"
+            or _fallback_event_id(payload, occurred_at)
         )
 
         extra = {
@@ -167,7 +220,9 @@ class GenericNormalizer:
             destination_port=coerce_port(_pick(payload, "destination_port")),
             protocol=_pick(payload, "protocol"),
             host=_pick(payload, "host"),
-            username=_pick(payload, "username"),
+            username=(
+                payload.get("dstuser") or payload.get("srcuser") or _pick(payload, "username")
+            ),
             process=_pick(payload, "process"),
             file_hash=_pick(payload, "file_hash"),
             rule_id=str(_pick(payload, "rule_id")) if _pick(payload, "rule_id") else None,
@@ -181,10 +236,12 @@ class GenericNormalizer:
             )[:300],
         )
 
-        event.indicators = self._extract_indicators(event)
+        event.indicators = self._extract_indicators(event, payload)
         return event
 
-    def _extract_indicators(self, event: NormalizedEvent) -> list[ExtractedIndicator]:
+    def _extract_indicators(
+        self, event: NormalizedEvent, payload: dict[str, Any]
+    ) -> list[ExtractedIndicator]:
         indicators: list[ExtractedIndicator] = []
 
         if is_external_ip(event.source_ip):
@@ -199,7 +256,26 @@ class GenericNormalizer:
                     IocType.IP, event.destination_ip, ObservationRole.DESTINO, "IP de destino"
                 )
             )
-        if event.username:
+        # A conta que actua é do lado do atacante; a visada, do lado da vítima.
+        # Tratá-las igual faria a correlação ver "o mesmo actor" em dois ataques
+        # contra a mesma conta — o defeito 4 do ESTADO, que o normalizador Wazuh
+        # já tinha corrigido e este não.
+        acting, targeted = payload.get("srcuser"), payload.get("dstuser")
+        if acting:
+            indicators.append(
+                ExtractedIndicator(
+                    IocType.UTILIZADOR, str(acting), ObservationRole.ACTOR,
+                    "Conta que executou a acção",
+                )
+            )
+        if targeted:
+            indicators.append(
+                ExtractedIndicator(
+                    IocType.UTILIZADOR, str(targeted), ObservationRole.ALVO,
+                    "Conta visada pela acção",
+                )
+            )
+        if not acting and not targeted and event.username:
             indicators.append(
                 ExtractedIndicator(
                     IocType.UTILIZADOR, event.username, ObservationRole.ACTOR, "Conta envolvida"
