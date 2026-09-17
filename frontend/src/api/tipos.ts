@@ -480,7 +480,7 @@ export interface Integracao {
 export interface Notificacao {
   id: string;
   kind: string;
-  severity: string;
+  severity: Severidade;
   title: string;
   body: string;
   resource_type: string | null;
@@ -651,4 +651,141 @@ export interface PerfilDetalhado {
   description: string;
   is_system: boolean;
   permissions: { code: string; description: string }[];
+}
+
+
+/**
+ * Evento bruto: o sinal como a fonte o entregou, antes de ser agregado.
+ *
+ * Campo a campo tal como `EventRead` o devolve. A distinção face ao alerta é
+ * conceptual e não cosmética: muitos eventos equivalentes convergem num único
+ * alerta, e `alert_id` é o que torna essa agregação visível.
+ */
+export interface Evento {
+  id: string;
+  source_kind: string;
+  source_name: string;
+  source_event_id: string;
+  occurred_at: string;
+  received_at: string;
+  severity: Severidade;
+  source_severity: string | null;
+  event_type: string;
+  description: string;
+  source_ip: string | null;
+  destination_ip: string | null;
+  source_port: number | null;
+  destination_port: number | null;
+  protocol: string | null;
+  host: string | null;
+  username: string | null;
+  process: string | null;
+  file_hash: string | null;
+  rule_id: string | null;
+  rule_name: string | null;
+  rule_groups: string[];
+  reported_techniques: string[];
+  normalized_extra: Record<string, unknown>;
+  alert_id: string | null;
+  created_at: string;
+}
+
+/** `EventDetail` acrescenta o payload original, que serve de prova de origem. */
+export interface EventoDetalhado extends Evento {
+  raw_payload: Record<string, unknown>;
+}
+
+/** Equipa, tal como `GET /roles/teams` a devolve. */
+export interface Equipa {
+  id: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+}
+
+/**
+ * Metadados do motor de recomendações (`GET /recommendations/meta/tipos`).
+ *
+ * `limiares` é deliberadamente um mapa aberto: quando o motor ganhar um novo
+ * limiar, ele aparece na interface sem ser preciso alterar este tipo — o que
+ * evita que um número novo passe a decidir em silêncio.
+ */
+export interface MetaDoMotor {
+  motor: string;
+  versao: string;
+  tipos: string[];
+  estados: string[];
+  limiares: Record<string, number>;
+}
+
+/**
+ * Vista do centro de operações (`GET /soc`).
+ *
+ * Os nomes dos campos são em português porque esta resposta não espelha nenhum
+ * modelo: é uma vista composta de propósito para um único ecrã.
+ */
+export interface VistaDoCentroDeOperacoes {
+  incidentes_activos: {
+    id: string;
+    referencia: string;
+    titulo: string;
+    severidade: Severidade;
+    estado: string;
+    prioridade: string;
+    pontuacao_risco: number;
+    responsavel: string | null;
+    detectado_em: string;
+    prazo: string | null;
+  }[];
+  alertas_recentes: {
+    id: string;
+    referencia: string;
+    titulo: string;
+    severidade: Severidade;
+    pontuacao: number;
+    fonte: string;
+    eventos: number;
+    ultimo_evento: string;
+    probabilidade_falso_positivo: number;
+  }[];
+  aprovacoes_pendentes: {
+    id: string;
+    referencia: string;
+    titulo: string;
+    tipo: string;
+    risco: string;
+    alvo: Record<string, unknown>;
+    justificacao: string;
+    solicitado_em: string;
+  }[];
+  playbooks_em_execucao: {
+    id: string;
+    referencia: string;
+    playbook: string;
+    estado: string;
+    iniciado_em: string;
+  }[];
+  indicadores_frequentes: {
+    id: string;
+    tipo: string;
+    valor: string;
+    reputacao: string;
+    avistamentos: number;
+    ultima_observacao: string | null;
+  }[];
+  activos_afectados: {
+    id: string;
+    identificador: string;
+    nome: string;
+    criticidade: string;
+    incidentes_activos: number;
+  }[];
+  tarefas_pendentes: {
+    id: string;
+    titulo: string;
+    estado: string;
+    prioridade: string;
+    responsavel: string | null;
+    prazo: string | null;
+  }[];
 }

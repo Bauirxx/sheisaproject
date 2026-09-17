@@ -20,6 +20,7 @@ import { pedir } from "@/api/cliente";
 import type { Integracao, Notificacao } from "@/api/tipos";
 import { useSessao } from "@/autenticacao/contexto";
 import { Carregando, Erro, instante, legivel, Vazio } from "@/componentes/comuns";
+import { NovaChaveDeIngestao } from "@/componentes/MinhasSessoes";
 
 const ASPECTO_DO_ESTADO: Record<string, string> = {
   ACTIVA: "distintivo--sucesso",
@@ -165,6 +166,8 @@ export function Integracoes() {
           </p>
         </div>
       </header>
+
+      <NovaChaveDeIngestao />
 
       {error ? <Erro erro={error} /> : null}
       {isPending ? (

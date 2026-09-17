@@ -24,6 +24,7 @@ import {
   AlterarMinhaPalavraPasse,
   EditarUtilizador,
 } from "@/componentes/EditarUtilizador";
+import { MinhasSessoes } from "@/componentes/MinhasSessoes";
 import { Carregando, Erro, instante, legivel, Vazio } from "@/componentes/comuns";
 import { CampoDeSelecao, Paginacao, useFiltros } from "@/componentes/listagem";
 
@@ -291,6 +292,10 @@ function Utilizadores() {
           <Paginacao pagina={data} aoMudar={(n) => definir({ page: n })} />
         </div>
       ) : null}
+
+      <div className="separador" style={{ margin: "var(--espaco-5) 0" }} />
+      <h3>As minhas sessões</h3>
+      <MinhasSessoes />
 
       <div className="separador" style={{ margin: "var(--espaco-5) 0" }} />
       <AlterarMinhaPalavraPasse />

@@ -3,7 +3,8 @@
 > Documento de passagem de testemunho. Descreve o que está **feito e
 > verificado**, o que **falta**, e como retomar o trabalho sem repetir análise.
 >
-> Última actualização: 2026-09-15 (recomendações, testes, demonstração e frontend)
+> Última actualização: 2026-09-17 (eventos brutos, centro de operações,
+> chaves de ingestão, sessões, equipas e limiares do motor)
 
 ---
 
@@ -13,8 +14,9 @@
 |---|---|
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
-| **Backend** | 106 rotas, 21 domínios, ~19k linhas |
-| **Testes** | 236 a passar · `verificar_contrato.py` para o frontend |
+| **Backend** | 109 rotas, 21 domínios, ~19k linhas |
+| **Testes** | 250 a passar, 77% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
+| **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.13.7 · Node 22.20 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
 | **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -166,14 +168,18 @@ diagnóstico errado uma vez).
   `promote_alert`, `playbook_engine.start_execution`) — uma recomendação aceite
   tem exactamente o mesmo efeito que a acção feita à mão.
 
-### Frontend (§4.13, §28–§30, §77–§82) — 12 páginas
+### Frontend (§4.13, §28–§30, §77–§82) — 18 ecrãs
 `frontend/`, React 18 + TypeScript + Vite, tudo em português.
-`npm install && npm run dev` → <http://localhost:5173>. O proxy de `/api` para
-`127.0.0.1:8099` mantém os caminhos iguais aos de produção e dispensa CORS.
+`npm install && npm run dev` → <http://127.0.0.1:5500>. **A porta é 5500 e não
+a 5173 por omissão do Vite:** o Windows reserva 5141–5240 para o Hyper-V/WSL e a
+5173 dava `EACCES` sem explicação. `SHEISA_PORTA_UI` sobrepõe-se. O proxy de
+`/api` para `127.0.0.1:8099` mantém os caminhos iguais aos de produção e
+dispensa CORS.
 
 As seis telas do §4.13 estão todas: entrada, painel, lista de incidentes,
-registo, detalhe e relatórios. Mais: alertas, recomendações, aprovações,
-indicadores, activos, MITRE, auditoria, administração e playbooks.
+registo, detalhe e relatórios. Mais: centro de operações, alertas, eventos
+brutos, recomendações, aprovações, indicadores, activos, MITRE, auditoria,
+administração e playbooks.
 
 Decisões que convém não desfazer:
 
@@ -203,6 +209,62 @@ Decisões que convém não desfazer:
 > um disponível. Compila, o servidor serve, o proxy responde, a autenticação
 > real funciona e o contrato está confirmado campo a campo. O que falta
 > confirmar é espaçamento, contraste e se alguma tabela transborda.
+
+### Cobertura de interface fechada (2026-09-17)
+Partiu-se de uma auditoria que compara cada operação da API com o que o
+frontend realmente chama. Estavam 12 sem ecrã; ficaram 7, e essas 7 são-no por
+razão própria — 2 sondas de saúde, 2 de documentação e as 3 de ingestão, que são
+máquina-a-máquina e autenticadas por `X-API-Key` (um browser nunca as chama).
+Todas as outras têm agora interface.
+
+**Eventos brutos** (`/eventos`, `GET /events`, `GET /events/{id}`). É a página
+com mais valor de defesa de todas as que foram acrescentadas, porque é onde a
+distinção evento/alerta/incidente deixa de ser uma afirmação da documentação e
+passa a ser observável: quatro mil tentativas de força bruta são quatro mil
+eventos e **um** alerta. O detalhe mostra o `raw_payload` tal como a fonte o
+enviou, e é a resposta concreta a "como sei que este valor não foi inventado
+pela plataforma?" — verificado com um alerta real do laboratório, em que
+`severidade ALTA` se lê no `rule.level 12` do payload, `203.0.113.212` no
+`data.srcip` e `backup` no `data.dstuser`. O payload traz `tsc`, `gdpr`,
+`pci_dss`, `firedtimes`, `predecoder`: campos que ninguém escreveria à mão.
+A tabela mostra ainda o **atraso** entre ocorrência e recepção, e assinala-o
+quando é negativo — isto é, quando a fonte diz que o evento ocorreu depois de
+ter sido recebido, o que denuncia relógios desalinhados. Foi exactamente a falha
+que custou horas no laboratório e que não produz erro em lado nenhum.
+
+**Centro de operações** (`/centro`, `GET /soc`). Deliberadamente distinto do
+painel: o painel responde a "como estamos" (tempos, tendências, distribuições),
+este responde a "o que faço agora" e mostra **itens**, não médias — sete filas
+de trabalho numa única resposta, porque sete pedidos separados comporiam o ecrã
+aos pedaços e levariam o analista a agir sobre uma imagem parcial. O prazo é
+dito por palavras ("fora de prazo há 4 h") e não apenas por cor, que não
+sobrevive a uma impressão nem a quem não a distinga.
+
+**Sessões do próprio utilizador** (`GET /auth/sessions`, na Administração).
+Mostra endereço, agente e última utilização de cada sessão, porque um acesso a
+partir de um endereço estranho é o primeiro sinal de uma credencial
+comprometida e é o dono da conta quem está em melhor posição para o notar.
+
+**Chaves de ingestão** (`POST /integrations/api-keys`, nas Integrações). A chave
+em claro aparece **uma só vez**, com o aviso de que a base de dados guarda
+apenas o hash — afirmação verificada: `SELECT` confirma 64 caracteres de
+SHA-256 e zero ocorrências do segredo em qualquer coluna. Verificado também que
+a chave **serve**: 401 com uma chave inventada, 202 com a criada pelo
+formulário, gerando o alerta ALT-000026. E que revogá-la a inutiliza de imediato.
+
+**Equipa no formulário de utilizador** (`GET /roles/teams`). O comentário de
+`EditarUtilizador` já prometia editar "nome, perfil, equipa e estado", e a API
+já aceitava `team_id` — só o campo faltava. Verificados os dois caminhos:
+atribuir e retirar (`team_id: null`).
+
+**Limiares do motor** (`GET /recommendations/meta/tipos`, nas Recomendações).
+Um bloco "Como o motor decide" que mostra as constantes que governam as
+propostas — confiança mínima 40, tecto de inferência 75, promoção a partir de
+65, validade 7 dias. Vêm do módulo do motor, não reescritas na página, e
+confirmou-se que **todas governam decisões a sério**: `MIN_CONFIDENCE_TO_RAISE`
+aparece em 7 guardas, e o tecto é aplicado via `_confidence_from(..., tecto=…)`.
+Uma constante exposta mas não usada seria exactamente o tipo de número
+decorativo que §4 proíbe.
 
 ### Cenário de demonstração — os dez passos do §4.14
 `app/services/demo_service.py`, invocado por `python -m scripts.manage demo
@@ -235,8 +297,8 @@ métricas de resposta aparecem comprimidas porque o cenário corre em segundos �
 os marcos são reais, o intervalo entre eles não representa trabalho humano.
 Antedatá-los produziria números mais apresentáveis e falsos.
 
-### Suite de testes (§32) — 221 testes, 75% de cobertura
-`backend/tests/`, 17 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
+### Suite de testes (§32) — 250 testes
+`backend/tests/`, 20 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
 (a configuração está em `pytest.ini` e `.coveragerc`).
 
 Cobre tudo o que o §32 enumera: autenticação, autorização, CRUD, filtros,
@@ -271,7 +333,7 @@ Quatro decisões da infra-estrutura de teste, explicadas em `tests/conftest.py`:
 > exaustivamente testado (com a linha, 70%). Um número assim levaria a
 > reescrever testes que já existem.
 
-### API (106 rotas, 21 domínios)
+### API (109 rotas, 21 domínios)
 Autenticação, ingestão, alertas, eventos, incidentes, evidências, tarefas,
 activos, IOCs, MITRE, acções, aprovações, playbooks, **recomendações**, painel,
 centro de operações, grafo, relatórios, utilizadores, perfis, auditoria,
@@ -359,6 +421,45 @@ reproduzido no servidor de desenvolvimento antes de ser corrigido:
 
 `ruff check app tests scripts` passa sem avisos; `pytest` passa 211 testes.
 
+### Defeitos encontrados ao fechar a cobertura de interface (2026-09-17)
+Os dois foram encontrados pelo mesmo método: exercer contra a API viva cada
+operação que ainda não tinha ecrã, em vez de assumir que funcionava por estar
+escrita.
+
+13. **`POST /integrations/api-keys` devolvia 500 em qualquer pedido válido.**
+    O esquema de entrada `ApiKeyCreate` herdava `ApiModel` — a base das
+    **respostas**, que traz `use_enum_values=True`. Pydantic substituía o membro
+    do enum pela string, e `payload.kind.value` levantava
+    `AttributeError: 'str' object has no attribute 'value'`. A rota era uma das
+    três que não tinham interface nem teste, e por isso o defeito sobreviveu
+    desde que foi escrita: **nunca funcionou nenhuma vez**. Corrigido fazendo-a
+    herdar `ApiInput`, como as outras 35 entradas — o que lhe dá também
+    `extra="forbid"`, logo um nome de campo trocado passa a falhar em voz alta
+    em vez de se perder. `tests/test_chaves_ingestao.py` cobre-o; reverter a
+    correcção faz falhar 4 dos 6 testes.
+
+14. **Filtro de severidade em `/events` que parecia filtrar e não filtrava.**
+    Ao construir a página de eventos ofereci um filtro de severidade que a rota
+    não declarava. Um parâmetro de consulta que o FastAPI não conhece é
+    **ignorado em silêncio**: a lista voltava completa e o utilizador concluiria
+    que não havia nada a filtrar. Acrescentado `severidade` à rota, a par de
+    `fonte`. O teste não se contenta com 200 — exige que a contagem filtrada
+    seja menor que a total, senão um filtro ignorado passaria.
+
+Fora do produto, duas arrumações: `alembic/env.py` tinha dois avisos do ruff
+(`ruff check .` nunca passava no repositório inteiro, só em `app/` e `tests/`) e
+o indicador `srv-web-lab` estava com reputação `MALICIOSA` na base de dados de
+desenvolvimento. Este segundo caso merece nota: era **resíduo de um teste manual
+da interface**, e foi o próprio registo de auditoria que o provou —
+`EDITAR_IOC`, `admin@sheisa.local`, campos `["reputation", "context"]`. A
+ingestão está correcta e nunca atribui reputação, deixando-a `DESCONHECIDA`,
+que é a resposta honesta quando nada foi verificado. Deixá-lo assim distorceria
+a triagem, que dá +20 pontos a indicadores maliciosos, e marcaria o servidor da
+própria organização como malicioso. Corrigido **pela API**, para que a correcção
+ficasse ela mesma auditada.
+
+---
+
 ## 5. O que FALTA (por ordem sugerida)
 
 ### 5.1 Motor de recomendações (§12) — **feito** (ver §4)
@@ -381,7 +482,8 @@ Se quiser alargá-lo: `_eventos_suricata` e `_evento_c2` em
 acrescentar uma função e uma chamada a `ingest_batch`.
 
 ### 5.3 Testes (§32) — **feito** (ver §4)
-211 testes, 74% de cobertura. O que a lista do §32 pede está coberto.
+250 testes, 77% de cobertura (medido em 2026-09-17). O que a lista do §32
+pede está coberto.
 
 Onde a cobertura continua baixa, e porquê:
 - `analytics_service` 14% — as consultas de agregação têm muitos ramos por
@@ -396,7 +498,7 @@ Onde a cobertura continua baixa, e porquê:
 
 ### 5.4 Frontend — **funcional; falta vê-lo num navegador**
 
-14 páginas, as seis telas do §4.13 incluídas.
+18 ecrãs, as seis telas do §4.13 incluídas.
 `cd frontend && npm install && npm run dev`.
 
 > **Porta 5500, não 5173.** O Windows reserva intervalos de portas para o
@@ -424,20 +526,27 @@ Acrescentado depois da primeira passagem:
 - **relações entre incidentes** (§20) e **reversão de acções** (§14);
 - **verificação de integridade** e eliminação de evidências.
 
-Das 106 operações da API, **3 continuam sem ecrã** (sessões próprias, criação
-de chaves de API e listagem de equipas) — eram 35 no início desta passagem.
+Acrescentado em 2026-09-17, fechando a cobertura: **eventos brutos** com o
+payload original, **centro de operações**, **sessões próprias**, **criação de
+chaves de ingestão**, **equipa no formulário de utilizador** e os **limiares do
+motor** nas recomendações. Ver a secção própria em §4.
+
+Das 109 operações da API, **7 continuam sem ecrã e devem continuar**: as duas
+sondas de saúde, as duas de documentação (`openapi.json`, `redoc`) e as três de
+ingestão, que são máquina-a-máquina e autenticadas por `X-API-Key`. Eram 35 no
+início desta passagem, 12 antes de 2026-09-17.
 
 **Por fazer:**
 
 - **abrir num navegador e corrigir o que estiver torto** — continua a ser o
   único passo que não pôde ser dado aqui (não há automação de navegador
   disponível). O que *foi* verificado: compila sem erros de TypeScript, serve,
-  o proxy chega à API, e cada caminho e campo usado foi confrontado com o
-  OpenAPI e com respostas reais.
-- Três operações continuam sem ecrã, todas marginais:
-  `GET /auth/sessions` (as próprias sessões do utilizador),
-  `POST /integrations/api-keys` (criar chaves; existe na linha de comandos com
-  `manage create-api-key`) e `GET /roles/teams`.
+  o proxy chega à API, cada caminho e campo usado foi confrontado com respostas
+  reais, e cada classe CSS usada foi confrontada com a folha de estilos — este
+  último ponto por experiência própria, porque o TypeScript não valida nomes de
+  classes e já foram inventadas quatro que não existiam.
+- **não há linter no frontend**, só `tsc`. Um `eslint` apanharia dependências
+  de `useEffect` em falta e variáveis não usadas, que hoje passam.
 
 ### 5.5 Laboratório Wazuh (§26) — **verificado a correr**
 Os ficheiros existem: `lab/docker-compose.lab.yml`, `lab/preparar.sh`,
@@ -539,11 +648,29 @@ backend/app/
   api/v1/      auth, ingest, alerts, incidents, investigation, catalog,
                response, recommendations, analytics, reports, admin
 
+  schemas/     common, auth, alert, incident, catalog, response
+  reporting/   pdf (as dez secções do relatório; degrada para 503 sem reportlab)
+
 backend/tests/  conftest (migração, transacção por teste, contas), e por tema:
                 infraestrutura, autenticacao, autorizacao, auditoria, ingestao,
-                triagem, correlacao, incidentes, resposta, playbooks,
-                recomendacoes, evidencias, filtros, painel, ponta_a_ponta
-  schemas/     common, auth, alert, incident, catalog, response
+                eventos (payload original e filtros), triagem, correlacao,
+                incidentes, resposta, playbooks, tarefas, recomendacoes,
+                evidencias, chaves_ingestao, relatorios_pdf, filtros, painel,
+                demonstracao, ponta_a_ponta
+
+frontend/src/
+  api/         cliente (renovação de sessão, multipart, descarga autenticada),
+               tipos (contrato partilhado com a API)
+  autenticacao/contexto (sessão, permissões efectivas vindas do servidor)
+  componentes/ comuns, listagem, Disposicao, graficos (SVG, sem dependência),
+               CarregarEvidencias, TriagemDeAlerta, TarefasEPlaybooks,
+               CoberturaMitre, RelacoesDeIncidente, Integracoes, MinhasSessoes,
+               Editar{Incidente,Catalogo,Utilizador}
+  paginas/     Entrada, Painel, CentroDeOperacoes, Alertas, Eventos,
+               Incidentes, IncidenteNovo, IncidenteDetalhe, Recomendacoes,
+               Aprovacoes, Relatorios, Catalogo (indicadores/activos/MITRE),
+               Auditoria, Integracoes (+notificações), Administracao
+  estilos/     tokens, base, disposicao
 ```
 
 ## 8. Como retomar

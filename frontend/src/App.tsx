@@ -16,9 +16,11 @@ import { Disposicao } from "@/componentes/Disposicao";
 import { Administracao, PaginaDePlaybooks } from "@/paginas/Administracao";
 import { Alertas } from "@/paginas/Alertas";
 import { Auditoria } from "@/paginas/Auditoria";
+import { CentroDeOperacoes } from "@/paginas/CentroDeOperacoes";
 import { Activos, Indicadores, Mitre } from "@/paginas/Catalogo";
 import { Aprovacoes } from "@/paginas/Aprovacoes";
 import { Entrada } from "@/paginas/Entrada";
+import { Eventos } from "@/paginas/Eventos";
 import { IncidenteDetalhe } from "@/paginas/IncidenteDetalhe";
 import { IncidenteNovo } from "@/paginas/IncidenteNovo";
 import { Incidentes } from "@/paginas/Incidentes";
@@ -62,7 +64,9 @@ function Encaminhamento() {
         }
       >
         <Route path="/painel" element={<Painel />} />
+        <Route path="/centro" element={<CentroDeOperacoes />} />
         <Route path="/alertas" element={<Alertas />} />
+        <Route path="/eventos" element={<Eventos />} />
         <Route path="/incidentes" element={<Incidentes />} />
         <Route path="/incidentes/novo" element={<IncidenteNovo />} />
         <Route path="/incidentes/:id" element={<IncidenteDetalhe />} />

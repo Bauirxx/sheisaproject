@@ -440,3 +440,24 @@ code,
   white-space: nowrap;
   border: 0;
 }
+
+/**
+ * Bloco de dados brutos: payload recebido de uma fonte, tal como chegou.
+ *
+ * Rola horizontalmente em vez de reformatar. A indentacao de um JSON e
+ * informacao — quebrar linhas para caber destruiria a estrutura que se esta
+ * justamente a pedir ao leitor para confrontar com os campos normalizados.
+ */
+.bloco-bruto {
+  margin: 0;
+  padding: var(--espaco-3);
+  background: var(--superficie-elevada);
+  border: 1px solid var(--contorno);
+  border-radius: var(--raio-pequeno);
+  font-size: var(--texto-xs);
+  line-height: 1.55;
+  color: var(--texto-secundario);
+  overflow-x: auto;
+  max-height: 28rem;
+  overflow-y: auto;
+}

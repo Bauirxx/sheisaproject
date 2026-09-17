@@ -20,7 +20,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { pedir } from "@/api/cliente";
-import type { PerfilDetalhado, UtilizadorResumo } from "@/api/tipos";
+import type { Equipa, PerfilDetalhado, UtilizadorResumo } from "@/api/tipos";
 import { useSessao } from "@/autenticacao/contexto";
 import { Erro } from "@/componentes/comuns";
 
@@ -37,6 +37,7 @@ export function EditarUtilizador({
   const [nome, definirNome] = useState(utilizador.full_name);
   const [perfil, definirPerfil] = useState(utilizador.role?.name ?? "");
   const [activo, definirActivo] = useState(utilizador.is_active);
+  const [equipa, definirEquipa] = useState(utilizador.team?.id ?? "");
 
   const [novaSenha, definirNovaSenha] = useState("");
   const [obrigarAlterar, definirObrigarAlterar] = useState(true);
@@ -50,6 +51,14 @@ export function EditarUtilizador({
     staleTime: 10 * 60 * 1000,
   });
 
+  // As equipas mudam raramente, mas têm de vir do servidor: uma lista fixa no
+  // código ficaria desactualizada sem que nada o assinalasse.
+  const equipas = useQuery({
+    queryKey: ["equipas"],
+    queryFn: () => pedir<Equipa[]>("/roles/teams"),
+    staleTime: 10 * 60 * 1000,
+  });
+
   const invalidar = () =>
     clienteDeDados.invalidateQueries({ queryKey: ["utilizadores"] });
 
@@ -58,6 +67,9 @@ export function EditarUtilizador({
     if (nome !== utilizador.full_name) m.full_name = nome;
     if (perfil !== (utilizador.role?.name ?? "")) m.role_name = perfil;
     if (activo !== utilizador.is_active) m.is_active = activo;
+    // `null` é o valor que retira o utilizador de qualquer equipa; "" no
+    // selector significa exactamente isso e não "sem alteração".
+    if (equipa !== (utilizador.team?.id ?? "")) m.team_id = equipa || null;
     return m;
   }
 
@@ -133,6 +145,29 @@ export function EditarUtilizador({
             {perfis.data?.find((p) => p.name === perfil)?.description ?? ""}
           </span>
         </label>
+
+        <label className="campo">
+          <span className="campo__etiqueta">Equipa</span>
+          <select
+            className="selector"
+            value={equipa}
+            onChange={(e) => definirEquipa(e.target.value)}
+          >
+            <option value="">— sem equipa —</option>
+            {(equipas.data ?? [])
+              .filter((eq) => eq.is_active || eq.id === utilizador.team?.id)
+              .map((eq) => (
+                <option key={eq.id} value={eq.id}>
+                  {eq.name}
+                </option>
+              ))}
+          </select>
+          <span className="campo__ajuda">
+            {equipas.data?.find((eq) => eq.id === equipa)?.description ??
+              "A equipa determina a quem um incidente pode ser atribuído."}
+          </span>
+        </label>
+        {equipas.error ? <Erro erro={equipas.error} /> : null}
 
         <label className="linha" style={{ gap: "var(--espaco-2)", alignItems: "center" }}>
           <input

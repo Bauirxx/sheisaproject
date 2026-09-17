@@ -34,7 +34,16 @@ const NAVEGACAO: Grupo[] = [
     titulo: "Operação",
     entradas: [
       { para: "/painel", rotulo: "Painel", icone: "◧", permissoes: ["dashboard:read"] },
+      // O painel diz como estamos; o centro diz o que está à espera de alguém.
+      {
+        para: "/centro",
+        rotulo: "Centro de operações",
+        icone: "◉",
+        permissoes: ["dashboard:read"],
+      },
       { para: "/alertas", rotulo: "Alertas", icone: "◆", permissoes: ["alerts:read"] },
+      // Logo abaixo dos alertas de propósito: é a camada de que eles são feitos.
+      { para: "/eventos", rotulo: "Eventos", icone: "·", permissoes: ["events:read"] },
       {
         para: "/incidentes",
         rotulo: "Incidentes",

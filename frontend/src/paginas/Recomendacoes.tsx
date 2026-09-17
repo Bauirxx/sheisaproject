@@ -23,6 +23,7 @@ import { Link } from "react-router-dom";
 import { consulta, pedir } from "@/api/cliente";
 import type {
   DecisaoSobreRecomendacao,
+  MetaDoMotor,
   Pagina,
   Recomendacao,
   TipoDeRecomendacao,
@@ -268,6 +269,111 @@ function Cartao({ recomendacao }: { recomendacao: Recomendacao }) {
   );
 }
 
+/** O que cada limiar do motor significa, em vez de um número solto. */
+const SENTIDO_DO_LIMIAR: Record<string, string> = {
+  confianca_minima_para_levantar:
+    "Abaixo desta confiança o motor não propõe nada. Existe para não enterrar o analista em sugestões fracas.",
+  confianca_maxima_de_inferencia:
+    "Tecto da confiança de qualquer inferência. O motor nunca se apresenta como certo, porque deduz de indícios.",
+  taxa_de_falso_positivo:
+    "Fracção acima da qual um alerta é tratado como provável falso positivo.",
+  pontuacao_minima_para_promover:
+    "Pontuação de triagem a partir da qual o motor propõe promover um alerta a incidente.",
+  validade_por_omissao_em_dias:
+    "Dias após os quais uma recomendação não decidida expira, em vez de ficar indefinidamente pendente.",
+};
+
+/**
+ * Os limiares do motor, lidos do próprio motor.
+ *
+ * Um motor determinístico distingue-se de um que adivinha por as suas
+ * constantes serem declaradas e verificáveis. Estes valores vêm de
+ * `GET /recommendations/meta/tipos`, isto é, do código que decide — e não de
+ * uma lista reescrita à mão nesta página, que poderia divergir dele sem que
+ * ninguém notasse.
+ */
+function ComoOMotorDecide() {
+  const [aberto, definirAberto] = useState(false);
+
+  const { data, isPending, error } = useQuery({
+    queryKey: ["motor-de-recomendacoes"],
+    queryFn: () => pedir<MetaDoMotor>("/recommendations/meta/tipos"),
+    staleTime: 30 * 60 * 1000,
+    enabled: aberto,
+  });
+
+  if (!aberto) {
+    return (
+      <div className="linha">
+        <button
+          type="button"
+          className="botao botao--discreto botao--pequeno"
+          onClick={() => definirAberto(true)}
+        >
+          Como o motor decide
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cartao pilha" style={{ gap: "var(--espaco-3)" }}>
+      <div className="linha linha--espalhada">
+        <strong>Como o motor decide</strong>
+        <button
+          type="button"
+          className="botao botao--discreto botao--pequeno"
+          onClick={() => definirAberto(false)}
+        >
+          Fechar
+        </button>
+      </div>
+
+      {error ? <Erro erro={error} /> : null}
+      {isPending ? <Carregando /> : null}
+
+      {data ? (
+        <>
+          <p className="terciario">
+            Motor <span className="mono">{data.motor}</span>, versão{" "}
+            <span className="mono">{data.versao}</span>. Os valores abaixo são
+            lidos do motor, não reescritos nesta página.
+          </p>
+
+          <div className="tabela-envolvente">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Limiar</th>
+                  <th>Valor</th>
+                  <th>O que significa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(data.limiares).map(([chave, valor]) => (
+                  <tr key={chave}>
+                    <td className="mono secundario">{chave}</td>
+                    <td className="mono">{valor}</td>
+                    <td className="terciario">
+                      {SENTIDO_DO_LIMIAR[chave] ??
+                        "Limiar declarado pelo motor, sem descrição nesta interface."}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="terciario">
+            Tipos de recomendação que o motor sabe produzir:{" "}
+            {data.tipos.map((t) => ROTULO_DO_TIPO[t] ?? t).join(", ")}.
+          </p>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function Recomendacoes() {
   const { ler, definir } = useFiltros();
   const clienteDeDados = useQueryClient();
@@ -315,6 +421,8 @@ export function Recomendacoes() {
           </div>
         ) : null}
       </div>
+
+      <ComoOMotorDecide />
 
       <div className="filtros">
         <CampoDeSelecao
