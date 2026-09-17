@@ -71,10 +71,12 @@ app = FastAPI(
 #: Só é `True` quando a aplicação está atrás de um proxy inverso de confiança.
 app.state.trust_proxy_headers = False
 
-# A ordem importa: o identificador de pedido tem de ser atribuído primeiro para
-# ficar disponível a tudo o que vem depois, incluindo as respostas de erro.
-app.add_middleware(SecurityHeadersMiddleware)
+# A ordem importa, e o último acrescentado é o mais exterior. O identificador de
+# pedido é atribuído primeiro, para ficar disponível a tudo o que vem depois. A
+# limitação de taxa fica por dentro dos cabeçalhos de segurança: estava por fora,
+# e o 429 que ela devolve saía sem nenhum deles.
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 app.add_middleware(

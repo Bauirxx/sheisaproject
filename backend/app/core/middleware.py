@@ -118,11 +118,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return "ingest", settings.rate_limit_ingest_per_minute
         return "default", settings.rate_limit_default_per_minute
 
-    def _identity(self, request: Request) -> str:
-        # Uma chave de API identifica-se melhor pelo prefixo do que pelo IP:
-        # várias fontes podem partilhar o mesmo IP de saída.
+    def _identity(self, request: Request, klass: str) -> str:
+        # Na ingestão, a chave de API identifica a fonte melhor do que o IP:
+        # várias fontes podem partilhar o mesmo IP de saída. **Só na ingestão**,
+        # que é onde a chave é validada. Noutras rotas o cabeçalho é texto livre
+        # do cliente: usado como identidade no login, bastava mudá-lo em cada
+        # tentativa para ter um balde novo e anular o limite contra força bruta.
         auth = request.headers.get("x-api-key")
-        if auth:
+        if klass == "ingest" and auth:
             return f"apikey:{auth[:8]}"
         client = request.client.host if request.client else "desconhecido"
         return f"ip:{client}"
@@ -132,7 +135,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         klass, limit = self._classify(request.url.path)
-        key = f"{klass}:{self._identity(request)}"
+        key = f"{klass}:{self._identity(request, klass)}"
         allowed, retry_after = self._window.hit(key, limit)
 
         if not allowed:
