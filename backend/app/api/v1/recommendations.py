@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import audit
+from app.core.audit import AuditContext
 from app.core.deps import AuditDep, SessionDep, require
 from app.core.enums import RecommendationKind, RecommendationStatus
 from app.core.errors import ConflictError
@@ -46,8 +49,11 @@ async def list_recommendations(
     params: Annotated[PageParams, Depends(page_params)],
     estado: Annotated[RecommendationStatus | None, Query(description="Filtrar por estado.")] = None,
     tipo: Annotated[RecommendationKind | None, Query(description="Filtrar por tipo.")] = None,
+    # Os dois valores possíveis, e não texto livre: com texto livre,
+    # `alvo=incidente` devolvia uma fila vazia e parecia não haver nada a decidir.
     alvo: Annotated[
-        str | None, Query(description="Tipo de alvo: 'alert' ou 'incident'.")
+        Literal["alert", "incident"] | None,
+        Query(description="Tipo de alvo: 'alert' ou 'incident'."),
     ] = None,
     alvo_id: Annotated[uuid.UUID | None, Query(description="Identificador do alvo.")] = None,
     confianca_minima: Annotated[int | None, Query(ge=0, le=100)] = None,
@@ -144,8 +150,6 @@ async def generate(
     _: Annotated[object, Depends(require(Permission.RECOMMENDATIONS_DECIDE))],
     limite: Annotated[int, Query(ge=1, le=500, description="Registos por tipo.")] = 200,
 ) -> RecommendationSyncResult:
-    from app.core import audit
-
     try:
         resumo = await recommendation_service.sincronizar_em_aberto(session, limite=limite)
     except IntegrityError as exc:
@@ -182,6 +186,7 @@ async def generate(
 async def generate_for_alert(
     alert_id: uuid.UUID,
     session: SessionDep,
+    ctx: AuditDep,
     _: Annotated[object, Depends(require(Permission.RECOMMENDATIONS_DECIDE))],
 ) -> list[RecommendationRead]:
     from app.core.errors import NotFoundError
@@ -189,7 +194,9 @@ async def generate_for_alert(
     alerta = await session.get(Alert, alert_id)
     if alerta is None:
         raise NotFoundError("Alerta", alert_id)
-    vigentes, _retiradas = await recommendation_service.sincronizar_alerta(session, alerta)
+    vigentes, retiradas = await recommendation_service.sincronizar_alerta(session, alerta)
+    await _auditar_recalculo(session, ctx, "alerta", alerta.id, alerta.reference,
+                             len(vigentes), retiradas)
     return [RecommendationRead.model_validate(r) for r in vigentes]
 
 
@@ -201,6 +208,7 @@ async def generate_for_alert(
 async def generate_for_incident(
     incident_id: uuid.UUID,
     session: SessionDep,
+    ctx: AuditDep,
     _: Annotated[object, Depends(require(Permission.RECOMMENDATIONS_DECIDE))],
 ) -> list[RecommendationRead]:
     from app.core.errors import NotFoundError
@@ -208,10 +216,34 @@ async def generate_for_incident(
     incidente = await session.get(Incident, incident_id)
     if incidente is None:
         raise NotFoundError("Incidente", incident_id)
-    vigentes, _retiradas = await recommendation_service.sincronizar_incidente(
+    vigentes, retiradas = await recommendation_service.sincronizar_incidente(
         session, incidente
     )
+    await _auditar_recalculo(session, ctx, "incidente", incidente.id, incidente.reference,
+                             len(vigentes), retiradas)
     return [RecommendationRead.model_validate(r) for r in vigentes]
+
+
+async def _auditar_recalculo(
+    session: AsyncSession, ctx: AuditContext, resource_type: str,
+    resource_id: uuid.UUID, reference: str,
+    vigentes: int, retiradas: int,
+) -> None:
+    """Regista o recálculo de um só alvo, como já se registava o global.
+
+    Um recálculo cria e retira recomendações, e uma recomendação retirada
+    desaparece da fila de quem decide — isso não pode acontecer sem rasto.
+    """
+    await audit.record(
+        session, ctx,
+        action="GERAR_RECOMENDACOES", resource_type=resource_type,
+        resource_id=resource_id, resource_reference=reference,
+        description=(
+            f"Recomendações de {reference} recalculadas: {vigentes} vigente(s), "
+            f"{retiradas} retirada(s) ou expirada(s)."
+        ),
+        new_value={"vigentes": vigentes, "retiradas_ou_expiradas": retiradas},
+    )
 
 
 @router.get(
