@@ -19,7 +19,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 421 a passar, 90% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
+| **Testes** | 438 a passar, 91% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva (48 com a fila de aprovação vazia) |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -302,8 +302,8 @@ métricas de resposta aparecem comprimidas porque o cenário corre em segundos �
 os marcos são reais, o intervalo entre eles não representa trabalho humano.
 Antedatá-los produziria números mais apresentáveis e falsos.
 
-### Suite de testes (§32) — 421 testes
-`backend/tests/`, 34 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
+### Suite de testes (§32) — 438 testes
+`backend/tests/`, 36 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
 (a configuração está em `pytest.ini` e `.coveragerc`).
 
 Cobre tudo o que o §32 enumera: autenticação, autorização, CRUD, filtros,
@@ -467,7 +467,8 @@ ficasse ela mesma auditada.
 Escrever testes para os módulos com cobertura baixa (`timeline_service`,
 `seed_service`, `mitre_service`, `integration_service`, conectores, ingestão
 genérica, catálogo, middlewares, arranque e rotas de recomendações e de
-alertas, correlação, administração e sessões) revelou trinta e um defeitos. Os testes não verificam que as linhas são criadas: exercem
+alertas, correlação, administração, sessões, acções e grafo) revelou trinta e
+sete defeitos. Os testes não verificam que as linhas são criadas: exercem
 aquilo para que cada módulo existe — contar a história do incidente pela ordem
 certa, e pôr a configuração semeada a funcionar nos motores reais.
 
@@ -638,10 +639,34 @@ certa, e pôr a configuração semeada a funcionar nos motores reais.
 45. **A hora do bloqueio vinha em UTC sem o dizer.** "Até 08:15" para quem está
     em Maputo significa 10:15 locais.
 
+46. **Propor a reversão de uma acção dava-a por revertida.** A original ficava
+    REVERTIDA com a inversa ainda por aprovar — o incidente dizia que o endereço
+    fora desbloqueado —, e uma inversa rejeitada deixava a original impossível de
+    reverter. Agora só fica REVERTIDA quando a inversa é executada, e não se
+    propõem duas reversões em curso. A interface já dizia ao analista o certo:
+    "não desfaz nada directamente".
+47. **Uma aprovação caducada ficava na fila para sempre.** Decidi-la devolvia 409
+    sem mudar nada. A base de desenvolvimento tinha um caso real, ACT-000001,
+    caducado na véspera. Há agora a decisão CADUCADA: a acção passa a CANCELADA
+    (em nome do sistema, auditado), um playbook suspenso nela termina, e o painel
+    e o centro de operações deixam de a contar. Confirmado na API reiniciada.
+48. **Uma execução em que o conector lançava excepção contava como falhada mas não
+    como executada** — a página de integrações mostrava "0 executadas (1
+    falhada)".
+49. **`enum_column` afirmava restrições CHECK que não existem.** O esquema não tem
+    nenhuma: o SQLAlchemy 2 não as cria por omissão. A docstring foi corrigida; se
+    se devem criar é uma decisão — ver [`CONTINUAR.md`](CONTINUAR.md) §4.3.
+50. **No grafo com profundidade, uma relação entre incidentes aparecia duas
+    vezes**, desenhada a partir de cada lado, e `resumo.arestas` contava-a em
+    dobro.
+51. **O grafo de um indicador inexistente devolvia 200** com um grafo vazio, ao
+    contrário do de um incidente (404). Confirmado na API reiniciada.
+
 Todos verificados por reversão. Desfazer a correcção faz falhar: 15, um teste;
 16, dois; 17, dois; 18, 19, 20 e 21, um cada; 22, cinco; 23, dois; 24, um; 25 e
 26, quatro cada; 27, nove; 28, cinco; 29 a 38, um cada; 39, dois; 40 a 45, um
-cada. Os defeitos 27 a 30, 32 e
+cada; 46, três; 47, quatro (decisão, fila, painel e playbook); 48, 50 e 51, um
+cada. O 49 é uma correcção de documentação. Os defeitos 27 a 30, 32 e
 34 foram também confirmados na API reiniciada, e o 31 com `manage init` na base
 de desenvolvimento, que correu sem alterar nada. A base de desenvolvimento não
 tinha alertas inconsistentes (0 de 27 PROMOVIDO ou CORRELACIONADO sem incidente). `verificar_contrato.py`
@@ -686,7 +711,7 @@ Se quiser alargá-lo: `_eventos_suricata` e `_evento_c2` em
 acrescentar uma função e uma chamada a `ingest_batch`.
 
 ### 5.3 Testes (§32) — **feito** (ver §4)
-421 testes, 90% de cobertura (medido em 2026-09-17). O que a lista do §32
+438 testes, 91% de cobertura (medido em 2026-09-17). O que a lista do §32
 pede está coberto.
 
 Onde a cobertura continua baixa, e porquê (remedido em 2026-09-17 — os valores
@@ -697,12 +722,13 @@ anteriores, que este documento afirmava, estavam desactualizados: o
   94%, `api/v1/recommendations.py` 95%, `services/bootstrap.py` 92%,
   `api/v1/catalog.py` 91%, `api/v1/alerts.py` 89%, `wazuh_connector` 87% —
   todos subidos em 2026-09-17 (estavam entre 0% e 67%); os testes revelaram os
-  defeitos 15 a 45 do §4 (também `correlation/engine.py` 91%,
-  `api/v1/admin.py` 96% e `services/auth_service.py` 97%);
+  defeitos 15 a 51 do §4 (também `correlation/engine.py` 91%,
+  `api/v1/admin.py` 96%, `services/auth_service.py` 97%, `api/v1/response.py`
+  90%, `action_service` 92% e `analytics_service` 95%);
 - `siem_connectors` 56% e `integrations/base` 73% — o que falta é código que
   nada na aplicação chama (`fetch_offenses`, `fetch_alerts`, `required_env`);
-- os mais baixos agora são `api/v1/response.py` e `services/analytics_service.py`
-  (76%), `api/v1/incidents.py` (77%) e `services/evidence_service.py` (78%);
+- os mais baixos agora são `reporting/pdf.py` e `recommendation_service` (77%),
+  `evidence_service` (78%) e `api/v1/incidents.py` (79%);
 - `playbooks/engine` 74% — suspensão, retoma, rejeição e execução da acção
   aprovada estão testados; os tipos de passo menos usados não.
 

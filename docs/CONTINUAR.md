@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 421 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 438 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,9 +101,9 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 421 a passar, 90% de cobertura |
+| Testes | 438 a passar, 91% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
-| Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
+| Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr — 48 quando a fila de aprovação está vazia, porque três só se verificam com pedidos pendentes |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
 
 **Cobertura de interface fechada.** Das 109 operações, 7 não têm ecrã e **não
@@ -159,8 +159,8 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 **Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
 cobertos, e com eles os conectores, a ingestão genérica, o catálogo, os
 middlewares, o arranque e as rotas de recomendações e de alertas. Escrever os
-testes revelou **trinta e um defeitos reais**, todos corrigidos e verificados
-por reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 45. Nenhum dava erro; todos deixavam o sistema num estado
+testes revelou **trinta e sete defeitos reais**, todos corrigidos e verificados
+por reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 51. Nenhum dava erro; todos deixavam o sistema num estado
 plausível e errado. O mais grave: aprovar um bloqueio num playbook **não o
 executava**, e o incidente registava "Bloqueio aplicado".
 
@@ -181,6 +181,9 @@ executava**, e o incidente registava "Bloqueio aplicado".
 | `correlation/engine.py` | 72% | 91% |
 | `api/v1/admin.py` | 73% | 96% |
 | `services/auth_service.py` | 74% | 97% |
+| `api/v1/response.py` | 76% | 90% |
+| `services/action_service.py` | 78% | 92% |
+| `services/analytics_service.py` | 76% | 95% |
 
 A lição de método: os testes que encontraram defeitos não verificavam que as
 linhas eram criadas, mas que o módulo fazia aquilo para que existe — a linha
@@ -204,15 +207,15 @@ vida do alerta; a promoção e a ligação não o consultavam. Ver a armadilha 5
 Aplicá-la ao resto do código encontrou logo mais um caso: os playbooks mudavam o
 estado do incidente sem passar pela transição (defeito 39).
 
-**Próximos candidatos**, medidos com a suite completa (421 testes, 90%):
+**Próximos candidatos**, medidos com a suite completa (438 testes, 91%):
 
 | Módulo | Cobertura | Porque importa |
 |---|---|---|
-| `api/v1/response.py` | 76% | acções, aprovações e playbooks pela API |
-| `services/analytics_service.py` | 76% | os números do painel e dos relatórios |
-| `api/v1/incidents.py` | 77% | |
+| `reporting/pdf.py` | 77% | o relatório exportado |
+| `services/recommendation_service.py` | 77% | aplicação das recomendações aceites |
 | `services/evidence_service.py` | 78% | integridade das evidências |
-| `services/action_service.py` | 78% | execução e reversão de acções |
+| `api/v1/incidents.py` | 79% | |
+| `api/v1/reports.py` | 80% | |
 
 `core/database.py`, `siem_connectors`, `integrations/base.py` e `main.py` ficam
 fora: ligação e arranque, ou código que nada chama.
@@ -227,7 +230,7 @@ para o `analytics_service`, que estava a 76%:
 ./.venv/Scripts/python.exe -m pytest --cov=app --cov-report=term
 ```
 
-> **Pendente de decisão do autor — quatro achados que não foram corrigidos**, por
+> **Pendente de decisão do autor — cinco achados que não foram corrigidos**, por
 > exigirem uma escolha e não uma correcção:
 >
 > 1. **Os playbooks semeados pedem duas aprovações para a mesma decisão**: um
@@ -264,6 +267,13 @@ para o `analytics_service`, que estava a 76%:
 >    definiu o playbook tinha autoridade para encerrar —, ou a separação entre
 >    quem conduz e quem dá por terminado deve valer também aqui. Nenhum
 >    playbook da base de desenvolvimento usa estado final.
+> 5. **A base de dados não impõe os valores das enumerações.** O esquema não tem
+>    nenhuma restrição CHECK (medido em 2026-09-17), embora `enum_column` o
+>    afirmasse: no SQLAlchemy 2 o `Enum` não as cria por omissão. A validação é
+>    só do ORM, e um valor inválido escrito por SQL directo passa. Criá-las exige
+>    uma migração e, depois, uma migração por cada estado novo (como `CADUCADA`,
+>    acrescentado agora sem migração nenhuma). A docstring foi corrigida; a
+>    decisão de as criar fica por tomar.
 
 ### 4.4 Ideias que foram deixadas de fora deliberadamente
 
