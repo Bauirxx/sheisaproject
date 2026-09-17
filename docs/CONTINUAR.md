@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 377 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 389 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 377 a passar, 87% de cobertura |
+| Testes | 389 a passar, 88% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -158,9 +158,9 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 
 **Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
 cobertos, e com eles os conectores, a ingestão genérica, o catálogo, os
-middlewares, o arranque e as rotas de recomendações. Escrever os testes revelou
-**dezanove defeitos reais**, todos corrigidos e verificados por reversão —
-[`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 33. Nenhum dava erro; todos deixavam o sistema num estado
+middlewares, o arranque e as rotas de recomendações e de alertas. Escrever os
+testes revelou **vinte e quatro defeitos reais**, todos corrigidos e verificados
+por reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 38. Nenhum dava erro; todos deixavam o sistema num estado
 plausível e errado. O mais grave: aprovar um bloqueio num playbook **não o
 executava**, e o incidente registava "Bloqueio aplicado".
 
@@ -177,6 +177,7 @@ executava**, e o incidente registava "Bloqueio aplicado".
 | `core/middleware.py` | 58% | 94% |
 | `services/bootstrap.py` | 59% | 92% (o commit `344cdbf` diz 100%: foi escrito antes de medir) |
 | `api/v1/recommendations.py` | 63% | 95% |
+| `api/v1/alerts.py` | 67% | 89% |
 
 A lição de método: os testes que encontraram defeitos não verificavam que as
 linhas eram criadas, mas que o módulo fazia aquilo para que existe — a linha
@@ -194,11 +195,14 @@ campo obrigatório dava **500 em cinco rotas** — ver a armadilha 5.14. Os
 middlewares trouxeram o de segurança: o limite contra força bruta no login
 **contornava-se mudando o cabeçalho `X-API-Key`** em cada tentativa.
 
-**Próximos candidatos**, medidos com a suite completa (377 testes, 87%):
+Os alertas repetiram um padrão que vale a pena procurar noutros sítios: **uma
+regra aplicada numa porta e esquecida nas outras**. A triagem cumpria o ciclo de
+vida do alerta; a promoção e a ligação não o consultavam. Ver a armadilha 5.15.
+
+**Próximos candidatos**, medidos com a suite completa (389 testes, 88%):
 
 | Módulo | Cobertura | Porque importa |
 |---|---|---|
-| `api/v1/alerts.py` | 67% | triagem e promoção |
 | `correlation/engine.py` | 72% | a conclusão "é a mesma actividade" |
 | `api/v1/admin.py` | 73% | utilizadores, perfis, auditoria |
 | `playbooks/engine.py` | 74% | tipos de passo menos usados |
@@ -375,6 +379,17 @@ auditoria, que regista em que pedido cada coisa aconteceu.
 
 E **aprovar não é executar**: `decide_action` só muda o estado para APROVADA. Se
 nada executar a acção, o passo seguinte corre sobre algo que não aconteceu.
+
+### 5.15 Uma regra de estado vale em todas as portas, não só na que a verificou
+
+`ALERT_TRANSITIONS` e `INCIDENT_TRANSITIONS` são a única fonte de verdade do ciclo
+de vida — mas só protegem o que as consulta. A rota de triagem consultava; a
+promoção e a ligação mudavam o estado do alerta directamente. O mesmo com
+`LINKABLE_STATUSES`: o motor de correlação recusava ligar alertas a incidentes
+encerrados, a ligação manual não. **Quando acrescentar uma operação que muda um
+estado, procure todas as outras que já o mudam** (`grep -rn "\.status = "`) e
+confirme que passam pela mesma verificação. A regra deve viver no serviço, não
+na rota, para valer também para a correlação automática e para a demonstração.
 
 ### 5.14 Num PATCH, omitir um campo não é o mesmo que enviá-lo a `null`
 
