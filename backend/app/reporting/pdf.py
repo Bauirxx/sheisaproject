@@ -419,11 +419,18 @@ def _periodo(conteudo: dict, estilos) -> list:
 
     e(Paragraph("Tempos de resposta", estilos["seccao"]))
     cumprimento = metricas.get("cumprimento_prazo", {})
+    # As métricas vêm em segundos; escritas assim ("5400"), sem unidade, não se
+    # liam — e o resto do relatório já as apresenta como "1h 30min".
+    from app.services.report_service import format_duration
+
     e(_tabela_de_propriedades([
-        ("Reconhecimento (médio)", metricas.get("tempo_medio_reconhecimento_segundos")),
-        ("Reconhecimento (mediano)", metricas.get("tempo_mediano_reconhecimento_segundos")),
-        ("Resolução (médio)", metricas.get("tempo_medio_resolucao_segundos")),
-        ("Resolução (mediano)", metricas.get("tempo_mediano_resolucao_segundos")),
+        ("Reconhecimento (médio)",
+         format_duration(metricas.get("tempo_medio_reconhecimento_segundos"))),
+        ("Reconhecimento (mediano)",
+         format_duration(metricas.get("tempo_mediano_reconhecimento_segundos"))),
+        ("Resolução (médio)", format_duration(metricas.get("tempo_medio_resolucao_segundos"))),
+        ("Resolução (mediano)",
+         format_duration(metricas.get("tempo_mediano_resolucao_segundos"))),
         ("Dentro do prazo",
          f"{cumprimento.get('dentro_do_prazo', 0)} de {cumprimento.get('avaliados', 0)}"),
     ], estilos))

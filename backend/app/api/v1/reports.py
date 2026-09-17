@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import Field
+from pydantic import AwareDatetime, Field
 from sqlalchemy import select
 
 from app.core.deps import AuditDep, SessionDep, require
@@ -45,8 +45,10 @@ class IncidentReportRequest(ApiInput):
 
 
 class PeriodReportRequest(ApiInput):
-    start: datetime
-    end: datetime
+    # Com fuso obrigatório: misturar um instante com fuso e outro sem ele dava
+    # 500 na comparação, e sem fuso nenhum eram tomados por UTC em silêncio.
+    start: AwareDatetime
+    end: AwareDatetime
     title: str | None = None
 
 

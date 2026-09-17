@@ -208,14 +208,27 @@ async def distribution(session: AsyncSession, *, days: int = 30) -> dict:
     }
 
 
-async def response_metrics(session: AsyncSession, *, days: int = 30) -> dict:
+async def response_metrics(
+    session: AsyncSession,
+    *,
+    days: int = 30,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> dict:
     """Tempos médios de reconhecimento e resolução (§17).
 
     Calculados em SQL a partir dos marcos temporais reais. Incidentes sem o
     marco correspondente ficam de fora da média em vez de contarem como zero —
     contá-los baixaria artificialmente os tempos.
     """
-    since = datetime.now(UTC) - timedelta(days=days)
+    # Um intervalo explícito prevalece sobre a janela relativa. O relatório de
+    # período passava só o número de dias, e as métricas contavam a partir de
+    # hoje: um relatório de Janeiro gerado em Setembro mostrava os tempos dos
+    # últimos 31 dias ao lado da lista de incidentes de Janeiro.
+    since = start or datetime.now(UTC) - timedelta(days=days)
+    in_window = [Incident.detected_at >= since]
+    if end is not None:
+        in_window.append(Incident.detected_at <= end)
 
     ack_seconds = func.extract(
         "epoch", Incident.acknowledged_at - Incident.detected_at
@@ -232,7 +245,7 @@ async def response_metrics(session: AsyncSession, *, days: int = 30) -> dict:
             func.percentile_cont(0.5).within_group(res_seconds)
             .filter(Incident.resolved_at.isnot(None)),
             func.count().filter(Incident.resolved_at.isnot(None)),
-        ).where(Incident.detected_at >= since)
+        ).where(*in_window)
     )
     avg_ack, med_ack, n_ack, avg_res, med_res, n_res = result.one()
 
@@ -242,7 +255,7 @@ async def response_metrics(session: AsyncSession, *, days: int = 30) -> dict:
             func.count(),
             func.count().filter(Incident.resolved_at <= Incident.due_at),
         ).where(
-            Incident.detected_at >= since,
+            *in_window,
             Incident.resolved_at.isnot(None),
             Incident.due_at.isnot(None),
         )

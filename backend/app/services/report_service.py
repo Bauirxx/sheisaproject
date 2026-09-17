@@ -40,7 +40,8 @@ from app.models.telemetry import Alert
 from app.services import analytics_service
 
 
-def _duration(seconds: int | None) -> str | None:
+def format_duration(seconds: int | None) -> str | None:
+    """Duração legível ("1h 30min"), usada no JSON e no PDF dos relatórios."""
     if seconds is None:
         return None
     if seconds < 60:
@@ -169,8 +170,8 @@ async def build_incident_report(
         "resolvido_em": incident.resolved_at.isoformat() if incident.resolved_at else None,
         "encerrado_em": incident.closed_at.isoformat() if incident.closed_at else None,
         "prazo": incident.due_at.isoformat() if incident.due_at else None,
-        "tempo_ate_reconhecimento": _duration(incident.time_to_acknowledge_seconds),
-        "tempo_ate_resolucao": _duration(incident.time_to_resolve_seconds),
+        "tempo_ate_reconhecimento": format_duration(incident.time_to_acknowledge_seconds),
+        "tempo_ate_resolucao": format_duration(incident.time_to_resolve_seconds),
         "cumpriu_prazo": (
             (incident.resolved_at <= incident.due_at)
             if incident.resolved_at and incident.due_at
@@ -411,7 +412,9 @@ async def build_period_report(
         )
     ).scalar_one()
 
-    metrics = await analytics_service.response_metrics(session, days=days)
+    metrics = await analytics_service.response_metrics(
+        session, days=days, start=start, end=end
+    )
 
     return {
         "tipo": "relatorio_de_periodo",
@@ -437,7 +440,7 @@ async def build_period_report(
                 "estado": i.status.value,
                 "detectado_em": i.detected_at.isoformat(),
                 "resolvido_em": i.resolved_at.isoformat() if i.resolved_at else None,
-                "tempo_ate_resolucao": _duration(i.time_to_resolve_seconds),
+                "tempo_ate_resolucao": format_duration(i.time_to_resolve_seconds),
             }
             for i in incidents
         ],
