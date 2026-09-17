@@ -44,12 +44,18 @@ def uuid_pk() -> Mapped[uuid.UUID]:
 
 
 def enum_column(py_enum: type, **kwargs: Any) -> Any:
-    """Coluna de enumeração como VARCHAR com restrição CHECK.
+    """Coluna de enumeração como VARCHAR, validada pela aplicação.
 
     Preferimos isto ao tipo ENUM nativo do PostgreSQL: acrescentar um estado ao
-    ciclo de vida passa a ser uma alteração de restrição em vez de um
-    `ALTER TYPE`, que não pode correr dentro de uma transacção em versões mais
-    antigas e complica os rollbacks.
+    ciclo de vida não exige um `ALTER TYPE`, que não pode correr dentro de uma
+    transacção em versões mais antigas e complica os rollbacks.
+
+    **A base de dados não impõe os valores.** Este comentário dizia "com
+    restrição CHECK", mas no SQLAlchemy 2 o `Enum` não cria a restrição por
+    omissão (`create_constraint=False`), e o esquema não tem nenhuma — medido em
+    2026-09-17. A validação é do ORM (`validate_strings=True`): um valor inválido
+    escrito por SQL directo passa. Acrescentar um estado, como `CADUCADA` nas
+    aprovações, não precisa por isso de migração.
     """
     return SAEnum(
         py_enum,

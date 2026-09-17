@@ -287,6 +287,8 @@ class ApprovalDecision(StrEnum):
     APROVADA = "APROVADA"
     REJEITADA = "REJEITADA"
     PENDENTE = "PENDENTE"
+    #: Ninguém decidiu dentro do prazo. Não é uma rejeição: ninguém rejeitou.
+    CADUCADA = "CADUCADA"
 
 
 class PlaybookExecutionStatus(StrEnum):

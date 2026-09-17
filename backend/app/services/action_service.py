@@ -301,9 +301,11 @@ async def decide_action(
         raise AuthorizationError(required=pending.required_permission)
 
     if pending.expires_at is not None and pending.expires_at <= datetime.now(UTC):
+        await _expire(session, action, pending)
+        await session.commit()
         raise ConflictError(
-            f"O pedido de aprovação da acção {action.reference} caducou. "
-            "Proponha a acção novamente."
+            f"O pedido de aprovação da acção {action.reference} caducou e a acção "
+            "foi cancelada. Proponha-a novamente."
         )
 
     if action.risk_level == ActionRiskLevel.CRITICO and not (justification or "").strip():
@@ -457,12 +459,18 @@ async def execute_action(
         action.status = ActionStatus.FALHADA
         action.error = str(exc)[:2000]
         action.result = {"sucesso": False, "detalhe": str(exc)[:2000]}
+        # Uma tentativa que rebenta também é uma execução tentada. Contada só como
+        # falhada, a página de integrações mostrava "0 executadas (1 falhada)".
+        integration.actions_executed += 1
         integration.actions_failed += 1
         detail = str(exc)
         success = False
 
     action.executed_at = now
     action.executed_by_id = ctx.actor_id
+
+    if success:
+        await _complete_reversion(session, ctx, inverse=action)
 
     await _record_execution_comment(session, action, success=success, detail=detail)
     await audit.record(
@@ -514,10 +522,26 @@ async def get_action(session: AsyncSession, action_id: uuid.UUID) -> Action:
     return action
 
 
+#: Estados em que uma acção inversa ainda pode vir a ser executada.
+_REVERSION_IN_PROGRESS = frozenset({
+    ActionStatus.PROPOSTA, ActionStatus.AGUARDA_APROVACAO,
+    ActionStatus.APROVADA, ActionStatus.EM_EXECUCAO,
+})
+
+
 async def revert_action(
     session: AsyncSession, ctx: AuditContext, *, action: Action, rationale: str
 ) -> Action:
-    """Cria e executa a acção inversa de uma acção já executada."""
+    """Propõe a acção inversa de uma acção já executada.
+
+    Propõe, não executa: a inversa passa pelo mesmo regime de aprovação. Por
+    isso a original **não** fica REVERTIDA aqui — só quando a inversa for de facto
+    executada (`_complete_reversion`). Antes ficava logo: o incidente dizia que o
+    endereço fora desbloqueado com a inversa ainda por aprovar, e uma inversa
+    rejeitada deixava a original impossível de reverter.
+    """
+    if action.status == ActionStatus.REVERTIDA:
+        raise ConflictError(f"A acção {action.reference} já foi revertida.")
     if action.status != ActionStatus.EXECUTADA:
         raise ConflictError("Só é possível reverter uma acção executada com sucesso.")
     inverse_kind = REVERSIBLE_BY.get(action.action_kind)
@@ -525,8 +549,13 @@ async def revert_action(
         raise ConflictError(
             f"A acção {action.action_kind.value} não tem operação inversa definida."
         )
-    if action.reverted_at is not None:
-        raise ConflictError(f"A acção {action.reference} já foi revertida.")
+    if action.reverted_by_action_id is not None:
+        current = await session.get(Action, action.reverted_by_action_id)
+        if current is not None and current.status in _REVERSION_IN_PROGRESS:
+            raise ConflictError(
+                f"Já existe uma reversão em curso: {current.reference} "
+                f"({current.status.value})."
+            )
 
     incident = await session.get(Incident, action.incident_id)
     inverse = await propose_action(
@@ -538,7 +567,100 @@ async def revert_action(
         target=action.target,
         parameters=action.parameters,
     )
-    action.reverted_at = datetime.now(UTC)
     action.reverted_by_action_id = inverse.id
-    action.status = ActionStatus.REVERTIDA
     return inverse
+
+
+async def _complete_reversion(
+    session: AsyncSession, ctx: AuditContext, *, inverse: Action
+) -> None:
+    """Dá a acção original por revertida, agora que a inversa foi executada."""
+    original = (
+        await session.execute(select(Action).where(Action.reverted_by_action_id == inverse.id))
+    ).scalar_one_or_none()
+    if original is None or original.status != ActionStatus.EXECUTADA:
+        return
+    original.status = ActionStatus.REVERTIDA
+    original.reverted_at = datetime.now(UTC)
+    await audit.record(
+        session, ctx,
+        action="REVERTER_ACCAO", resource_type="accao",
+        resource_id=original.id, resource_reference=original.reference,
+        description=(
+            f"Acção {original.reference} revertida pela execução de {inverse.reference}."
+        ),
+        old_value={"estado": ActionStatus.EXECUTADA.value},
+        new_value={"estado": ActionStatus.REVERTIDA.value},
+        changed_fields=["status"],
+    )
+
+
+# ----------------------------------------------------------------- caducidade
+async def expire_overdue_approvals(session: AsyncSession) -> int:
+    """Cancela as acções cujo pedido de aprovação caducou sem decisão.
+
+    Sem isto, um pedido caducado ficava na fila para sempre: decidi-lo devolvia
+    409 sem mudar nada, e a acção continuava AGUARDA_APROVACAO. É chamado por
+    quem consulta ou decide a fila — a caducidade aplica-se quando alguém olha,
+    em vez de depender de um processo à parte que pode não estar a correr.
+    """
+    overdue = (
+        await session.execute(
+            select(ActionApproval)
+            .where(
+                ActionApproval.decision == ApprovalDecision.PENDENTE,
+                ActionApproval.expires_at.is_not(None),
+                ActionApproval.expires_at <= datetime.now(UTC),
+            )
+        )
+    ).scalars().all()
+    for pending in overdue:
+        action = await session.get(Action, pending.action_id)
+        if action is not None:
+            await _expire(session, action, pending)
+    await session.flush()
+    return len(overdue)
+
+
+async def _expire(session: AsyncSession, action: Action, pending: ActionApproval) -> None:
+    """Regista a caducidade: pedido CADUCADO, acção CANCELADA, playbook terminado.
+
+    Feito em nome do sistema — ninguém decidiu nada, o prazo é que acabou.
+    """
+    ctx = AuditContext.system(origin="caducidade")
+    expired_at = pending.expires_at
+    reason = (
+        f"Pedido de aprovação caducado em {expired_at:%Y-%m-%d %H:%M} UTC sem decisão."
+        if expired_at else "Pedido de aprovação caducado sem decisão."
+    )
+    pending.decision = ApprovalDecision.CADUCADA
+    action.status = ActionStatus.CANCELADA
+    action.error = reason
+    session.add(
+        Comment(
+            incident_id=action.incident_id,
+            body=f"Acção {action.reference} cancelada. {reason}",
+            is_system=True,
+        )
+    )
+    await audit.record(
+        session, ctx,
+        action="CADUCAR_APROVACAO", resource_type="accao",
+        resource_id=action.id, resource_reference=action.reference,
+        description=f"Acção {action.reference} cancelada. {reason}",
+        old_value={"estado": ActionStatus.AGUARDA_APROVACAO.value},
+        new_value={"estado": ActionStatus.CANCELADA.value},
+        changed_fields=["status"],
+    )
+
+    if action.playbook_execution_id is not None:
+        from app.core.enums import PlaybookExecutionStatus
+        from app.models.response import PlaybookExecution as Execution
+        from app.playbooks import engine as playbook_engine
+
+        execution = await session.get(Execution, action.playbook_execution_id)
+        if execution is not None and execution.status == PlaybookExecutionStatus.AGUARDA_APROVACAO:
+            await playbook_engine.cancel_after_rejection(
+                session, ctx, execution=execution, action=action,
+                reason=f"o pedido de aprovação da acção {action.reference} caducou",
+            )

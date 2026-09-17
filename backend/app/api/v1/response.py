@@ -190,6 +190,9 @@ async def list_pending(
     params: Annotated[PageParams, Depends(page_params)],
     apenas_pendentes: Annotated[bool, Query()] = True,
 ) -> Page[ActionRead]:
+    # Um pedido caducado não pode ser decidido; deixá-lo na fila era mostrar
+    # botões que falham sempre.
+    await action_service.expire_overdue_approvals(session)
     stmt = (
         select(Action)
         .join(ActionApproval, ActionApproval.action_id == Action.id)

@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -33,6 +33,15 @@ from app.models.incident import Incident, IncidentRelation, incident_assets
 from app.models.investigation import Observation, Task
 from app.models.response import Action, ActionApproval, PlaybookExecution
 from app.models.telemetry import Alert, Event
+
+
+def _not_expired():
+    """Pedido de aprovação ainda dentro do prazo.
+
+    Um pedido caducado não pode ser decidido; contá-lo como pendente inflacionava
+    o painel e o centro de operações até alguém abrir a fila de aprovação.
+    """
+    return or_(ActionApproval.expires_at.is_(None), ActionApproval.expires_at > func.now())
 
 
 async def _scalar(session: AsyncSession, stmt) -> int:
@@ -112,7 +121,7 @@ async def dashboard_overview(session: AsyncSession, *, days: int = 30) -> dict:
     approvals_pending = await _scalar(
         session,
         select(func.count()).select_from(ActionApproval)
-        .where(ActionApproval.decision == ApprovalDecision.PENDENTE),
+        .where(ActionApproval.decision == ApprovalDecision.PENDENTE, _not_expired()),
     )
     actions_executed = await _scalar(
         session,
@@ -364,7 +373,7 @@ async def soc_center(session: AsyncSession, *, limit: int = 10) -> dict:
     pending_approvals = await session.execute(
         select(Action)
         .join(ActionApproval, ActionApproval.action_id == Action.id)
-        .where(ActionApproval.decision == ApprovalDecision.PENDENTE)
+        .where(ActionApproval.decision == ApprovalDecision.PENDENTE, _not_expired())
         .options(selectinload(Action.approvals))
         .order_by(Action.created_at.asc())
         .limit(limit)

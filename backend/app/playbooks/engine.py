@@ -274,8 +274,9 @@ async def cancel_after_rejection(
     *,
     execution: PlaybookExecution,
     action: Action,
+    reason: str | None = None,
 ) -> PlaybookExecution:
-    """Termina a execução cuja aprovação foi recusada.
+    """Termina a execução cuja aprovação foi recusada ou caducou.
 
     Sem isto a execução ficava em AGUARDA_APROVACAO para sempre: o painel mostrava
     um playbook à espera de uma decisão que já tinha sido tomada, e a fila de
@@ -290,9 +291,10 @@ async def cancel_after_rejection(
             f"(estado: {execution.status.value})."
         )
 
+    causa = reason or f"a acção {action.reference} foi rejeitada"
     motivo = (
-        f"A acção {action.reference} ('{action.title}') foi rejeitada; os passos "
-        "seguintes não foram executados."
+        f"{causa[0].upper()}{causa[1:]} ('{action.title}'); os passos seguintes não "
+        "foram executados."
     )
     execution.status = PlaybookExecutionStatus.CANCELADA
     execution.error = motivo
