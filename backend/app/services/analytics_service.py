@@ -501,6 +501,9 @@ async def investigation_graph(
     nodes: dict[str, dict] = {}
     edges: list[dict] = []
     visited: set[uuid.UUID] = set()
+    # Uma relação liga dois incidentes e é encontrada a partir de cada um deles;
+    # sem esta memória, com profundidade 2 era desenhada (e contada) duas vezes.
+    drawn_relations: set[uuid.UUID] = set()
     frontier = [incident_id]
 
     def add_node(key: str, **data) -> None:
@@ -604,6 +607,9 @@ async def investigation_graph(
                 )
             )
             for relation in relations.scalars():
+                if relation.id in drawn_relations:
+                    continue
+                drawn_relations.add(relation.id)
                 other_id = (
                     relation.target_incident_id
                     if relation.source_incident_id == incident.id

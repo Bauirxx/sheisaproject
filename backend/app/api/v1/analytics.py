@@ -8,7 +8,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import SessionDep, require
+from app.core.errors import NotFoundError
 from app.core.permissions import Permission
+from app.models.catalog import Ioc
 from app.services import analytics_service, incident_service
 
 dashboard_router = APIRouter(prefix="/dashboard", tags=["Painel"])
@@ -131,4 +133,8 @@ async def ioc_graph(
     session: SessionDep,
     _: Annotated[object, Depends(require(Permission.IOCS_READ))],
 ) -> dict:
+    # Como no grafo de um incidente: um identificador errado não pode parecer um
+    # indicador que nunca foi observado.
+    if await session.get(Ioc, ioc_id) is None:
+        raise NotFoundError("Indicador", ioc_id)
     return await analytics_service.ioc_graph(session, ioc_id=ioc_id)
