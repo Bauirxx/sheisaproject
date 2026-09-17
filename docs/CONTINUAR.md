@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 298 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 327 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 298 a passar, 83% de cobertura |
+| Testes | 327 a passar, 84% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -157,9 +157,9 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 ### 4.3 Subir a cobertura onde ela é baixa — **a lista original está feita**
 
 **Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
-cobertos, e os conectores com eles. Escrever os testes revelou **oito defeitos
-reais**, todos corrigidos e verificados por reversão — [`ESTADO.md`](ESTADO.md)
-§4, defeitos 15 a 22. Nenhum dava erro; todos deixavam o sistema num estado
+cobertos, e com eles os conectores e a ingestão genérica. Escrever os testes
+revelou **doze defeitos reais**, todos corrigidos e verificados por reversão —
+[`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 26. Nenhum dava erro; todos deixavam o sistema num estado
 plausível e errado. O mais grave: aprovar um bloqueio num playbook **não o
 executava**, e o incidente registava "Bloqueio aplicado".
 
@@ -171,6 +171,7 @@ executava**, e o incidente registava "Bloqueio aplicado".
 | `integration_service` | 55% | 94% |
 | `wazuh_connector` | 26% | 87% |
 | `siem_connectors` | 30% | 56% — o resto é código que nada chama (abaixo) |
+| `ingestion/generic.py` | 18% | 95% |
 
 A lição de método: os testes que encontraram defeitos não verificavam que as
 linhas eram criadas, mas que o módulo fazia aquilo para que existe — a linha
@@ -178,19 +179,23 @@ temporal conta a história pela ordem certa, a configuração semeada funciona n
 motores reais de ponta a ponta, o conector fala com o gestor Wazuh verdadeiro
 (os formatos do duplo HTTP foram capturados do laboratório).
 
-**Próximos candidatos**, medidos com a suite completa (298 testes, 83%) — nenhum
-estava na lista original:
+A ingestão genérica confirmou o palpite que a pôs no topo da lista: uma rota
+máquina-a-máquina sem ecrã tinha **quatro** defeitos, e o pior perdia eventos —
+duas falhas de autenticação no mesmo segundo, de origens diferentes, contavam
+como duplicadas e a segunda era descartada.
+
+**Próximos candidatos**, medidos com a suite completa (327 testes, 84%):
 
 | Módulo | Cobertura | Porque importa |
 |---|---|---|
-| `ingestion/generic.py` | 18% | caminho de ingestão real (API genérica), apresentado como implementado |
-| `api/v1/catalog.py` | 35% | activos, IOCs e rotas MITRE |
-| `core/middleware.py` | 58% | |
-| `services/bootstrap.py` | 59% | |
+| `api/v1/catalog.py` | 35% | activos, IOCs e rotas MITRE — o que o analista consulta para decidir |
+| `core/middleware.py` | 58% | cabeçalhos de segurança e limites de pedido |
+| `services/bootstrap.py` | 59% | o arranque de uma instalação nova |
 | `api/v1/incidents.py` | 63% | |
+| `api/v1/recommendations.py` | 63% | |
 
-Comece pelo `generic.py`: é o mesmo perfil do defeito 13 — uma rota
-máquina-a-máquina sem ecrã, que só um teste ou um cliente real exercita.
+`core/database.py` (45%) e `siem_connectors` (56%) não são candidatos: o
+primeiro é ligação e ciclo de vida do motor, o segundo é código que nada chama.
 
 Meça sempre antes de citar um número destes — o `ESTADO.md` chegou a afirmar 14%
 para o `analytics_service`, que estava a 76%:

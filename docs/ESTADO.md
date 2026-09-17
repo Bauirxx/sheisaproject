@@ -19,7 +19,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 298 a passar, 83% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
+| **Testes** | 327 a passar, 84% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -302,8 +302,8 @@ métricas de resposta aparecem comprimidas porque o cenário corre em segundos �
 os marcos são reais, o intervalo entre eles não representa trabalho humano.
 Antedatá-los produziria números mais apresentáveis e falsos.
 
-### Suite de testes (§32) — 298 testes
-`backend/tests/`, 24 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
+### Suite de testes (§32) — 327 testes
+`backend/tests/`, 25 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
 (a configuração está em `pytest.ini` e `.coveragerc`).
 
 Cobre tudo o que o §32 enumera: autenticação, autorização, CRUD, filtros,
@@ -465,8 +465,8 @@ ficasse ela mesma auditada.
 
 ### Defeitos encontrados ao subir a cobertura (2026-09-17)
 Escrever testes para os módulos com cobertura baixa (`timeline_service`,
-`seed_service`, `mitre_service`, `integration_service` e conectores) revelou oito
-defeitos. Os testes não verificam que as linhas são criadas: exercem
+`seed_service`, `mitre_service`, `integration_service`, conectores e ingestão
+genérica) revelou doze defeitos. Os testes não verificam que as linhas são criadas: exercem
 aquilo para que cada módulo existe — contar a história do incidente pela ordem
 certa, e pôr a configuração semeada a funcionar nos motores reais.
 
@@ -517,8 +517,30 @@ certa, e pôr a configuração semeada a funcionar nos motores reais.
     um `ISOLAR_ACTIVO` sem agente no alvo ficava FALHADO com "A integração
     'Wazuh' não está disponível." e mais nada. O motivo passa a ir na mensagem.
 
+23. **A ingestão genérica descartava eventos diferentes como duplicados.** Sem
+    identificador no payload, o de recurso usava só o instante e a descrição:
+    duas falhas de autenticação no mesmo segundo, de origens diferentes, davam o
+    mesmo identificador, e a segunda era ignorada como "já recebida" — um sinal
+    de segurança perdido sem aviso. A descrição entrava ainda por `hash()`, que
+    o Python aleatoriza por processo, pelo que o mesmo evento reenviado depois de
+    reiniciar a API já não era reconhecido. Passa a SHA-256 do payload canónico
+    com o instante.
+24. **O defeito 4 continuava vivo na ingestão genérica.** `dstuser` era um
+    sinónimo de `username` e recebia o papel ACTOR: a conta visada contava como
+    a do atacante. Corrigido no normalizador Wazuh, nunca neste.
+25. **Normalização parcial sem aviso.** Um instante ilegível era trocado pela
+    hora de recepção, e uma severidade em texto ("12") ou desconhecida era
+    interpretada ou assumida em silêncio — o contrário do que o módulo promete.
+26. **Instantes syslog datados de 1900.** O formato `Sep 17 08:15:30` não traz
+    ano e o `strptime` preenchia 1900; o 29 de Fevereiro nem era lido. Um evento
+    de 1900 fica fora de qualquer janela de correlação e no fundo da linha
+    temporal. Passa a ter o ano mais recente plausível, tratando a passagem de
+    ano e o dia bissexto. Foi um `DeprecationWarning` do Python 3.13 na suite
+    que o denunciou.
+
 Todos verificados por reversão. Desfazer a correcção faz falhar: 15, um teste;
-16, dois; 17, dois; 18, 19, 20 e 21, um cada; 22, cinco. `verificar_contrato.py`
+16, dois; 17, dois; 18, 19, 20 e 21, um cada; 22, cinco; 23, dois; 24, um; 25 e
+26, quatro cada. `verificar_contrato.py`
 continua a confirmar as 51 vistas.
 
 O conector Wazuh foi confrontado com o gestor 4.12.0 do laboratório antes de se
@@ -559,20 +581,20 @@ Se quiser alargá-lo: `_eventos_suricata` e `_evento_c2` em
 acrescentar uma função e uma chamada a `ingest_batch`.
 
 ### 5.3 Testes (§32) — **feito** (ver §4)
-298 testes, 83% de cobertura (medido em 2026-09-17). O que a lista do §32
+327 testes, 84% de cobertura (medido em 2026-09-17). O que a lista do §32
 pede está coberto.
 
 Onde a cobertura continua baixa, e porquê (remedido em 2026-09-17 — os valores
 anteriores, que este documento afirmava, estavam desactualizados: o
 `analytics_service` subiu de 14% para **76%** entretanto):
 - `timeline_service` e `seed_service` 100%, `mitre_service` 98%,
-  `integration_service` 94%, `wazuh_connector` 87% — todos subidos em
-  2026-09-17 (estavam entre 0% e 55%); os testes revelaram os defeitos 15 a 22
-  do §4;
+  `ingestion/generic.py` 95%, `integration_service` 94%, `wazuh_connector` 87%
+  — todos subidos em 2026-09-17 (estavam entre 0% e 55%); os testes revelaram
+  os defeitos 15 a 26 do §4;
 - `siem_connectors` 56% e `integrations/base` 73% — o que falta é código que
   nada na aplicação chama (`fetch_offenses`, `fetch_alerts`, `required_env`);
-- os mais baixos agora são `ingestion/generic.py` (18%) e `api/v1/catalog.py`
-  (35%), que não constavam da lista anterior;
+- o mais baixo agora é `api/v1/catalog.py` (35%) — activos, IOCs e rotas
+  MITRE;
 - `playbooks/engine` 74% — suspensão, retoma, rejeição e execução da acção
   aprovada estão testados; os tipos de passo menos usados não.
 
