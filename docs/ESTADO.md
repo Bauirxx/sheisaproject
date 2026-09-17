@@ -3,6 +3,10 @@
 > Documento de passagem de testemunho. Descreve o que está **feito e
 > verificado**, o que **falta**, e como retomar o trabalho sem repetir análise.
 >
+> **Se só vai ler um ficheiro, leia [`CONTINUAR.md`](CONTINUAR.md)**, que é
+> curto e accionável. Este é o registo completo, para consultar quando precisar
+> do detalhe ou do histórico de uma decisão.
+>
 > Última actualização: 2026-09-17 (eventos brutos, centro de operações,
 > chaves de ingestão, sessões, equipas e limiares do motor)
 
@@ -14,11 +18,11 @@
 |---|---|
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
-| **Backend** | 109 rotas, 21 domínios, ~19k linhas |
+| **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | **Testes** | 250 a passar, 77% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
-| **Ambiente** | Python 3.13.7 · Node 22.20 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
+| **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
 | **Git** | tudo em `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
 
 **Documentos de referência, agora versionados:**
@@ -83,15 +87,16 @@ Decisões arquitecturais tomadas durante a construção:
 ## 3. Ambiente
 
 ```
-Python 3.13.7 · Node 22.20 · Docker 27.5.1 · PostgreSQL 16
-backend/.venv          ambiente virtual (recriado em 2026-09-15)
+Python 3.11.9 (backend/.venv) · Node 22.10.0 · Docker 29.3.1 · PostgreSQL 16
+backend/.venv          ambiente virtual
 docker compose up -d   sheisa-db :15433 · sheisa-db-test :15434
 ```
 
-> **Nota de portabilidade.** O projecto foi construído em Python 3.11.9. Numa
-> máquina nova (clone de raiz) foi reposto em **Python 3.13.7** — todas as
-> dependências de `requirements-dev.txt` instalam sem alteração de versões e
-> `app.main` importa sem avisos. `ruff.toml` mantém `target-version = "py311"`
+> **Nota de portabilidade.** O projecto é construído em Python 3.11.9, que é o
+> que esta máquina tem no `backend/.venv`. Foi também reposto num clone de raiz
+> em **Python 3.13.7**: todas as dependências de `requirements-dev.txt` instalam
+> sem alteração de versões e `app.main` importa sem avisos. Confirme sempre com
+> `backend/.venv/Scripts/python.exe --version` em vez de assumir. `ruff.toml` mantém `target-version = "py311"`
 > de propósito: garante que o código não usa sintaxe que quebre em 3.11.
 >
 > Depois de um clone **não existe** `.env`, `backend/.venv`, `var/` (onde vive
@@ -168,7 +173,7 @@ diagnóstico errado uma vez).
   `promote_alert`, `playbook_engine.start_execution`) — uma recomendação aceite
   tem exactamente o mesmo efeito que a acção feita à mão.
 
-### Frontend (§4.13, §28–§30, §77–§82) — 18 ecrãs
+### Frontend (§4.13, §28–§30, §77–§82) — 19 rotas, 18 autenticadas
 `frontend/`, React 18 + TypeScript + Vite, tudo em português.
 `npm install && npm run dev` → <http://127.0.0.1:5500>. **A porta é 5500 e não
 a 5173 por omissão do Vite:** o Windows reserva 5141–5240 para o Hyper-V/WSL e a
@@ -333,7 +338,7 @@ Quatro decisões da infra-estrutura de teste, explicadas em `tests/conftest.py`:
 > exaustivamente testado (com a linha, 70%). Um número assim levaria a
 > reescrever testes que já existem.
 
-### API (109 rotas, 21 domínios)
+### API (109 rotas, 24 domínios)
 Autenticação, ingestão, alertas, eventos, incidentes, evidências, tarefas,
 activos, IOCs, MITRE, acções, aprovações, playbooks, **recomendações**, painel,
 centro de operações, grafo, relatórios, utilizadores, perfis, auditoria,
@@ -485,10 +490,10 @@ acrescentar uma função e uma chamada a `ingest_batch`.
 250 testes, 77% de cobertura (medido em 2026-09-17). O que a lista do §32
 pede está coberto.
 
-Onde a cobertura continua baixa, e porquê:
-- `analytics_service` 14% — as consultas de agregação têm muitos ramos por
-  combinação de filtros; os endpoints estão testados, as combinações não;
-- `mitre_service` 19%, `integration_service` 21% — ambos falam com o exterior
+Onde a cobertura continua baixa, e porquê (remedido em 2026-09-17 — os valores
+anteriores, que este documento afirmava, estavam desactualizados: o
+`analytics_service` subiu de 14% para **76%** entretanto):
+- `mitre_service` 19%, `integration_service` 55% — ambos falam com o exterior
   (descarga do bundle STIX, conectores); testá-los a sério exige duplos de
   teste, que ainda não existem;
 - `timeline_service` e `seed_service` a 0% — só são exercitados pela CLI e pela
@@ -498,7 +503,7 @@ Onde a cobertura continua baixa, e porquê:
 
 ### 5.4 Frontend — **funcional; falta vê-lo num navegador**
 
-18 ecrãs, as seis telas do §4.13 incluídas.
+19 rotas (18 autenticadas mais a entrada), as seis telas do §4.13 incluídas.
 `cd frontend && npm install && npm run dev`.
 
 > **Porta 5500, não 5173.** O Windows reserva intervalos de portas para o

@@ -9,6 +9,11 @@ própria: nenhuma destas plataformas é copiada, e o capítulo
 [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) explica o que se aproveitou de
 cada uma e o que se fez de outra maneira, e porquê.
 
+> **A retomar o desenvolvimento?** Comece em
+> [`docs/CONTINUAR.md`](docs/CONTINUAR.md) — estado actual, o que fazer a
+> seguir, e as armadilhas que já custaram horas. Este `README` serve para
+> instalar de raiz; o `CONTINUAR.md` serve para continuar.
+
 ---
 
 ## O princípio que governa o projecto
