@@ -19,7 +19,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 269 a passar, 79% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
+| **Testes** | 298 a passar, 83% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -302,8 +302,8 @@ métricas de resposta aparecem comprimidas porque o cenário corre em segundos �
 os marcos são reais, o intervalo entre eles não representa trabalho humano.
 Antedatá-los produziria números mais apresentáveis e falsos.
 
-### Suite de testes (§32) — 269 testes
-`backend/tests/`, 22 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
+### Suite de testes (§32) — 298 testes
+`backend/tests/`, 24 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
 (a configuração está em `pytest.ini` e `.coveragerc`).
 
 Cobre tudo o que o §32 enumera: autenticação, autorização, CRUD, filtros,
@@ -464,8 +464,9 @@ própria organização como malicioso. Corrigido **pela API**, para que a correc
 ficasse ela mesma auditada.
 
 ### Defeitos encontrados ao subir a cobertura (2026-09-17)
-Escrever testes para os dois módulos a 0% (`timeline_service`, `seed_service`)
-revelou seis defeitos. Os testes não verificam que as linhas são criadas: exercem
+Escrever testes para os módulos com cobertura baixa (`timeline_service`,
+`seed_service`, `mitre_service`, `integration_service` e conectores) revelou oito
+defeitos. Os testes não verificam que as linhas são criadas: exercem
 aquilo para que cada módulo existe — contar a história do incidente pela ordem
 certa, e pôr a configuração semeada a funcionar nos motores reais.
 
@@ -504,10 +505,35 @@ certa, e pôr a configuração semeada a funcionar nos motores reais.
     pessoa.
 20. **O resumo final perdia os passos anteriores à pausa.** A retoma recomeçava a
     lista, e a execução concluída mostrava só "7. Registar o resultado".
+21. **Uma técnica revogada pela MITRE continuava válida depois de actualizar o
+    catálogo.** O objecto revogado mantém o identificador e ganha
+    `revoked: true`; a importação saltava-o — certo numa base vazia, errado numa
+    actualização, em que a linha da versão anterior ficava a ser oferecida no
+    catálogo. Passa a depreciada (não apagada, para não partir incidentes que a
+    referem). Recarregar o bundle real 19.2 mantém 709 técnicas e 12
+    depreciadas.
+22. **Uma acção falhada não dizia porquê.** `IntegrationNotAvailableError`
+    guardava o motivo só em `details`, e quem regista a falha grava `str(exc)`:
+    um `ISOLAR_ACTIVO` sem agente no alvo ficava FALHADO com "A integração
+    'Wazuh' não está disponível." e mais nada. O motivo passa a ir na mensagem.
 
 Todos verificados por reversão. Desfazer a correcção faz falhar: 15, um teste;
-16, dois; 17, dois; 18, 19 e 20, um cada. `verificar_contrato.py` continua a
-confirmar as 51 vistas.
+16, dois; 17, dois; 18, 19, 20 e 21, um cada; 22, cinco. `verificar_contrato.py`
+continua a confirmar as 51 vistas.
+
+O conector Wazuh foi confrontado com o gestor 4.12.0 do laboratório antes de se
+escreverem os seus testes: com a verificação de certificado ligada falha
+(`CERTIFICATE_VERIFY_FAILED`, auto-assinado); com
+`permitir_certificado_auto_assinado` responde "Ligação estabelecida com o gestor
+Wazuh v4.12.0; 2 agente(s) registado(s)." Os formatos do duplo HTTP dos testes
+são os que esse gestor devolveu.
+
+Três achados ficaram por corrigir, porque exigem uma decisão e não uma correcção
+— estão descritos em [`CONTINUAR.md`](CONTINUAR.md) §4.3: playbooks semeados com
+aprovação dupla (e o de bloqueio de IP, que nenhum conector pode concluir); a
+importação do QRadar e do NetScout, que nada chama embora o catálogo diga que
+importa; e os comandos de resposta activa do Wazuh, não verificados e em parte
+aparentemente errados.
 
 ---
 
@@ -533,18 +559,20 @@ Se quiser alargá-lo: `_eventos_suricata` e `_evento_c2` em
 acrescentar uma função e uma chamada a `ingest_batch`.
 
 ### 5.3 Testes (§32) — **feito** (ver §4)
-269 testes, 79% de cobertura (medido em 2026-09-17). O que a lista do §32
+298 testes, 83% de cobertura (medido em 2026-09-17). O que a lista do §32
 pede está coberto.
 
 Onde a cobertura continua baixa, e porquê (remedido em 2026-09-17 — os valores
 anteriores, que este documento afirmava, estavam desactualizados: o
 `analytics_service` subiu de 14% para **76%** entretanto):
-- `mitre_service` 19%, `wazuh_connector` 26%, `siem_connectors` 30%,
-  `integration_service` 55% — falam com o exterior (descarga do bundle STIX,
-  conectores). O `mitre_service` testa-se sem rede, porque `load_attack_data`
-  aceita `source_file`; os conectores precisam de um duplo HTTP;
-- `timeline_service` e `seed_service` — **100%** desde 2026-09-17 (estavam a 0%).
-  Os testes revelaram os defeitos 15 a 20 do §4;
+- `timeline_service` e `seed_service` 100%, `mitre_service` 98%,
+  `integration_service` 94%, `wazuh_connector` 87% — todos subidos em
+  2026-09-17 (estavam entre 0% e 55%); os testes revelaram os defeitos 15 a 22
+  do §4;
+- `siem_connectors` 56% e `integrations/base` 73% — o que falta é código que
+  nada na aplicação chama (`fetch_offenses`, `fetch_alerts`, `required_env`);
+- os mais baixos agora são `ingestion/generic.py` (18%) e `api/v1/catalog.py`
+  (35%), que não constavam da lista anterior;
 - `playbooks/engine` 74% — suspensão, retoma, rejeição e execução da acção
   aprovada estão testados; os tipos de passo menos usados não.
 

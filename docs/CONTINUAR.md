@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 269 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 298 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 269 a passar, 79% de cobertura |
+| Testes | 298 a passar, 83% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -154,36 +154,43 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 **não foram desligadas**: correram tal como vêm, e a única que disparou
 (`react-hooks/purity`) apontou para um defeito verdadeiro.
 
-### 4.3 Subir a cobertura onde ela é baixa — **em curso**
+### 4.3 Subir a cobertura onde ela é baixa — **a lista original está feita**
 
-**Onde parámos (2026-09-17):** `timeline_service` e `seed_service` passaram de 0%
-para **100%**. Escrever esses testes revelou **seis defeitos reais**, todos
-corrigidos e verificados por reversão — ver [`ESTADO.md`](ESTADO.md) §4, defeitos
-15 a 20. O padrão repetiu-se: nenhum dava erro, todos deixavam o sistema num
-estado plausível e errado. O mais grave: aprovar um bloqueio de IP num playbook
-**não o executava**, e o incidente registava "Bloqueio aplicado".
+**Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
+cobertos, e os conectores com eles. Escrever os testes revelou **oito defeitos
+reais**, todos corrigidos e verificados por reversão — [`ESTADO.md`](ESTADO.md)
+§4, defeitos 15 a 22. Nenhum dava erro; todos deixavam o sistema num estado
+plausível e errado. O mais grave: aprovar um bloqueio num playbook **não o
+executava**, e o incidente registava "Bloqueio aplicado".
+
+| Módulo | Antes | Agora |
+|---|---|---|
+| `timeline_service` | 0% | 100% |
+| `seed_service` | 0% | 100% |
+| `mitre_service` | 19% | 98% |
+| `integration_service` | 55% | 94% |
+| `wazuh_connector` | 26% | 87% |
+| `siem_connectors` | 30% | 56% — o resto é código que nada chama (abaixo) |
 
 A lição de método: os testes que encontraram defeitos não verificavam que as
 linhas eram criadas, mas que o módulo fazia aquilo para que existe — a linha
-temporal conta a história pela ordem certa; a configuração semeada funciona nos
-motores reais, de ponta a ponta.
+temporal conta a história pela ordem certa, a configuração semeada funciona nos
+motores reais de ponta a ponta, o conector fala com o gestor Wazuh verdadeiro
+(os formatos do duplo HTTP foram capturados do laboratório).
 
-**O próximo passo é o `mitre_service` (19%).** Não exige rede:
-`load_attack_data` aceita `source_file`, e um bundle STIX mínimo escrito à mão
-(tácticas, uma técnica, uma subtécnica, um objecto `revoked`) chega para testar a
-importação sem descarregar o bundle do MITRE. Depois, `integration_service` e os
-conectores, que precisam de um duplo HTTP.
+**Próximos candidatos**, medidos com a suite completa (298 testes, 83%) — nenhum
+estava na lista original:
 
-Medido em 2026-09-17, depois destas correcções:
+| Módulo | Cobertura | Porque importa |
+|---|---|---|
+| `ingestion/generic.py` | 18% | caminho de ingestão real (API genérica), apresentado como implementado |
+| `api/v1/catalog.py` | 35% | activos, IOCs e rotas MITRE |
+| `core/middleware.py` | 58% | |
+| `services/bootstrap.py` | 59% | |
+| `api/v1/incidents.py` | 63% | |
 
-| Módulo | Cobertura |
-|---|---|
-| `mitre_service` | 19% |
-| `wazuh_connector` | 26% |
-| `siem_connectors` | 30% |
-| `integration_service` | 55% |
-| `action_service` | 67% |
-| `playbooks/engine` | 74% |
+Comece pelo `generic.py`: é o mesmo perfil do defeito 13 — uma rota
+máquina-a-máquina sem ecrã, que só um teste ou um cliente real exercita.
 
 Meça sempre antes de citar um número destes — o `ESTADO.md` chegou a afirmar 14%
 para o `analytics_service`, que estava a 76%:
@@ -192,15 +199,33 @@ para o `analytics_service`, que estava a 76%:
 ./.venv/Scripts/python.exe -m pytest --cov=app --cov-report=term
 ```
 
-> **Pendente de decisão do autor.** Os três playbooks semeados pedem **duas
-> aprovações para a mesma decisão**: um passo `SOLICITAR_APROVACAO` seguido de um
-> `EXECUTAR_ACCAO` crítico, que volta a suspender. No de bloqueio de IP, o gestor
-> aprova "Solicitar aprovação de bloqueio" (sem o endereço) e logo a seguir
-> "Bloquear o endereço" (com ele). Não foi alterado: pode ser intencional —
-> autorizar o procedimento e depois o alvo concreto — e o `seed_service` nunca
-> sobrepõe playbooks existentes, pelo que mudá-lo só afectaria bases de dados
-> novas. Se se decidir retirar a porta redundante, os testes de
-> `test_configuracao_inicial.py` indicam o que ajustar.
+> **Pendente de decisão do autor — três achados que não foram corrigidos**, por
+> exigirem uma escolha e não uma correcção:
+>
+> 1. **Os playbooks semeados pedem duas aprovações para a mesma decisão**: um
+>    `SOLICITAR_APROVACAO` seguido de um `EXECUTAR_ACCAO` crítico, que volta a
+>    suspender. Pode ser intencional (autorizar o procedimento, depois o alvo). E
+>    o playbook de bloqueio de IP **nunca pode concluir**: nenhum conector
+>    executa `BLOQUEAR_IP`, pelo que pára sempre no passo 6 — agora com uma falha
+>    honesta, depois da correcção 17.
+> 2. **A importação do QRadar e do NetScout não está ligada a nada.**
+>    `fetch_offenses`, `fetch_alerts` e `fetch_agents` (e `required_env`) não são
+>    chamados por nenhuma rota, comando ou tarefa. Só o teste de ligação é
+>    alcançável. Mas a descrição do catálogo, que a página de integrações mostra,
+>    diz "Importa offenses do QRadar através da API REST". Ou se liga a
+>    importação, ou se corrige o texto — que está gravado na base de dados, pelo
+>    que o `ensure_catalog` sozinho não o actualiza.
+> 3. **Os comandos de resposta activa do Wazuh não foram verificados, e alguns
+>    parecem errados.** `EXECUTAR_VARRIMENTO` envia `restart-wazuh0` (reinicia o
+>    agente — não é um varrimento); `RECOLHER_ARTEFACTOS` envia
+>    `wazuh-logcollector` (um daemon, não um script de resposta activa);
+>    `ISOLAR_ACTIVO` envia `firewall-drop0` sem argumentos (bloqueia um IP, não
+>    isola o host). O sucesso é `affected_items` não vazio, que significa que o
+>    gestor **enviou** a mensagem, não que o agente a aplicou. No laboratório,
+>    em 2026-09-17: o gestor não tem secções `<command>` nem `<active-response>`
+>    (a API devolve o erro 1106), e o agente `001 srv-web-lab` está
+>    **desligado** — pelo que nada disto pôde ser confrontado. Os testes não
+>    afirmam os nomes dos comandos, para não os fixar.
 
 ### 4.4 Ideias que foram deixadas de fora deliberadamente
 
