@@ -24,6 +24,7 @@ from app.core.enums import (
 )
 from app.core.errors import AuthorizationError, NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, apply_sort, page_params, paginate
+from app.core.partial_update import reject_nulls_for_required
 from app.core.permissions import Permission
 from app.models.incident import Incident, IncidentRelation, IncidentTechnique
 from app.models.investigation import Comment, Evidence, Observation, Task
@@ -237,6 +238,7 @@ async def update_incident(
     incident = await incident_service.get_incident(session, incident_id, with_details=True)
 
     changes = payload.model_dump(exclude_unset=True)
+    reject_nulls_for_required(incident, changes)
     for field, value in changes.items():
         setattr(incident, field, value)
 

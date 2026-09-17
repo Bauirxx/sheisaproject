@@ -16,6 +16,7 @@ from app.core.deps import AuditDep, CurrentUser, SessionDep, require
 from app.core.enums import AuditOutcome, SourceKind
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, apply_sort, page_params, paginate
+from app.core.partial_update import reject_nulls_for_required
 from app.core.permissions import Permission
 from app.core.security import hash_password
 from app.models.identity import ApiKey, Role, Team, User
@@ -147,6 +148,7 @@ async def update_user(
 ) -> UserDetail:
     user = await auth_service.get_user_or_404(session, user_id)
     changes = payload.model_dump(exclude_unset=True)
+    reject_nulls_for_required(user, changes)
 
     if (role_name := changes.pop("role_name", None)) is not None:
         role_result = await session.execute(

@@ -128,6 +128,37 @@ async def resolve_asset(session: AsyncSession, event: NormalizedEvent) -> Asset 
 
 
 # ----------------------------------------------------------------------- IOCs
+#: Comprimento de cada tipo de hash, em dígitos hexadecimais.
+_HASH_LENGTHS: dict[IocType, int] = {
+    IocType.HASH_MD5: 32, IocType.HASH_SHA1: 40, IocType.HASH_SHA256: 64,
+}
+
+
+def ioc_value_problem(ioc_type: IocType, value: str) -> str | None:
+    """Porque é que o valor é impossível para o tipo, ou `None` se servir.
+
+    A normalização devolve o texto tal como vem quando não o consegue
+    interpretar, pelo que um "IP" `banana` era guardado como IP — e podia chegar a
+    ser proposto como endereço a bloquear. Só se verificam os tipos com forma
+    inequívoca: domínios, contas, processos ou caminhos variam demasiado entre
+    sistemas para uma regra que não recuse valores legítimos.
+    """
+    import ipaddress
+    import string
+
+    text = value.strip()
+    if ioc_type == IocType.IP:
+        try:
+            ipaddress.ip_address(text)
+        except ValueError:
+            return f"'{text}' não é um endereço IP válido"
+        return None
+    if (length := _HASH_LENGTHS.get(ioc_type)) is not None:
+        if len(text) != length or any(c not in string.hexdigits for c in text):
+            return f"um {ioc_type.value} tem exactamente {length} dígitos hexadecimais"
+    return None
+
+
 def normalise_ioc_value(ioc_type: IocType, value: str) -> str:
     """Forma canónica de um indicador.
 

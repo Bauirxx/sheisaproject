@@ -17,8 +17,9 @@ from app.core.enums import (
     IocReputation,
     IocType,
 )
-from app.core.errors import ConflictError, NotFoundError
+from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, apply_sort, page_params, paginate
+from app.core.partial_update import reject_nulls_for_required
 from app.core.permissions import Permission
 from app.models.catalog import Asset, Ioc, MitreTactic, MitreTechnique
 from app.models.incident import Incident, IncidentTechnique, incident_assets
@@ -156,7 +157,9 @@ async def update_asset(
     if asset is None:
         raise NotFoundError("Activo", asset_id)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    reject_nulls_for_required(asset, changes)
+    for field, value in changes.items():
         setattr(asset, field, value)
 
     await audit.record_change(
@@ -211,8 +214,13 @@ async def create_ioc(
     ctx: AuditDep,
     _: Annotated[object, Depends(require(Permission.IOCS_MANAGE))],
 ) -> IocRead:
-    from app.services.ingestion_service import normalise_ioc_value
+    from app.services.ingestion_service import ioc_value_problem, normalise_ioc_value
 
+    if problem := ioc_value_problem(payload.ioc_type, payload.value):
+        raise ValidationError(
+            f"Valor inválido para {payload.ioc_type.value}: {problem}.",
+            code="VALOR_INVALIDO",
+        )
     value = normalise_ioc_value(payload.ioc_type, payload.value)
     existing = await session.execute(
         select(Ioc).where(Ioc.ioc_type == payload.ioc_type, Ioc.value == value)
@@ -285,7 +293,9 @@ async def update_ioc(
     if ioc is None:
         raise NotFoundError("Indicador", ioc_id)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    reject_nulls_for_required(ioc, changes)
+    for field, value in changes.items():
         setattr(ioc, field, value)
 
     await audit.record_change(

@@ -16,6 +16,7 @@ from app.core.deps import AuditDep, SessionDep, require
 from app.core.enums import EvidenceType, TaskStatus
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, apply_sort, page_params, paginate
+from app.core.partial_update import reject_nulls_for_required
 from app.core.permissions import Permission
 from app.models.investigation import Task
 from app.schemas.common import MessageResponse
@@ -317,6 +318,7 @@ async def update_task(
         raise NotFoundError("Tarefa", task_id)
 
     changes = payload.model_dump(exclude_unset=True)
+    reject_nulls_for_required(task, changes)
 
     if (new_status := changes.get("status")) is not None:
         if new_status == TaskStatus.CONCLUIDA:
