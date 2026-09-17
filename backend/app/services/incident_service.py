@@ -154,6 +154,13 @@ async def create_incident(
     is_demo: bool = False,
 ) -> Incident:
     """Cria um incidente e regista a criação na auditoria."""
+    from app.core.lookups import require_all_existing, require_existing
+    from app.models.identity import Team, User
+
+    await require_existing(session, User, assignee_id, "Utilizador")
+    await require_existing(session, Team, team_id, "Equipa")
+    assets = await require_all_existing(session, Asset, asset_ids or [], "Activo")
+
     detected = detected_at or datetime.now(UTC)
     reference = await next_reference(session, ReferenceKind.INCIDENT)
 
@@ -180,9 +187,8 @@ async def create_incident(
         is_demo_data=is_demo,
     )
 
-    if asset_ids:
-        result = await session.execute(select(Asset).where(Asset.id.in_(asset_ids)))
-        incident.assets = list(result.scalars())
+    if assets:
+        incident.assets = assets
 
     session.add(incident)
     await session.flush()
@@ -645,6 +651,12 @@ async def assign(
     assignee_id: uuid.UUID | None,
     team_id: uuid.UUID | None = None,
 ) -> Incident:
+    from app.core.lookups import require_existing
+    from app.models.identity import Team, User
+
+    await require_existing(session, User, assignee_id, "Utilizador")
+    await require_existing(session, Team, team_id, "Equipa")
+
     previous = incident.assignee_id
     incident.assignee_id = assignee_id
     if team_id is not None:

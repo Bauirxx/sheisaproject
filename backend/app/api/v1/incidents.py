@@ -409,6 +409,10 @@ async def add_observation(
     ioc = await session.get(Ioc, payload.ioc_id)
     if ioc is None:
         raise NotFoundError("Indicador", payload.ioc_id)
+    from app.core.lookups import require_existing
+    from app.models.catalog import Asset
+
+    await require_existing(session, Asset, payload.asset_id, "Activo")
 
     observation = Observation(
         incident_id=incident.id,

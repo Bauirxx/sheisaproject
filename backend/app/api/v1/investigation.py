@@ -15,9 +15,11 @@ from app.core import audit
 from app.core.deps import AuditDep, SessionDep, require
 from app.core.enums import EvidenceType, TaskStatus
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.lookups import require_existing
 from app.core.pagination import Page, PageParams, apply_sort, page_params, paginate
 from app.core.partial_update import reject_nulls_for_required
 from app.core.permissions import Permission
+from app.models.identity import User
 from app.models.investigation import Task
 from app.schemas.common import MessageResponse
 from app.schemas.incident import EvidenceRead, TaskCreate, TaskRead, TaskUpdate
@@ -247,6 +249,7 @@ async def create_task(
     payload: TaskCreate = ...,
 ) -> TaskRead:
     incident = await incident_service.get_incident(session, incident_id)
+    await require_existing(session, User, payload.assignee_id, "Utilizador")
 
     highest = await session.execute(
         select(Task.ordering).where(Task.incident_id == incident.id)
@@ -319,6 +322,7 @@ async def update_task(
 
     changes = payload.model_dump(exclude_unset=True)
     reject_nulls_for_required(task, changes)
+    await require_existing(session, User, changes.get("assignee_id"), "Utilizador")
 
     if (new_status := changes.get("status")) is not None:
         if new_status == TaskStatus.CONCLUIDA:
