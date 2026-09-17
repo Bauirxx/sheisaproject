@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 250 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 269 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 250 a passar, 77% de cobertura |
+| Testes | 269 a passar, 79% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -154,20 +154,53 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 **não foram desligadas**: correram tal como vêm, e a única que disparou
 (`react-hooks/purity`) apontou para um defeito verdadeiro.
 
-### 4.3 Subir a cobertura onde ela é baixa por bom motivo
+### 4.3 Subir a cobertura onde ela é baixa — **em curso**
 
-Medido em 2026-09-17: `mitre_service` 19%, `integration_service` 55%,
-`timeline_service` e `seed_service` a 0%. Os dois primeiros falam com o exterior
-(descarga do bundle STIX, conectores) e testá-los a sério exige duplos de teste,
-que ainda não existem; os dois últimos só são exercitados pela CLI e pela rota de
-linha temporal.
+**Onde parámos (2026-09-17):** `timeline_service` e `seed_service` passaram de 0%
+para **100%**. Escrever esses testes revelou **seis defeitos reais**, todos
+corrigidos e verificados por reversão — ver [`ESTADO.md`](ESTADO.md) §4, defeitos
+15 a 20. O padrão repetiu-se: nenhum dava erro, todos deixavam o sistema num
+estado plausível e errado. O mais grave: aprovar um bloqueio de IP num playbook
+**não o executava**, e o incidente registava "Bloqueio aplicado".
+
+A lição de método: os testes que encontraram defeitos não verificavam que as
+linhas eram criadas, mas que o módulo fazia aquilo para que existe — a linha
+temporal conta a história pela ordem certa; a configuração semeada funciona nos
+motores reais, de ponta a ponta.
+
+**O próximo passo é o `mitre_service` (19%).** Não exige rede:
+`load_attack_data` aceita `source_file`, e um bundle STIX mínimo escrito à mão
+(tácticas, uma técnica, uma subtécnica, um objecto `revoked`) chega para testar a
+importação sem descarregar o bundle do MITRE. Depois, `integration_service` e os
+conectores, que precisam de um duplo HTTP.
+
+Medido em 2026-09-17, depois destas correcções:
+
+| Módulo | Cobertura |
+|---|---|
+| `mitre_service` | 19% |
+| `wazuh_connector` | 26% |
+| `siem_connectors` | 30% |
+| `integration_service` | 55% |
+| `action_service` | 67% |
+| `playbooks/engine` | 74% |
 
 Meça sempre antes de citar um número destes — o `ESTADO.md` chegou a afirmar 14%
-para o `analytics_service`, que está hoje a 76%:
+para o `analytics_service`, que estava a 76%:
 
 ```bash
 ./.venv/Scripts/python.exe -m pytest --cov=app --cov-report=term
 ```
+
+> **Pendente de decisão do autor.** Os três playbooks semeados pedem **duas
+> aprovações para a mesma decisão**: um passo `SOLICITAR_APROVACAO` seguido de um
+> `EXECUTAR_ACCAO` crítico, que volta a suspender. No de bloqueio de IP, o gestor
+> aprova "Solicitar aprovação de bloqueio" (sem o endereço) e logo a seguir
+> "Bloquear o endereço" (com ele). Não foi alterado: pode ser intencional —
+> autorizar o procedimento e depois o alvo concreto — e o `seed_service` nunca
+> sobrepõe playbooks existentes, pelo que mudá-lo só afectaria bases de dados
+> novas. Se se decidir retirar a porta redundante, os testes de
+> `test_configuracao_inicial.py` indicam o que ajustar.
 
 ### 4.4 Ideias que foram deixadas de fora deliberadamente
 
@@ -282,6 +315,27 @@ O `eslint` apanhou um dos dois casos. O outro estava dentro de uma função
 auxiliar, onde a regra `react-hooks/purity` não vê. **O linter não substitui um
 `grep -rn "Date.now()" src`** depois de escrever código que dependa do tempo.
 
+### 5.12 `now()` do PostgreSQL é o início da transacção, não a hora actual
+
+Tudo o que um pedido grava com `now()` fica com o mesmo instante — o do início.
+A linha temporal punha comentários escritos no fim de um pedido antes da criação
+do incidente, sem erro nenhum. Os valores por omissão de `created_at` e
+`updated_at` usam `clock_timestamp()` desde a migração `0005_instantes_reais`:
+**não escreva `func.now()` num modelo novo**. Nos testes o efeito é máximo,
+porque cada teste corre inteiro numa transacção — o que ajuda: é lá que se vê.
+
+### 5.13 Na retoma de um playbook, o `ctx` é de quem aprovou
+
+`resume_execution` corre dentro do pedido de decisão, pelo que `ctx.actor_id` é o
+aprovador, não quem iniciou o playbook. Código do motor que use `ctx.actor_id`
+como "quem fez isto" atribui ao aprovador o que é do playbook: foi assim que o
+gestor passou a "proponente" do bloqueio e ficou impedido de o aprovar. Para a
+autoria use `execution.triggered_by_id`; o `ctx` continua certo para a
+auditoria, que regista em que pedido cada coisa aconteceu.
+
+E **aprovar não é executar**: `decide_action` só muda o estado para APROVADA. Se
+nada executar a acção, o passo seguinte corre sobre algo que não aconteceu.
+
 ---
 
 ## 6. Como trabalhar aqui
@@ -298,8 +352,9 @@ delas devolvia 500 em todos os pedidos válidos sem que nada o revelasse.
 
 **Testes de regressão verificam-se por reversão.** Depois de corrigir um defeito
 e escrever o teste, desfaça a correcção e confirme que o teste falha. Um teste
-que passa nas duas situações não está a testar nada. Foi feito com os dois
-últimos defeitos: reverter faz falhar 4 de 6 e 2 de 8.
+que passa nas duas situações não está a testar nada. Foi feito com todos os
+defeitos corrigidos desde 2026-09-17; `ESTADO.md` §4 regista quantos testes cada
+reversão fez falhar.
 
 **Asserções ambíguas não valem nada.** `assert codigo in (200, 403)` não afirma
 nada. Descubra qual é o valor certo — consultando `ROLE_PERMISSIONS` em

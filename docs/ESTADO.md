@@ -19,7 +19,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 250 a passar, 77% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
+| **Testes** | 269 a passar, 79% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -302,8 +302,8 @@ métricas de resposta aparecem comprimidas porque o cenário corre em segundos �
 os marcos são reais, o intervalo entre eles não representa trabalho humano.
 Antedatá-los produziria números mais apresentáveis e falsos.
 
-### Suite de testes (§32) — 250 testes
-`backend/tests/`, 20 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
+### Suite de testes (§32) — 269 testes
+`backend/tests/`, 22 ficheiros. Corre com `./.venv/Scripts/python.exe -m pytest`
 (a configuração está em `pytest.ini` e `.coveragerc`).
 
 Cobre tudo o que o §32 enumera: autenticação, autorização, CRUD, filtros,
@@ -463,6 +463,52 @@ a triagem, que dá +20 pontos a indicadores maliciosos, e marcaria o servidor da
 própria organização como malicioso. Corrigido **pela API**, para que a correcção
 ficasse ela mesma auditada.
 
+### Defeitos encontrados ao subir a cobertura (2026-09-17)
+Escrever testes para os dois módulos a 0% (`timeline_service`, `seed_service`)
+revelou seis defeitos. Os testes não verificam que as linhas são criadas: exercem
+aquilo para que cada módulo existe — contar a história do incidente pela ordem
+certa, e pôr a configuração semeada a funcionar nos motores reais.
+
+15. **A linha temporal contava a história ao contrário.** `created_at` usava
+    `now()` do PostgreSQL, que devolve o **início da transacção**. Tudo o que um
+    pedido criasse ficava com esse instante, e a auditoria, que regista a hora
+    real, passava à frente: no cenário de demonstração, "Estado alterado de
+    RESOLVIDO para ENCERRADO" aparecia antes de "Criar incidente". A migração
+    `0005_instantes_reais` passa `created_at`/`updated_at` para
+    `clock_timestamp()`; o downgrade repõe `now()` e foi exercido. Confirmado na
+    API a correr depois de `manage demo --reset`: 15 entradas, alertas antes da
+    criação, transições por ordem até ENCERRADO.
+16. **Cada mudança de estado e cada comentário apareciam duas vezes** na linha
+    temporal — como comentário de sistema e como auditoria. A deduplicação é
+    estreita de propósito: os comentários de sistema das decisões sobre acções e
+    dos passos de playbook ficam, porque a sua auditoria está ligada à acção ou à
+    execução e são o único rasto no incidente.
+17. **Aprovar um bloqueio não o executava — e o incidente dizia que sim.** No
+    playbook semeado "Resposta a endereço IP malicioso", depois de aprovado o
+    bloqueio a execução retomava com a acção parada em APROVADA; o passo 7
+    escrevia "Bloqueio aplicado e resultado registado no incidente." e a execução
+    terminava CONCLUIDA. É exactamente o que o §4 proíbe. A retoma executa agora a
+    acção aprovada; sem integração capaz de bloquear, a acção falha, o passo 6
+    (`abort_on_failure`) interrompe o playbook e nada é afirmado. **Decisão
+    tomada:** quem executa é o playbook, como já acontecia com as acções de risco
+    baixo; o controlo humano é a aprovação. O gestor não tem `actions:execute` e
+    não precisa — a permissão verificada é `playbooks:execute`, de quem iniciou.
+18. **Rejeitar deixava a execução suspensa para sempre**, em AGUARDA_APROVACAO sem
+    nada na fila de quem aprova. Passa a CANCELADA, com o motivo no incidente e na
+    auditoria (`INTERROMPER_PLAYBOOK`).
+19. **Quem aprovava um passo tornava-se proponente do seguinte.** A retoma corre
+    no pedido do aprovador e `propose_action` usava `ctx.actor_id`: o gestor que
+    autorizava o passo 5 recebia 403 no bloqueio do passo 6 — "Não pode aprovar
+    uma acção que propôs". A proposta de um playbook é agora de quem o iniciou
+    (`triggered_by_id`), e a separação de funções continua a valer para essa
+    pessoa.
+20. **O resumo final perdia os passos anteriores à pausa.** A retoma recomeçava a
+    lista, e a execução concluída mostrava só "7. Registar o resultado".
+
+Todos verificados por reversão. Desfazer a correcção faz falhar: 15, um teste;
+16, dois; 17, dois; 18, 19 e 20, um cada. `verificar_contrato.py` continua a
+confirmar as 51 vistas.
+
 ---
 
 ## 5. O que FALTA (por ordem sugerida)
@@ -487,19 +533,20 @@ Se quiser alargá-lo: `_eventos_suricata` e `_evento_c2` em
 acrescentar uma função e uma chamada a `ingest_batch`.
 
 ### 5.3 Testes (§32) — **feito** (ver §4)
-250 testes, 77% de cobertura (medido em 2026-09-17). O que a lista do §32
+269 testes, 79% de cobertura (medido em 2026-09-17). O que a lista do §32
 pede está coberto.
 
 Onde a cobertura continua baixa, e porquê (remedido em 2026-09-17 — os valores
 anteriores, que este documento afirmava, estavam desactualizados: o
 `analytics_service` subiu de 14% para **76%** entretanto):
-- `mitre_service` 19%, `integration_service` 55% — ambos falam com o exterior
-  (descarga do bundle STIX, conectores); testá-los a sério exige duplos de
-  teste, que ainda não existem;
-- `timeline_service` e `seed_service` a 0% — só são exercitados pela CLI e pela
-  rota de linha temporal, que não têm teste;
-- `playbooks/engine` — os caminhos de suspensão e retoma estão testados; os
-  tipos de passo menos usados não.
+- `mitre_service` 19%, `wazuh_connector` 26%, `siem_connectors` 30%,
+  `integration_service` 55% — falam com o exterior (descarga do bundle STIX,
+  conectores). O `mitre_service` testa-se sem rede, porque `load_attack_data`
+  aceita `source_file`; os conectores precisam de um duplo HTTP;
+- `timeline_service` e `seed_service` — **100%** desde 2026-09-17 (estavam a 0%).
+  Os testes revelaram os defeitos 15 a 20 do §4;
+- `playbooks/engine` 74% — suspensão, retoma, rejeição e execução da acção
+  aprovada estão testados; os tipos de passo menos usados não.
 
 ### 5.4 Frontend — **funcional; falta vê-lo num navegador**
 
