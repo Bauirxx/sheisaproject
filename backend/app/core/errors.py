@@ -154,9 +154,13 @@ class IntegrationNotAvailableError(SheisaError):
     message = "A integração necessária não está configurada ou activa."
 
     def __init__(self, name: str, reason: str | None = None) -> None:
+        # O motivo vai na mensagem, e não só em `details`: quem regista a falha
+        # guarda `str(exc)` — o erro de uma acção falhada, o detalhe de um teste
+        # de ligação — e sem ele ficava escrito apenas "não está disponível".
+        motivo = (reason or "não configurada").rstrip(".")
         super().__init__(
-            f"A integração '{name}' não está disponível.",
-            details={"integracao": name, "motivo": reason or "não configurada"},
+            f"A integração '{name}' não está disponível: {motivo}.",
+            details={"integracao": name, "motivo": motivo},
         )
 
 
