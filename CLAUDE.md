@@ -5,7 +5,7 @@ prática de uma monografia sobre o INCM (Moçambique). Não é um protótipo vis
 tem de ser real, funcional, testável e defensável numa defesa académica.
 
 **Antes de trabalhar, leia [`docs/CONTINUAR.md`](docs/CONTINUAR.md)** — estado
-actual, o que fazer a seguir, e treze armadilhas concretas que já custaram horas
+actual, o que fazer a seguir, e catorze armadilhas concretas que já custaram horas
 cada. Poupa mais tempo do que ocupa.
 
 ## O princípio, que não se negocia

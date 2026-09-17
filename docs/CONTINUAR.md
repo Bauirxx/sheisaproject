@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 327 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 355 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 327 a passar, 84% de cobertura |
+| Testes | 355 a passar, 86% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -157,9 +157,9 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 ### 4.3 Subir a cobertura onde ela é baixa — **a lista original está feita**
 
 **Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
-cobertos, e com eles os conectores e a ingestão genérica. Escrever os testes
-revelou **doze defeitos reais**, todos corrigidos e verificados por reversão —
-[`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 26. Nenhum dava erro; todos deixavam o sistema num estado
+cobertos, e com eles os conectores, a ingestão genérica e o catálogo. Escrever
+os testes revelou **catorze defeitos reais**, todos corrigidos e verificados por
+reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15 a 28. Nenhum dava erro; todos deixavam o sistema num estado
 plausível e errado. O mais grave: aprovar um bloqueio num playbook **não o
 executava**, e o incidente registava "Bloqueio aplicado".
 
@@ -172,6 +172,7 @@ executava**, e o incidente registava "Bloqueio aplicado".
 | `wazuh_connector` | 26% | 87% |
 | `siem_connectors` | 30% | 56% — o resto é código que nada chama (abaixo) |
 | `ingestion/generic.py` | 18% | 95% |
+| `api/v1/catalog.py` | 35% | 91% |
 
 A lição de método: os testes que encontraram defeitos não verificavam que as
 linhas eram criadas, mas que o módulo fazia aquilo para que existe — a linha
@@ -184,15 +185,17 @@ máquina-a-máquina sem ecrã tinha **quatro** defeitos, e o pior perdia eventos
 duas falhas de autenticação no mesmo segundo, de origens diferentes, contavam
 como duplicadas e a segunda era descartada.
 
-**Próximos candidatos**, medidos com a suite completa (327 testes, 84%):
+O catálogo trouxe o defeito de alcance mais largo: um `PATCH` com `null` num
+campo obrigatório dava **500 em cinco rotas** — ver a armadilha 5.14.
+
+**Próximos candidatos**, medidos com a suite completa (355 testes, 86%):
 
 | Módulo | Cobertura | Porque importa |
 |---|---|---|
-| `api/v1/catalog.py` | 35% | activos, IOCs e rotas MITRE — o que o analista consulta para decidir |
 | `core/middleware.py` | 58% | cabeçalhos de segurança e limites de pedido |
 | `services/bootstrap.py` | 59% | o arranque de uma instalação nova |
-| `api/v1/incidents.py` | 63% | |
-| `api/v1/recommendations.py` | 63% | |
+| `api/v1/recommendations.py` | 63% | a decisão humana sobre o que o motor propõe |
+| `api/v1/alerts.py` | 67% | triagem e promoção |
 
 `core/database.py` (45%) e `siem_connectors` (56%) não são candidatos: o
 primeiro é ligação e ciclo de vida do motor, o segundo é código que nada chama.
@@ -365,6 +368,17 @@ auditoria, que regista em que pedido cada coisa aconteceu.
 
 E **aprovar não é executar**: `decide_action` só muda o estado para APROVADA. Se
 nada executar a acção, o passo seguinte corre sobre algo que não aconteceu.
+
+### 5.14 Num PATCH, omitir um campo não é o mesmo que enviá-lo a `null`
+
+Os esquemas de edição declaram todos os campos opcionais — é o que permite
+omiti-los —, e por isso também aceitam `null` em campos que a base de dados exige.
+Aplicar `model_dump(exclude_unset=True)` com `setattr` deixava o objecto inválido,
+e a rota dava 500 ao serializar. Acontecia em cinco rotas. **Numa rota PATCH nova,
+chame `reject_nulls_for_required(objecto, alteracoes)`** de
+`app/core/partial_update.py` antes do `setattr`: lê a nulabilidade do próprio
+modelo e responde 422. A interface nunca o desencadeia — só envia o que mudou —,
+por isso só um teste o apanha.
 
 ---
 
