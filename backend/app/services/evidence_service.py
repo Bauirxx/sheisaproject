@@ -220,11 +220,16 @@ async def verify_integrity(
         if ok
         else "O conteúdo não corresponde ao hash registado: a evidência foi alterada."
     )
+    # Uma verificação que conclui adulteração é uma verificação falhada, como a
+    # do ficheiro em falta. Registada como SUCESSO, não aparecia a quem
+    # procurasse na auditoria as verificações falhadas — e é o caso mais grave.
     await audit.record(
         session, ctx,
         action="VERIFICAR_INTEGRIDADE", resource_type="evidencia",
         resource_id=evidence.id,
         description=f"Verificação de '{evidence.name}': {detail}",
+        outcome=AuditOutcome.SUCESSO if ok else AuditOutcome.FALHA,
+        failure_reason=None if ok else "conteúdo não corresponde ao hash da recepção",
     )
     return {
         "integra": ok,
