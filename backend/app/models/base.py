@@ -62,20 +62,27 @@ def enum_column(py_enum: type, **kwargs: Any) -> Any:
 
 
 class TimestampMixin:
-    """Instantes de criação e actualização mantidos pela base de dados."""
+    """Instantes de criação e actualização mantidos pela base de dados.
+
+    `clock_timestamp()` e não `now()`. O `now()` do PostgreSQL devolve o início
+    da **transacção**, e repete-o em todas as linhas dela: um pedido que crie um
+    incidente, mude o estado e escreva um comentário gravava tudo com o mesmo
+    instante. A linha temporal, que ordena tudo num só eixo, contava então a
+    história ao contrário — ver a migração `0005_instantes_reais`.
+    """
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=func.now(),
+        server_default=func.clock_timestamp(),
         index=True,
         sort_order=100,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
+        server_default=func.clock_timestamp(),
+        onupdate=func.clock_timestamp(),
         sort_order=101,
     )
 

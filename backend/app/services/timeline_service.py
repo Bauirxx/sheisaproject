@@ -22,6 +22,27 @@ from app.models.response import Action
 from app.models.system import AuditLog
 from app.models.telemetry import Alert
 from app.schemas.incident import IncidentTimelineEntry
+from app.services.incident_service import PREFIXO_COMENTARIO_DE_TRANSICAO
+
+#: Acções de auditoria que não entram na linha temporal porque o acontecimento já
+#: lá está numa entrada mais rica. A auditoria de um comentário diz apenas
+#: "comentário adicionado"; o comentário em si traz o texto.
+#:
+#: **Não confundir com "tirar os comentários de sistema".** Só são duplicados os
+#: pares em que a auditoria está ligada ao próprio incidente. A decisão sobre uma
+#: acção e os passos de um playbook deixam auditoria ligada à acção ou à
+#: execução, que não aparece aqui — e o comentário de sistema é então o único
+#: rasto no incidente. Tirá-lo apagaria a aprovação da história.
+AUDITORIA_REPRESENTADA_NOUTRA_ENTRADA: frozenset[str] = frozenset({"COMENTAR"})
+
+
+def _e_comentario_de_transicao(comment: Comment) -> bool:
+    """O comentário de sistema que duplica uma auditoria `ALTERAR_ESTADO`.
+
+    Das duas representações da mesma mudança de estado fica a auditoria, que
+    traz o valor anterior e o novo; o comentário só os repete em texto.
+    """
+    return comment.is_system and comment.body.startswith(PREFIXO_COMENTARIO_DE_TRANSICAO)
 
 
 async def build_timeline(
@@ -37,6 +58,8 @@ async def build_timeline(
         .limit(500)
     )
     for entry in audit_rows.scalars():
+        if entry.action in AUDITORIA_REPRESENTADA_NOUTRA_ENTRADA:
+            continue
         dados: dict = {}
         if entry.old_value or entry.new_value:
             dados = {
@@ -65,6 +88,8 @@ async def build_timeline(
         .order_by(Comment.created_at.asc())
     )
     for comment in comments.scalars():
+        if _e_comentario_de_transicao(comment):
+            continue
         entries.append(
             IncidentTimelineEntry(
                 instante=comment.created_at,

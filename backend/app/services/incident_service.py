@@ -492,6 +492,15 @@ async def apply_correlation(
     return None
 
 
+#: Início do comentário de sistema que cada mudança de estado deixa no incidente.
+#:
+#: É uma constante porque a linha temporal o usa para não mostrar a mudança duas
+#: vezes (uma como comentário, outra como auditoria). Se o texto fosse repetido
+#: nos dois sítios e alguém o alterasse só num, a duplicação voltava em silêncio;
+#: `tests/test_linha_temporal.py` apanharia, mas assim nem chega a acontecer.
+PREFIXO_COMENTARIO_DE_TRANSICAO = "Estado alterado de "
+
+
 async def transition(
     session: AsyncSession,
     ctx: AuditContext,
@@ -558,7 +567,7 @@ async def transition(
             incident_id=incident.id,
             author_id=ctx.actor_id,
             body=(
-                f"Estado alterado de {current.value} para {new_status.value}."
+                f"{PREFIXO_COMENTARIO_DE_TRANSICAO}{current.value} para {new_status.value}."
                 + (f" {note}" if note else "")
             ),
             is_system=True,
