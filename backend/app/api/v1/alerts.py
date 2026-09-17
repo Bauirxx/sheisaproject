@@ -39,6 +39,11 @@ from app.services import incident_service
 router = APIRouter(prefix="/alerts", tags=["Alertas"])
 events_router = APIRouter(prefix="/events", tags=["Eventos"])
 
+#: Estados que só a promoção e a ligação podem dar, porque são elas que criam o
+#: incidente ou a ligação que lhes dá sentido. Pela triagem, o alerta ficava
+#: "promovido" sem ter originado nada.
+STATES_REQUIRING_INCIDENT = frozenset({AlertStatus.PROMOVIDO, AlertStatus.CORRELACIONADO})
+
 SORTABLE = {
     "created_at", "last_event_at", "first_event_at", "triage_score",
     "severity", "status", "reference", "event_count", "false_positive_score",
@@ -189,6 +194,13 @@ async def triage_alert(
     alert = await _load_alert(session, alert_id)
     current = alert.status
 
+    if payload.status in STATES_REQUIRING_INCIDENT:
+        raise ValidationError(
+            f"Um alerta só fica {payload.status.value} ao ser promovido ou ligado a um "
+            f"incidente: use POST /api/alerts/{alert.id}/promote ou /link.",
+            code="ESTADO_EXIGE_INCIDENTE",
+        )
+
     allowed = ALERT_TRANSITIONS.get(current, frozenset())
     if payload.status not in allowed:
         from app.core.errors import InvalidTransitionError
@@ -259,6 +271,7 @@ async def promote_alert(
         severity=payload.severity,
         assignee_id=payload.assignee_id,
         rationale=payload.rationale,
+        confidence=payload.confidence,
     )
     await session.flush()
     incident = await incident_service.get_incident(session, incident.id, with_details=True)

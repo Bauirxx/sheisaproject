@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 from app.core import audit
 from app.core.audit import AuditContext
 from app.core.enums import (
+    ALERT_TRANSITIONS,
     INCIDENT_TRANSITIONS,
     AlertStatus,
     Confidence,
@@ -44,7 +45,7 @@ from app.core.errors import (
     ValidationError,
 )
 from app.core.references import ReferenceKind, next_reference
-from app.correlation.engine import CorrelationDecision
+from app.correlation.engine import LINKABLE_STATUSES, CorrelationDecision
 from app.models.catalog import Asset, Ioc
 from app.models.incident import Incident, IncidentRelation, IncidentTechnique
 from app.models.investigation import Comment, Observation
@@ -274,6 +275,22 @@ async def materialise_observations(
     return created
 
 
+def _require_alert_transition(alert: Alert, target: AlertStatus) -> None:
+    """Promover e ligar também são transições do ciclo de vida do alerta.
+
+    A triagem cumpria `ALERT_TRANSITIONS`; a promoção e a ligação não o
+    consultavam. Um alerta DESCARTADO era promovido directamente, apagando a
+    decisão de descarte que o motor usa para estimar o ruído da regra, e um
+    alerta PROMOVIDO podia ser religado a outro incidente, saindo do que ele
+    próprio originou.
+    """
+    allowed = ALERT_TRANSITIONS.get(alert.status, frozenset())
+    if target not in allowed:
+        raise InvalidTransitionError(
+            alert.status.value, target.value, [s.value for s in allowed]
+        )
+
+
 async def link_alert(
     session: AsyncSession,
     ctx: AuditContext,
@@ -287,6 +304,14 @@ async def link_alert(
         raise ConflictError(
             f"O alerta {alert.reference} já está ligado ao incidente "
             f"{incident.reference}."
+        )
+    _require_alert_transition(alert, AlertStatus.CORRELACIONADO)
+    # O mesmo critério do motor de correlação, que já recusava fazê-lo sozinho.
+    if incident.status not in LINKABLE_STATUSES:
+        raise ConflictError(
+            f"O incidente {incident.reference} está {incident.status.value}: "
+            "ligar-lhe um alerta reescreveria um registo já concluído.",
+            code="INCIDENTE_FECHADO",
         )
 
     alert.incident_id = incident.id
@@ -330,6 +355,7 @@ async def promote_alert(
     severity: Severity | None = None,
     assignee_id: uuid.UUID | None = None,
     rationale: str = "",
+    confidence: Confidence = Confidence.MEDIA,
     origin: IncidentOrigin = IncidentOrigin.PROMOCAO_ALERTA,
     is_demo: bool = False,
 ) -> Incident:
@@ -343,6 +369,7 @@ async def promote_alert(
             f"O alerta {alert.reference} já originou um incidente.",
             details={"incidente_id": str(alert.incident_id)},
         )
+    _require_alert_transition(alert, AlertStatus.PROMOVIDO)
 
     incident = await create_incident(
         session, ctx,
@@ -350,7 +377,7 @@ async def promote_alert(
         description=alert.description or alert.title,
         category=category or suggest_category(alert.tags, alert.rule_name),
         severity=severity or alert.severity,
-        confidence=Confidence.MEDIA,
+        confidence=confidence,
         origin=origin,
         source_kind=alert.source_kind,
         source_detail=f"{alert.source_name} / regra {alert.rule_id or '-'}",
