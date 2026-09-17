@@ -38,11 +38,33 @@ cd ../frontend
 npm run verificar                                        # tsc, sem erros
 ```
 
-O ambiente desta máquina: **Python 3.11.9** em `backend/.venv`, Node 22.10.0,
-Docker 29.3.1. Confirme com `backend/.venv/Scripts/python.exe --version` em vez
-de assumir — o `ESTADO.md` já esteve errado sobre isto.
+**O projecto corre em duas máquinas, com ambientes diferentes** — ambos
+verificados, ambos a passar a bateria acima:
 
-As contas de laboratório estão em [`ESTADO.md` §6](ESTADO.md#6-contas-e-credenciais-do-ambiente-local).
+| | Máquina A | Máquina B |
+|---|---|---|
+| Python (`backend/.venv`) | 3.11.9 | 3.13.7 |
+| Node | 22.10.0 | 22.20.0 |
+| Docker | 29.3.1 | 27.5.1 |
+
+Confirme com `backend/.venv/Scripts/python.exe --version` em vez de assumir. Este
+parágrafo já afirmou um só ambiente como "o desta máquina", e estava certo numa e
+errado na outra.
+
+> **Na máquina B, o Python 3.14 também está instalado — não o use para o
+> `.venv`.** O `reportlab 4.2.5` emite `DeprecationWarning: ast.NameConstant is
+> deprecated and will be removed in Python 3.14`: em 3.14 a exportação PDF deixa
+> de funcionar.
+
+**Depois de um `git pull`, reinicie a API** (`./scripts/api.sh restart`). O
+uvicorn corre sem `--reload`, pelo que continua a servir o código anterior sem
+dar sinal disso. O Vite, pelo contrário, recarrega-se sozinho — incluindo quando
+muda a porta no `vite.config.ts`. E se o `pull` trouxer alterações a
+`requirements*.txt`, instale-as antes de reiniciar.
+
+As contas de laboratório estão em [`ESTADO.md` §6](ESTADO.md#6-contas-e-credenciais-do-ambiente-local),
+com uma ressalva: **a palavra-passe de administração é diferente em cada
+máquina**, porque é gerada pelo `manage init` de cada base de dados.
 
 ---
 
@@ -259,10 +281,17 @@ nada. Descubra qual é o valor certo — consultando `ROLE_PERMISSIONS` em
 segredos no código.
 
 > **Pendente de decisão do autor.** A palavra-passe de administração do
-> laboratório está em texto claro em [`ESTADO.md` §6](ESTADO.md#6-contas-e-credenciais-do-ambiente-local),
-> e o repositório é **público**. Serve para outra instância poder correr a
-> plataforma, mas fica indexável. A alternativa é substituí-la por uma instrução
-> de a gerar com `manage init`, que a mostra uma única vez.
+> laboratório está em texto claro em [`ESTADO.md` §6](ESTADO.md#6-contas-e-credenciais-do-ambiente-local).
+>
+> O repositório é **privado** — verificado em 2026-09-17: a API do GitHub
+> devolve 404 a um pedido sem autenticação. (Este aviso dizia antes "público",
+> o que exagerava o risco.) A palavra-passe não está, portanto, indexável.
+>
+> O argumento que resta é outro, e é mais forte: **o valor escrito já está errado
+> numa das duas máquinas**. Cada base de dados gera a sua no `manage init`, e o
+> documento só consegue guardar uma. A alternativa é substituí-la por uma
+> instrução de a gerar com `manage init`, que a mostra uma única vez — e que é o
+> que acontece de qualquer maneira numa máquina nova.
 
 ---
 
