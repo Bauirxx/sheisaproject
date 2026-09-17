@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "verificar": "tsc -b --noEmit"
+    "verificar": "tsc -b --noEmit && eslint . && node scripts/verificar-relogio.mjs",
+    "lint": "eslint .",
+    "verificar:relogio": "node scripts/verificar-relogio.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "5.62.7",
@@ -17,10 +19,16 @@
     "react-router-dom": "7.18.3"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@types/react": "18.3.17",
     "@types/react-dom": "18.3.5",
     "@vitejs/plugin-react": "4.3.4",
+    "eslint": "10.10.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "globals": "17.12.0",
     "typescript": "5.7.2",
+    "typescript-eslint": "8.70.0",
     "vite": "6.4.3"
   }
 }

@@ -31,11 +31,19 @@ import {
   SEVERIDADES,
   useFiltros,
 } from "@/componentes/listagem";
+import { useAgora } from "@/componentes/relogio";
 
-/** Assinala um prazo já ultrapassado num incidente por resolver. */
+/**
+ * Assinala um prazo já ultrapassado num incidente por resolver.
+ *
+ * O instante vem de `useAgora()` e não de `Date.now()`: lido durante o render,
+ * um prazo que expirasse com a fila aberta nunca ficaria vermelho, porque um
+ * refetch com os mesmos dados não provoca render. Ver `componentes/relogio.ts`.
+ */
 function Prazo({ valor, resolvido }: { valor: string | null; resolvido: boolean }) {
+  const agora = useAgora();
   if (!valor) return <span className="terciario">—</span>;
-  const expirou = !resolvido && new Date(valor).getTime() < Date.now();
+  const expirou = !resolvido && new Date(valor).getTime() < agora;
   return (
     <span style={expirou ? { color: "var(--critico)", fontWeight: 600 } : undefined}>
       {instante(valor)}

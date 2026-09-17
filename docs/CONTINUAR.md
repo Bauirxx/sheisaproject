@@ -35,7 +35,7 @@ cd backend
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
 cd ../frontend
-npm run verificar                                        # tsc, sem erros
+npm run verificar                                        # tsc + eslint + relógio
 ```
 
 **O projecto corre em duas máquinas, com ambientes diferentes** — ambos
@@ -102,7 +102,7 @@ irreversível do RTIR é uma má decisão.
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
 | Testes | 250 a passar, 77% de cobertura |
-| Qualidade | `ruff check .` limpo em todo o repositório |
+| Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
 
@@ -136,11 +136,23 @@ rolar, e se os gráficos SVG ficam legíveis com poucos dados. Percorra as 19
 rotas, comece pelas mais novas (`/eventos`, `/centro`) e corrija o que estiver
 torto.
 
-### 4.2 Instalar um linter no frontend
+### 4.2 ~~Instalar um linter no frontend~~ — **feito em 2026-09-17**
 
-Há só `tsc`. Um `eslint` com `eslint-plugin-react-hooks` apanharia dependências
-de `useEffect` em falta e variáveis não usadas, que hoje passam silenciosamente.
-É a lacuna de qualidade mais concreta que resta.
+ESLint 10 com `typescript-eslint` e `eslint-plugin-react-hooks` 7, configurado
+em `frontend/eslint.config.js`. `npm run verificar` corre agora `tsc`, `eslint` e
+`scripts/verificar-relogio.mjs`, e é o que conta como verificação do frontend.
+
+O que encontrou, em 36 ficheiros: **nenhuma** dependência de `useEffect` em
+falta, uma atribuição inútil, e **um defeito real** — ver a armadilha 5.11. Ficam
+13 avisos de `react-refresh/only-export-components`, todos em ficheiros que
+exportam componentes e utilitários juntos (`comuns.tsx`, `listagem.tsx`,
+`graficos.tsx`, `contexto.tsx`). Só afectam o recarregamento a quente em
+desenvolvimento; resolvê-los obrigaria a partir esses ficheiros e a mexer nos
+imports de ~20 páginas, o que não compensa enquanto não houver outro motivo.
+
+As regras do React Compiler que a versão 7 traz no conjunto recomendado
+**não foram desligadas**: correram tal como vêm, e a única que disparou
+(`react-hooks/purity`) apontou para um defeito verdadeiro.
 
 ### 4.3 Subir a cobertura onde ela é baixa por bom motivo
 
@@ -252,6 +264,23 @@ Devolve o objecto sem as relações, e a primeira leitura de uma delas dispara I
 fora do contexto assíncrono — `MissingGreenlet`, que chega ao utilizador como
 500. Use `selectinload` explícito quando for preciso a relação. Aconteceu com
 `Task.depends_on` ao concluir uma tarefa.
+
+### 5.11 `Date.now()` durante o render congela o que depende do tempo
+
+Um render só acontece quando algo muda — e o React Query, quando um refetch traz
+os **mesmos** dados, mantém o objecto anterior e não provoca render nenhum.
+Resultado: na fila de incidentes, um prazo que expirasse com a página aberta
+**não ficava vermelho**; no centro de operações, a contagem "faltam 3 min" ficava
+parada depois de o prazo passar. Nenhum erro, nenhum aviso — só um sinal
+visual errado, precisamente o que o analista usa para decidir.
+
+**Use `useAgora()` de `frontend/src/componentes/relogio.ts`**, que é um relógio
+partilhado (um só intervalo para a aplicação) e faz do tempo uma entrada do
+render.
+
+O `eslint` apanhou um dos dois casos. O outro estava dentro de uma função
+auxiliar, onde a regra `react-hooks/purity` não vê. **O linter não substitui um
+`grep -rn "Date.now()" src`** depois de escrever código que dependa do tempo.
 
 ---
 

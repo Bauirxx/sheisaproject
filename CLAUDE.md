@@ -5,7 +5,7 @@ prática de uma monografia sobre o INCM (Moçambique). Não é um protótipo vis
 tem de ser real, funcional, testável e defensável numa defesa académica.
 
 **Antes de trabalhar, leia [`docs/CONTINUAR.md`](docs/CONTINUAR.md)** — estado
-actual, o que fazer a seguir, e dez armadilhas concretas que já custaram horas
+actual, o que fazer a seguir, e onze armadilhas concretas que já custaram horas
 cada. Poupa mais tempo do que ocupa.
 
 ## O princípio, que não se negocia
@@ -50,7 +50,7 @@ cd backend
 ./.venv/Scripts/python.exe -m pytest -q              # suite
 ./.venv/Scripts/python.exe -m ruff check .           # tem de passar limpo
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
-cd frontend && npm run verificar                     # tsc
+cd frontend && npm run verificar                     # tsc + eslint + relógio
 ```
 
 `verificar_contrato.py` confronta os tipos do frontend com respostas reais da API

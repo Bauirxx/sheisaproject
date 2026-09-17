@@ -136,10 +136,12 @@ async function executar(caminho: string, opcoes: Opcoes = {}): Promise<Response>
 }
 
 async function extrairErro(resposta: Response): Promise<ErroDaApi> {
-  let corpo: { erro?: ErroApi } | null = null;
+  let corpo: { erro?: ErroApi } | null;
   try {
     corpo = (await resposta.json()) as { erro?: ErroApi };
   } catch {
+    // Corpo vazio ou que não é JSON (um proxy a devolver HTML, por exemplo):
+    // cai-se na mensagem genérica abaixo em vez de rebentar a tratar um erro.
     corpo = null;
   }
   const erro: ErroApi = corpo?.erro ?? {

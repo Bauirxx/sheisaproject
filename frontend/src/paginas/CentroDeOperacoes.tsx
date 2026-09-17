@@ -29,11 +29,22 @@ import {
   legivel,
   Vazio,
 } from "@/componentes/comuns";
+import { useAgora } from "@/componentes/relogio";
 
-/** Há quanto tempo o prazo passou, ou quanto falta. */
-function prazoLegivel(prazo: string | null): { texto: string; expirado: boolean } | null {
+/**
+ * Há quanto tempo o prazo passou, ou quanto falta.
+ *
+ * Recebe o instante em vez de o ler. Com `Date.now()` aqui dentro, a contagem
+ * "faltam 3 min" ficava parada depois de o prazo passar: um refetch com os
+ * mesmos dados não provoca render. O linter não apanhou este caso por a leitura
+ * estar numa função auxiliar e não no corpo do componente.
+ */
+function prazoLegivel(
+  prazo: string | null,
+  agora: number,
+): { texto: string; expirado: boolean } | null {
   if (!prazo) return null;
-  const ms = new Date(prazo).getTime() - Date.now();
+  const ms = new Date(prazo).getTime() - agora;
   if (!Number.isFinite(ms)) return null;
 
   const minutos = Math.round(Math.abs(ms) / 60000);
@@ -50,7 +61,8 @@ function prazoLegivel(prazo: string | null): { texto: string; expirado: boolean 
 }
 
 function Prazo({ prazo }: { prazo: string | null }) {
-  const p = prazoLegivel(prazo);
+  const agora = useAgora();
+  const p = prazoLegivel(prazo, agora);
   if (!p) return <span className="terciario">sem prazo</span>;
   return (
     <span
