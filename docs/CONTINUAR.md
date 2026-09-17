@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 362 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 371 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 362 a passar, 86% de cobertura |
+| Testes | 371 a passar, 87% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -157,10 +157,10 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 ### 4.3 Subir a cobertura onde ela é baixa — **a lista original está feita**
 
 **Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
-cobertos, e com eles os conectores, a ingestão genérica, o catálogo e os
-middlewares. Escrever os testes revelou **dezasseis defeitos reais**, todos
-corrigidos e verificados por reversão — [`ESTADO.md`](ESTADO.md) §4, defeitos 15
-a 30. Nenhum dava erro; todos deixavam o sistema num estado
+cobertos, e com eles os conectores, a ingestão genérica, o catálogo, os
+middlewares e o arranque. Escrever os testes revelou **dezassete defeitos
+reais**, todos corrigidos e verificados por reversão — [`ESTADO.md`](ESTADO.md)
+§4, defeitos 15 a 31. Nenhum dava erro; todos deixavam o sistema num estado
 plausível e errado. O mais grave: aprovar um bloqueio num playbook **não o
 executava**, e o incidente registava "Bloqueio aplicado".
 
@@ -175,6 +175,7 @@ executava**, e o incidente registava "Bloqueio aplicado".
 | `ingestion/generic.py` | 18% | 95% |
 | `api/v1/catalog.py` | 35% | 91% |
 | `core/middleware.py` | 58% | 94% |
+| `services/bootstrap.py` | 59% | 92% (o commit `344cdbf` diz 100%: foi escrito antes de medir) |
 
 A lição de método: os testes que encontraram defeitos não verificavam que as
 linhas eram criadas, mas que o módulo fazia aquilo para que existe — a linha
@@ -192,15 +193,15 @@ campo obrigatório dava **500 em cinco rotas** — ver a armadilha 5.14. Os
 middlewares trouxeram o de segurança: o limite contra força bruta no login
 **contornava-se mudando o cabeçalho `X-API-Key`** em cada tentativa.
 
-**Próximos candidatos**, medidos com a suite completa (362 testes, 86%):
+**Próximos candidatos**, medidos com a suite completa (371 testes, 87%):
 
 | Módulo | Cobertura | Porque importa |
 |---|---|---|
-| `services/bootstrap.py` | 59% | o arranque de uma instalação nova |
 | `api/v1/recommendations.py` | 63% | a decisão humana sobre o que o motor propõe |
 | `api/v1/alerts.py` | 67% | triagem e promoção |
 | `services/recommendation_service.py` | 70% | |
 | `correlation/engine.py` | 72% | |
+| `services/auth_service.py` | 74% | sessões, bloqueio de conta, mudança de palavra-passe |
 
 `core/database.py` (45%) e `siem_connectors` (56%) não são candidatos: o
 primeiro é ligação e ciclo de vida do motor, o segundo é código que nada chama.
