@@ -185,6 +185,29 @@ async def _candidates_in_window(
     return list(result.scalars())
 
 
+async def _same_activity(
+    session: AsyncSession, alert: Alert, candidates: list[Alert]
+) -> list[Alert]:
+    """Candidatos que partilham com o alerta o activo ou algum artefacto observado.
+
+    Uma progressão é de *uma* actividade. Sem esta restrição, a sequência
+    considerava todos os alertas da janela: uma falha de autenticação num
+    servidor, uma execução noutro e um trojan num terceiro, de três origens
+    diferentes, formavam uma "cadeia de ataque" com severidade CRITICA.
+
+    Aqui contam todos os papéis, e não só os do atacante: ao contrário de
+    ENTIDADE_PARTILHADA, uma progressão sobre a mesma vítima é precisamente o
+    que se procura.
+    """
+    own = await _alert_indicator_values(session, alert)
+    related: list[Alert] = []
+    for candidate in candidates:
+        same_asset = alert.asset_id is not None and candidate.asset_id == alert.asset_id
+        if same_asset or (own and own & await _alert_indicator_values(session, candidate)):
+            related.append(candidate)
+    return related
+
+
 # ------------------------------------------------------------------ estratégias
 async def _match_shared_entity(
     session: AsyncSession, alert: Alert, rule: CorrelationRule
@@ -285,7 +308,9 @@ async def _match_sequence(
     if not expected:
         return None
 
-    candidates = await _candidates_in_window(session, alert, rule.window_minutes)
+    candidates = await _same_activity(
+        session, alert, await _candidates_in_window(session, alert, rule.window_minutes)
+    )
     timeline = sorted([*candidates, alert], key=lambda a: a.last_event_at)
 
     matched: list[Alert] = []
@@ -309,7 +334,7 @@ async def _match_sequence(
     etapas = " -> ".join(rule.sequence)
     return others, (
         f"Sequência de cadeia de ataque observada em {rule.window_minutes} minutos: "
-        f"{etapas}."
+        f"{etapas}, em alertas que partilham o activo ou artefactos observados."
     )
 
 
@@ -339,7 +364,10 @@ async def _match_target_asset(
     # Exigimos regras *distintas*: várias ocorrências da mesma detecção são
     # repetição, não convergência de vectores.
     distinct_rules = {a.rule_id for a in matches if a.rule_id}
-    distinct_rules.add(alert.rule_id)
+    # Um alerta sem regra não é uma detecção identificável: acrescentar `None`
+    # fazia-o contar como mais uma detecção distinta.
+    if alert.rule_id:
+        distinct_rules.add(alert.rule_id)
     if len(distinct_rules) < rule.min_alerts:
         return None
 
