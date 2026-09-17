@@ -157,6 +157,16 @@ async def update_user(
         role = role_result.scalar_one_or_none()
         if role is None:
             raise NotFoundError("Perfil", role_name)
+        # A mesma razão da auto-desactivação, abaixo: trocar o próprio perfil por
+        # um que não gere contas também tira o acesso, e numa instalação com um
+        # só administrador deixava a plataforma sem ninguém que o repusesse.
+        if user.id == current.id and Permission.USERS_MANAGE.value not in {
+            p.code for p in role.permissions
+        }:
+            raise ValidationError(
+                "Não pode retirar a si próprio o perfil que lhe permite gerir contas.",
+                code="AUTO_DESPROMOCAO",
+            )
         user.role_id = role.id
 
     # Impede que um administrador se desactive a si próprio e perca o acesso.
