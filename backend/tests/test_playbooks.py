@@ -444,3 +444,127 @@ async def test_o_resumo_final_inclui_os_passos_anteriores_a_suspensao(
     resumo = actual["result_summary"]
     for linha in ("1. Registar nota de abertura", "2. Autorizar a meio", "3. Registar fecho"):
         assert linha in resumo, f"falta '{linha}' no resumo:\n{resumo}"
+
+
+# ------------------------------------------- estado do incidente num playbook
+# Encontrados ao aplicar a armadilha 5.15: o motor mudava `incident.status`
+# directamente, verificando só o ciclo de vida. Tudo o resto que uma transição
+# garante — marcos temporais das métricas de resposta, resumo obrigatório para
+# RESOLVIDO, entrada ALTERAR_ESTADO na auditoria e na linha temporal — ficava
+# por fazer.
+def _passo_de_estado(ordem: int, estado: str) -> dict:
+    return {
+        "ordering": ordem,
+        "name": f"Passar a {estado}",
+        "step_type": "ALTERAR_ESTADO",
+        "parameters": {"estado": estado},
+        "abort_on_failure": True,
+    }
+
+
+async def _correr(cliente, token, playbook, incidente) -> dict:
+    resposta = await cliente.post(
+        f"/api/playbooks/{playbook['id']}/run",
+        json={"incident_id": incidente["id"]},
+        headers=cabecalho(token),
+    )
+    assert resposta.status_code == 201, resposta.text
+    return resposta.json()
+
+
+async def _mudancas_de_estado(sessao, incidente) -> list:
+    import uuid
+
+    from sqlalchemy import select
+
+    from app.models.system import AuditLog
+
+    return (
+        await sessao.execute(
+            select(AuditLog)
+            .where(
+                AuditLog.action == "ALTERAR_ESTADO",
+                AuditLog.resource_id == uuid.UUID(incidente["id"]),
+            )
+            .order_by(AuditLog.created_at)
+        )
+    ).scalars().all()
+
+
+async def test_o_passo_alterar_estado_regista_marcos_e_auditoria(
+    cliente, sessao, token_admin, token_analista
+):
+    """Regressão: sem `contained_at`, o tempo até à contenção nunca era medido."""
+    incidente = await _incidente(cliente, token_analista)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook que conduz o incidente",
+        passos=[_passo_de_estado(1, "TRIAGEM"), _passo_de_estado(2, "INVESTIGACAO"),
+                _passo_de_estado(3, "CONTENCAO")],
+    )
+
+    execucao = await _correr(cliente, token_analista, playbook, incidente)
+
+    assert execucao["status"] == PlaybookExecutionStatus.CONCLUIDA.value, execucao
+    actual = (
+        await cliente.get(f"/api/incidents/{incidente['id']}", headers=cabecalho(token_analista))
+    ).json()
+    assert actual["status"] == "CONTENCAO"
+    assert actual["acknowledged_at"] is not None
+    assert actual["contained_at"] is not None
+    mudancas = await _mudancas_de_estado(sessao, incidente)
+    assert [m.new_value["estado"] for m in mudancas] == ["TRIAGEM", "INVESTIGACAO", "CONTENCAO"]
+
+
+async def test_o_passo_nao_resolve_sem_o_resumo_que_a_transicao_exige(
+    cliente, token_admin, token_analista
+):
+    """Regressão: o playbook resolvia o incidente sem resumo da resolução."""
+    incidente = await _incidente(cliente, token_analista)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook que tenta resolver",
+        passos=[_passo_de_estado(1, "TRIAGEM"), _passo_de_estado(2, "INVESTIGACAO"),
+                _passo_de_estado(3, "RESOLVIDO")],
+    )
+
+    execucao = await _correr(cliente, token_analista, playbook, incidente)
+
+    assert execucao["status"] == PlaybookExecutionStatus.FALHADA.value, execucao
+    assert "resumo da resolução" in (execucao["error"] or "")
+    actual = (
+        await cliente.get(f"/api/incidents/{incidente['id']}", headers=cabecalho(token_analista))
+    ).json()
+    assert actual["status"] == "INVESTIGACAO"
+
+
+async def test_o_estado_final_do_playbook_passa_pela_transicao_real(
+    cliente, sessao, token_admin, token_analista
+):
+    incidente = await _incidente(cliente, token_analista)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook que fecha a triagem",
+        passos=[PASSO_NOTA], closing_status="TRIAGEM",
+    )
+
+    await _correr(cliente, token_analista, playbook, incidente)
+
+    actual = (
+        await cliente.get(f"/api/incidents/{incidente['id']}", headers=cabecalho(token_analista))
+    ).json()
+    assert (actual["status"], actual["acknowledged_at"] is not None) == ("TRIAGEM", True)
+    assert len(await _mudancas_de_estado(sessao, incidente)) == 1
+
+
+async def test_estado_final_impossivel_fica_registado_em_vez_de_ignorado(
+    cliente, token_admin, token_analista
+):
+    """Regressão: um estado final que o ciclo de vida recusa era saltado em silêncio."""
+    incidente = await _incidente(cliente, token_analista)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook com estado final impossível",
+        passos=[PASSO_NOTA], closing_status="ENCERRADO",
+    )
+
+    execucao = await _correr(cliente, token_analista, playbook, incidente)
+
+    assert execucao["status"] == PlaybookExecutionStatus.CONCLUIDA.value
+    assert "ENCERRADO não aplicado" in execucao["result_summary"], execucao["result_summary"]

@@ -405,20 +405,30 @@ async def _run_from(
 
     execution.status = PlaybookExecutionStatus.CONCLUIDA
     execution.finished_at = datetime.now(UTC)
-    execution.result_summary = "\n".join(outcomes)
     playbook.success_count += 1
 
-    # Transição final declarada pelo playbook, se o ciclo de vida a permitir.
+    # Transição final declarada pelo playbook. Passa pela transição real (ver
+    # `_change_incident_status`) e, se não puder ser aplicada, fica dito no
+    # resumo — antes era saltada em silêncio. O resumo só é gravado depois disto:
+    # gravado antes, nem a transição bem-sucedida lá ficava.
     if playbook.closing_status:
         try:
             target = IncidentStatus(playbook.closing_status)
-            from app.core.enums import INCIDENT_TRANSITIONS
-
-            if target in INCIDENT_TRANSITIONS.get(incident.status, frozenset()):
-                incident.status = target
-                outcomes.append(f"Incidente transitado para {target.value}.")
         except ValueError:
-            pass
+            outcomes.append(
+                f"Estado final {playbook.closing_status} não aplicado: não é um "
+                "estado de incidente."
+            )
+        else:
+            try:
+                await _change_incident_status(
+                    session, ctx, incident, target,
+                    note=f"Estado final declarado pelo playbook {execution.reference}.",
+                )
+                outcomes.append(f"Incidente transitado para {target.value}.")
+            except SheisaError as exc:
+                outcomes.append(f"Estado final {target.value} não aplicado: {exc.message}")
+    execution.result_summary = "\n".join(outcomes)
 
     session.add(
         Comment(
@@ -629,16 +639,14 @@ async def _execute_step(
 
     # --------------------------------------------------------- estado / notas
     if kind == PlaybookStepType.ALTERAR_ESTADO:
-        from app.core.enums import INCIDENT_TRANSITIONS
-
         target_status = IncidentStatus(step.parameters["estado"])
-        if target_status not in INCIDENT_TRANSITIONS.get(incident.status, frozenset()):
-            raise ConflictError(
-                f"O playbook tentou passar de {incident.status.value} para "
-                f"{target_status.value}, o que o ciclo de vida não permite."
-            )
         previous = incident.status
-        incident.status = target_status
+        await _change_incident_status(
+            session, ctx, incident, target_status,
+            note=f"Pelo playbook {execution.reference}, passo {step.ordering}.",
+            resolution_summary=step.parameters.get("resumo"),
+            false_positive_reason=step.parameters.get("motivo"),
+        )
         return (
             {"resumo": f"Estado alterado de {previous.value} para {target_status.value}."},
             False,
@@ -681,6 +689,37 @@ async def _execute_step(
         )
 
     raise ValidationError(f"Tipo de passo não suportado: {kind}.")
+
+
+async def _change_incident_status(
+    session: AsyncSession,
+    ctx: AuditContext,
+    incident: Incident,
+    target: IncidentStatus,
+    *,
+    note: str,
+    resolution_summary: str | None = None,
+    false_positive_reason: str | None = None,
+) -> None:
+    """Muda o estado do incidente pela transição real, como se fosse à mão.
+
+    O motor fazia `incident.status = ...` depois de consultar o ciclo de vida, e
+    saltava tudo o resto que a transição garante: os marcos temporais de que
+    dependem as métricas de resposta (`contained_at`, `resolved_at`...), o resumo
+    obrigatório para RESOLVIDO, o motivo e a propagação para FALSO_POSITIVO, e a
+    entrada ALTERAR_ESTADO na auditoria, que é o que a linha temporal mostra.
+    Os parâmetros `resumo` e `motivo` de um passo servem estes dois casos.
+    """
+    from app.services import incident_service
+
+    await incident_service.transition(
+        session, ctx,
+        incident=incident,
+        new_status=target,
+        note=note,
+        resolution_summary=resolution_summary,
+        false_positive_reason=false_positive_reason,
+    )
 
 
 async def _build_target(
