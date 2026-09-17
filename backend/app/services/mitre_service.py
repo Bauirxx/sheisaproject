@@ -174,13 +174,19 @@ async def load_attack_data(
         for t in (await session.execute(select(MitreTechnique))).scalars()
     }
     techniques_loaded = subtechniques_loaded = 0
+    revoked_ids: set[str] = set()
+    loaded_ids: set[str] = set()
 
     for obj in objects:
-        if obj.get("type") != "attack-pattern" or obj.get("revoked"):
+        if obj.get("type") != "attack-pattern":
             continue
         technique_id, url = _attack_reference(obj)
         if not technique_id:
             continue
+        if obj.get("revoked"):
+            revoked_ids.add(technique_id)
+            continue
+        loaded_ids.add(technique_id)
 
         is_sub = bool(obj.get("x_mitre_is_subtechnique", False))
         shortnames = [
@@ -219,6 +225,15 @@ async def load_attack_data(
             subtechniques_loaded += 1
         else:
             techniques_loaded += 1
+
+    # Uma técnica revogada mantém o identificador e ganha `revoked: true`. Numa
+    # base vazia basta saltá-la; numa actualização, a linha trazida pela versão
+    # anterior continuava válida e o catálogo continuava a oferecê-la. Marca-se
+    # como depreciada em vez de a apagar, para não partir os incidentes que já a
+    # referem.
+    for technique_id in revoked_ids - loaded_ids:
+        if (stale := existing_techniques.get(technique_id)) is not None:
+            stale.is_deprecated = True
 
     await session.flush()
 
