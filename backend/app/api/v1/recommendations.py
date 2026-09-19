@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,12 +61,28 @@ async def list_recommendations(
 ) -> Page[RecommendationRead]:
     stmt = select(Recommendation)
 
-    if estado is not None:
-        stmt = stmt.where(Recommendation.status == estado)
-    else:
-        # Por omissão só interessa o que está por decidir: a lista serve para
-        # trabalhar, não para consultar histórico.
-        stmt = stmt.where(Recommendation.status == RecommendationStatus.PENDENTE)
+    # Por omissão só interessa o que está por decidir: a lista serve para
+    # trabalhar, não para consultar histórico.
+    pedido = estado if estado is not None else RecommendationStatus.PENDENTE
+    stmt = stmt.where(Recommendation.status == pedido)
+
+    if pedido is RecommendationStatus.PENDENTE:
+        # Estar por decidir exclui o que já venceu. `status` é uma
+        # denormalização: a coluna só passa a EXPIRADA quando alguém recalcula,
+        # pelo que o facto autoritativo é `expires_at`. Confiar na coluna
+        # deixaria a fila a oferecer propostas caducadas até ao varrimento
+        # seguinte — e a filtrar aqui, `?estado=PENDENTE` explícito tem de dar o
+        # mesmo que a omissão, senão passar o filtro à mão contornava a regra.
+        #
+        # O instante é calculado em Python de propósito. O `now()` do PostgreSQL
+        # é o do início da transacção, e usá-lo faria a fronteira depender de
+        # quando o pedido começou em vez de quando a pergunta é feita.
+        stmt = stmt.where(
+            or_(
+                Recommendation.expires_at.is_(None),
+                Recommendation.expires_at > datetime.now(UTC),
+            )
+        )
     if tipo is not None:
         stmt = stmt.where(Recommendation.kind == tipo)
     if alvo is not None:

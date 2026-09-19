@@ -91,6 +91,44 @@ async def test_a_fila_nao_mostra_recomendacoes_vencidas(cliente, sessao, token_a
     assert str(vencida.id) not in {r["id"] for r in fila["itens"]}
 
 
+async def test_pedir_pendentes_a_mao_da_o_mesmo_que_a_omissao(
+    cliente, sessao, token_analista
+):
+    """A regra não pode depender de o filtro ser omitido.
+
+    A primeira correcção excluía as vencidas só quando `estado` não vinha no
+    pedido. Passar `?estado=PENDENTE` à mão — que é o que a interface faz ao
+    mostrar o filtro escolhido — voltava a trazê-las, pelo que a regra
+    contornava-se sem intenção nenhuma.
+    """
+    alerta = await _alerta(sessao)
+    # Tipos diferentes de propósito: `uq_recommendations_pendente_por_alvo`
+    # impede duas propostas PENDENTES do mesmo tipo sobre o mesmo alvo, o que é
+    # a regra que evita o motor empilhar duplicados.
+    vencida = await _recomendacao(
+        sessao, alerta, {"operacao": "ALTERAR_ESTADO_ALERTA", "de": "NOVO", "para": "FALSO_POSITIVO"},
+        tipo=RecommendationKind.FALSO_POSITIVO,
+        expira=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    viva = await _recomendacao(
+        sessao, alerta, {"operacao": "ALTERAR_ESTADO_ALERTA", "de": "NOVO", "para": "DESCARTADO"},
+        tipo=RecommendationKind.TRIAGEM,
+        expira=datetime.now(UTC) + timedelta(days=1),
+    )
+
+    fila = (
+        await cliente.get(
+            "/api/recommendations?estado=PENDENTE", headers=cabecalho(token_analista)
+        )
+    ).json()
+    presentes = {r["id"] for r in fila["itens"]}
+
+    assert str(vencida.id) not in presentes, "o filtro explícito trouxe uma vencida"
+    assert str(viva.id) in presentes, (
+        "excluiu uma proposta dentro da validade — o filtro está a cortar demasiado"
+    )
+
+
 # ------------------------------------------------------------- aplicadores
 async def test_triagem_por_recomendacao_aplica_o_falso_positivo(cliente, sessao, token_analista):
     alerta = await _alerta(sessao)

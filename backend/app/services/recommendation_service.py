@@ -252,6 +252,40 @@ async def decidir(
             details={"estado": rec.status.value},
         )
 
+    # A validade era imposta só pelo recálculo global, o que fazia depender uma
+    # regra de um varrimento periódico: entre o vencimento e o recálculo
+    # seguinte, a proposta continuava a aplicar-se. Uma recomendação venceu
+    # porque o fundamento que a sustentava deixou de ser actual — aplicá-la
+    # depois altera o alvo com base em indícios que já não valem.
+    #
+    # Marca-se aqui, em vez de apenas recusar: quem tentou decidir mostrou que
+    # a proposta está a ser vista, e deixá-la PENDENTE faria reaparecer o mesmo
+    # erro ao próximo analista.
+    if rec.expires_at is not None and rec.expires_at <= datetime.now(UTC):
+        rec.status = RecommendationStatus.EXPIRADA
+        rec.decision_note = "Expirada sem decisão."
+        await audit.record_denied(
+            session,
+            ctx,
+            action="DECIDIR_RECOMENDACAO",
+            resource_type="recomendacao",
+            resource_id=rec.id,
+            reason=(
+                f"a validade expirou em {rec.expires_at:%Y-%m-%d %H:%M} UTC; "
+                "o alvo não foi alterado"
+            ),
+        )
+        # Consolidamos a expiração e o registo antes de levantar: a excepção faz
+        # rollback da transacção do pedido e levaria ambos com ela. É o mesmo
+        # procedimento que `require()` usa ao registar um acesso negado.
+        await session.commit()
+        raise ConflictError(
+            f"A validade desta recomendação expirou em {rec.expires_at:%Y-%m-%d %H:%M} "
+            "UTC e o fundamento que a sustentava deixou de ser actual. "
+            "Recalcule as recomendações do alvo para obter uma proposta nova.",
+            details={"expirou_em": rec.expires_at.isoformat()},
+        )
+
     referencia = await descrever_alvo(session, rec)
     rec.status = RecommendationStatus.ACEITE if aceitar else RecommendationStatus.REJEITADA
     rec.decided_at = datetime.now(UTC)
@@ -367,11 +401,27 @@ async def _carregar_incidente(session: AsyncSession, rec: Recommendation) -> Inc
 async def _aplicar_estado_alerta(
     session: AsyncSession, ctx: AuditContext, rec: Recommendation
 ) -> tuple[bool, str]:
-    from app.core.enums import ALERT_TRANSITIONS
+    from app.core.enums import (
+        ALERT_STATES_REQUIRING_INCIDENT,
+        ALERT_TRANSITIONS,
+    )
     from app.core.errors import InvalidTransitionError
 
     alerta = await _carregar_alerta(session, rec)
     destino = AlertStatus(rec.proposed_change["para"])
+
+    # A mesma guarda da triagem à mão. O motor não gera hoje uma proposta
+    # destas, mas a regra não pode depender disso: uma recomendação gravada por
+    # outro caminho deixaria aqui um alerta PROMOVIDO sem incidente nenhum.
+    if destino in ALERT_STATES_REQUIRING_INCIDENT:
+        raise ValidationError(
+            f"Um alerta só fica {destino.value} ao ser promovido ou ligado a um "
+            "incidente, o que cria as observações e importa as técnicas. "
+            "Aplicar só o estado deixaria o alerta fora da fila de triagem e "
+            "fora de qualquer incidente.",
+            code="ESTADO_EXIGE_INCIDENTE",
+        )
+
     permitidas = ALERT_TRANSITIONS.get(alerta.status, frozenset())
     if destino not in permitidas:
         raise InvalidTransitionError(

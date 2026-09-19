@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.core import audit
 from app.core.deps import AuditDep, SessionDep, require
 from app.core.enums import (
+    ALERT_STATES_REQUIRING_INCIDENT,
     ALERT_TRANSITIONS,
     AlertStatus,
     Severity,
@@ -42,7 +43,9 @@ events_router = APIRouter(prefix="/events", tags=["Eventos"])
 #: Estados que só a promoção e a ligação podem dar, porque são elas que criam o
 #: incidente ou a ligação que lhes dá sentido. Pela triagem, o alerta ficava
 #: "promovido" sem ter originado nada.
-STATES_REQUIRING_INCIDENT = frozenset({AlertStatus.PROMOVIDO, AlertStatus.CORRELACIONADO})
+#: Alias histórico. A definição vive em `core.enums`, ao lado das transições,
+#: para que todas as portas a partilhem em vez de cada uma ter a sua.
+STATES_REQUIRING_INCIDENT = ALERT_STATES_REQUIRING_INCIDENT
 
 SORTABLE = {
     "created_at", "last_event_at", "first_event_at", "triage_score",

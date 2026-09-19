@@ -172,6 +172,21 @@ ALERT_TRANSITIONS: dict[AlertStatus, frozenset[AlertStatus]] = {
 
 ALERT_OPEN_STATUSES = frozenset({AlertStatus.NOVO, AlertStatus.EM_TRIAGEM})
 
+#: Estados que um alerta só pode atingir **ligando-o a um incidente**.
+#:
+#: `ALERT_TRANSITIONS` diz que a passagem é legítima; isto diz que não é
+#: legítima por si só. Um alerta PROMOVIDO sem `incident_id` mente duas vezes:
+#: sai da fila de triagem como se tivesse sido tratado e não aparece em
+#: incidente nenhum, pelo que o trabalho desaparece sem deixar rasto.
+#:
+#: Vive aqui, e não na rota que primeiro a verificou, porque uma regra guardada
+#: numa porta é uma regra que as outras portas esquecem — foi assim que a
+#: aplicação de recomendações a perdeu depois de a triagem manual a ganhar.
+#: Quem atingir estes estados tem de passar por `promote_alert` ou `link_alert`.
+ALERT_STATES_REQUIRING_INCIDENT = frozenset({
+    AlertStatus.PROMOVIDO, AlertStatus.CORRELACIONADO,
+})
+
 
 class TaskStatus(StrEnum):
     PENDENTE = "PENDENTE"
