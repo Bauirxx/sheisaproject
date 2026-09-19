@@ -368,7 +368,7 @@ async def list_techniques(
     _: Annotated[object, Depends(require(Permission.MITRE_READ))],
     params: Annotated[PageParams, Depends(page_params)],
     q: Annotated[str | None, Query(description="Pesquisa por identificador ou nome.")] = None,
-    taccica: Annotated[str | None, Query(description="Nome curto da táctica.")] = None,
+    tactica: Annotated[str | None, Query(description="Nome curto da táctica.")] = None,
     incluir_subtecnicas: Annotated[bool, Query()] = True,
 ) -> Page[MitreTechniqueRead]:
     stmt = select(MitreTechnique).where(MitreTechnique.is_deprecated.is_(False))
@@ -377,8 +377,8 @@ async def list_techniques(
         stmt = stmt.where(
             or_(MitreTechnique.technique_id.ilike(pattern), MitreTechnique.name.ilike(pattern))
         )
-    if taccica:
-        stmt = stmt.where(MitreTechnique.tactic_shortnames.contains([taccica]))
+    if tactica:
+        stmt = stmt.where(MitreTechnique.tactic_shortnames.contains([tactica]))
     if not incluir_subtecnicas:
         stmt = stmt.where(MitreTechnique.is_subtechnique.is_(False))
 

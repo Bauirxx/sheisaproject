@@ -33,7 +33,10 @@ import {
   Vazio,
 } from "@/componentes/comuns";
 import {
+  ateISO,
   CampoDeSelecao,
+  desdeISO,
+  FiltroDePeriodo,
   Paginacao,
   SEVERIDADES,
   useFiltros,
@@ -228,6 +231,8 @@ export function Eventos() {
     severidade: ler("severidade"),
     ip: ler("ip"),
     host: ler("host"),
+    desde: desdeISO(ler("desde")),
+    ate: ateISO(ler("ate")),
     page: ler("page", "1"),
     size: "25",
     sort: ler("sort", "-occurred_at"),
@@ -239,11 +244,9 @@ export function Eventos() {
     placeholderData: keepPreviousData,
   });
 
-  const temFiltros =
-    ler("fonte") !== "" ||
-    ler("severidade") !== "" ||
-    ler("ip") !== "" ||
-    ler("host") !== "";
+  const temFiltros = [
+    "fonte", "severidade", "ip", "host", "desde", "ate",
+  ].some((c) => ler(c) !== "");
 
   return (
     <>
@@ -309,6 +312,7 @@ export function Eventos() {
             }}
           />
         </div>
+        <FiltroDePeriodo desde={ler("desde")} ate={ler("ate")} aoMudar={definir} />
         {temFiltros ? (
           <button
             type="button"

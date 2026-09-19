@@ -24,10 +24,14 @@ import {
   Vazio,
 } from "@/componentes/comuns";
 import {
+  ateISO,
   CATEGORIAS,
   CampoDeSelecao,
+  desdeISO,
   ESTADOS_DO_INCIDENTE,
+  FiltroDePeriodo,
   Paginacao,
+  PRIORIDADES,
   SEVERIDADES,
   useFiltros,
 } from "@/componentes/listagem";
@@ -62,6 +66,11 @@ export function Incidentes() {
     estado: ler("estado"),
     severidade: ler("severidade"),
     categoria: ler("categoria"),
+    prioridade: ler("prioridade"),
+    // O RF16 pede explicitamente o filtro por período. `ateISO` inclui o dia
+    // inteiro: sem isso, "até hoje" excluía tudo o que aconteceu hoje.
+    desde: desdeISO(ler("desde")),
+    ate: ateISO(ler("ate")),
     apenas_activos: ler("apenas_activos"),
     sem_responsavel: ler("sem_responsavel"),
     page: ler("page", "1"),
@@ -76,7 +85,10 @@ export function Incidentes() {
     placeholderData: keepPreviousData,
   });
 
-  const temFiltros = ["q", "estado", "severidade", "categoria", "apenas_activos", "sem_responsavel"]
+  const temFiltros = [
+    "q", "estado", "severidade", "categoria", "prioridade", "desde", "ate",
+    "apenas_activos", "sem_responsavel",
+  ]
     .some((chave) => ler(chave) !== "");
 
   return (
@@ -131,6 +143,13 @@ export function Incidentes() {
           opcoes={CATEGORIAS}
           aoMudar={(v) => definir({ categoria: v })}
         />
+        <CampoDeSelecao
+          etiqueta="Prioridade"
+          valor={ler("prioridade")}
+          opcoes={PRIORIDADES}
+          aoMudar={(v) => definir({ prioridade: v })}
+        />
+        <FiltroDePeriodo desde={ler("desde")} ate={ler("ate")} aoMudar={definir} />
         <CampoDeSelecao
           etiqueta="Âmbito"
           valor={ler("apenas_activos")}

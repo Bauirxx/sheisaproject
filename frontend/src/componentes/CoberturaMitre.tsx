@@ -135,15 +135,15 @@ export function CoberturaMitre() {
           alignItems: "start",
         }}
       >
-        {ordenadas.map((taccica, indice) => (
-          <div key={taccica.id} className="cartao pilha" style={{ gap: "var(--espaco-2)" }}>
+        {ordenadas.map((tactica, indice) => (
+          <div key={tactica.id} className="cartao pilha" style={{ gap: "var(--espaco-2)" }}>
             <div className="pilha" style={{ gap: 0 }}>
               <span className="terciario mono">
-                {indice + 1}. {taccica.tactic_id}
+                {indice + 1}. {tactica.tactic_id}
               </span>
-              <strong>{taccica.name}</strong>
+              <strong>{tactica.name}</strong>
             </div>
-            {(porTaccica.get(taccica.name) ?? []).map((t) => (
+            {(porTaccica.get(tactica.name) ?? []).map((t) => (
               <CartaoDaTecnica key={t.technique_id} entrada={t} />
             ))}
           </div>

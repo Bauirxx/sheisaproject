@@ -27,8 +27,11 @@ import {
 } from "@/componentes/comuns";
 import { TriagemDeAlerta } from "@/componentes/TriagemDeAlerta";
 import {
+  ateISO,
   CampoDeSelecao,
+  desdeISO,
   ESTADOS_DO_ALERTA,
+  FiltroDePeriodo,
   Paginacao,
   SEVERIDADES,
   useFiltros,
@@ -174,6 +177,12 @@ export function Alertas() {
   const parametros = {
     estado: ler("estado"),
     severidade: ler("severidade"),
+    // `sem_incidente` é a fila real de trabalho: o alerta que ainda não está
+    // ligado a incidente nenhum é o que continua à espera de alguém.
+    sem_incidente: ler("sem_incidente"),
+    pontuacao_minima: ler("pontuacao_minima"),
+    desde: desdeISO(ler("desde")),
+    ate: ateISO(ler("ate")),
     page: ler("page", "1"),
     size: "25",
     sort: ler("sort", "-triage_score"),
@@ -185,7 +194,9 @@ export function Alertas() {
     placeholderData: keepPreviousData,
   });
 
-  const temFiltros = ler("estado") !== "" || ler("severidade") !== "";
+  const temFiltros = [
+    "estado", "severidade", "sem_incidente", "pontuacao_minima", "desde", "ate",
+  ].some((c) => ler(c) !== "");
 
   return (
     <>
@@ -213,6 +224,25 @@ export function Alertas() {
           opcoes={SEVERIDADES}
           aoMudar={(v) => definir({ severidade: v })}
         />
+        <CampoDeSelecao
+          etiqueta="Âmbito"
+          valor={ler("sem_incidente")}
+          opcoes={[{ valor: "true", rotulo: "Sem incidente associado" }]}
+          aoMudar={(v) => definir({ sem_incidente: v })}
+          todos="Todos"
+        />
+        <CampoDeSelecao
+          etiqueta="Pontuação mínima"
+          valor={ler("pontuacao_minima")}
+          opcoes={[
+            { valor: "40", rotulo: "40 ou mais" },
+            { valor: "65", rotulo: "65 ou mais (limiar de promoção)" },
+            { valor: "80", rotulo: "80 ou mais" },
+          ]}
+          aoMudar={(v) => definir({ pontuacao_minima: v })}
+          todos="Qualquer"
+        />
+        <FiltroDePeriodo desde={ler("desde")} ate={ler("ate")} aoMudar={definir} />
         {temFiltros ? (
           <button type="button" className="botao botao--discreto" onClick={limpar}>
             Limpar filtros

@@ -22,7 +22,14 @@ import { useState } from "react";
 import { consulta, pedir } from "@/api/cliente";
 import type { Pagina } from "@/api/tipos";
 import { Carregando, Erro, instante, Vazio } from "@/componentes/comuns";
-import { CampoDeSelecao, Paginacao, useFiltros } from "@/componentes/listagem";
+import {
+  ateISO,
+  CampoDeSelecao,
+  desdeISO,
+  FiltroDePeriodo,
+  Paginacao,
+  useFiltros,
+} from "@/componentes/listagem";
 
 interface RegistoDeAuditoria {
   id: string;
@@ -162,6 +169,12 @@ export function Auditoria() {
     q: ler("q"),
     resultado: ler("resultado"),
     accao: ler("accao"),
+    actor: ler("actor"),
+    tipo_recurso: ler("tipo_recurso"),
+    // As datas vão em ISO; `ateISO` inclui o dia inteiro, senão um intervalo
+    // "até hoje" excluía tudo o que aconteceu hoje.
+    desde: desdeISO(ler("desde")),
+    ate: ateISO(ler("ate")),
     page: ler("page", "1"),
     size: "30",
   };
@@ -178,7 +191,17 @@ export function Auditoria() {
     retry: false,
   });
 
-  const temFiltros = ["q", "resultado", "accao"].some((c) => ler(c) !== "");
+  // Os tipos vêm do próprio registo. Uma lista fixa no código ofereceria
+  // filtros para tipos que já ninguém escreve e faltaria os que aparecerem.
+  const { data: tiposDeRecurso } = useQuery({
+    queryKey: ["tipos-de-recurso-auditados"],
+    queryFn: () => pedir<string[]>("/audit/resource-types"),
+    retry: false,
+  });
+
+  const temFiltros = [
+    "q", "resultado", "accao", "actor", "tipo_recurso", "desde", "ate",
+  ].some((c) => ler(c) !== "");
 
   return (
     <>
@@ -224,6 +247,35 @@ export function Auditoria() {
             aoMudar={(v) => definir({ accao: v })}
           />
         ) : null}
+        <div className="campo">
+          <label className="campo__etiqueta" htmlFor="filtro-actor">
+            Utilizador
+          </label>
+          <input
+            id="filtro-actor"
+            className="entrada"
+            type="search"
+            placeholder="endereço exacto"
+            defaultValue={ler("actor")}
+            onBlur={(e) => definir({ actor: e.target.value.trim() })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") definir({ actor: e.currentTarget.value.trim() });
+            }}
+          />
+        </div>
+        {tiposDeRecurso && tiposDeRecurso.length > 0 ? (
+          <CampoDeSelecao
+            etiqueta="Tipo de recurso"
+            valor={ler("tipo_recurso")}
+            opcoes={tiposDeRecurso.map((t) => ({ valor: t, rotulo: t }))}
+            aoMudar={(v) => definir({ tipo_recurso: v })}
+          />
+        ) : null}
+        <FiltroDePeriodo
+          desde={ler("desde")}
+          ate={ler("ate")}
+          aoMudar={definir}
+        />
         {temFiltros ? (
           <button type="button" className="botao botao--discreto" onClick={limpar}>
             Limpar filtros

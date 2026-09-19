@@ -124,6 +124,83 @@ export function CampoDeSelecao({
   );
 }
 
+/**
+ * Filtro por período, em dois campos de data.
+ *
+ * Guarda-se a data tal como o `input type="date"` a dá (`AAAA-MM-DD`) e
+ * converte-se no momento de a enviar. Enviar o valor cru daria um intervalo
+ * errado por um dia inteiro: `ate=2026-09-19` significa a meia-noite desse dia,
+ * pelo que tudo o que aconteceu durante o dia 19 ficava de fora — e um intervalo
+ * que exclui silenciosamente o último dia é pior do que não ter filtro, porque
+ * dá um número que parece completo.
+ *
+ * `desdeISO`/`ateISO` fazem essa conversão; use-os ao montar os parâmetros.
+ */
+export function FiltroDePeriodo({
+  desde,
+  ate,
+  aoMudar,
+}: {
+  desde: string;
+  ate: string;
+  aoMudar: (alteracoes: { desde?: string; ate?: string }) => void;
+}) {
+  return (
+    <>
+      <div className="campo">
+        <label className="campo__etiqueta" htmlFor="filtro-desde">
+          De
+        </label>
+        <input
+          id="filtro-desde"
+          type="date"
+          value={desde}
+          max={ate || undefined}
+          onChange={(e) => aoMudar({ desde: e.target.value })}
+        />
+      </div>
+      <div className="campo">
+        <label className="campo__etiqueta" htmlFor="filtro-ate">
+          Até
+        </label>
+        <input
+          id="filtro-ate"
+          type="date"
+          value={ate}
+          min={desde || undefined}
+          onChange={(e) => aoMudar({ ate: e.target.value })}
+        />
+      </div>
+    </>
+  );
+}
+
+/** Início do dia indicado, em ISO. Vazio quando não há data. */
+export function desdeISO(data: string): string {
+  if (!data) return "";
+  return new Date(`${data}T00:00:00`).toISOString();
+}
+
+/**
+ * **Fim** do dia indicado, em ISO.
+ *
+ * É aqui que está a subtileza: o utilizador que escreve "até 19" quer incluir o
+ * dia 19 inteiro, e não pará-lo à meia-noite.
+ */
+export function ateISO(data: string): string {
+  if (!data) return "";
+  return new Date(`${data}T23:59:59.999`).toISOString();
+}
+
+//: Rótulos das prioridades. O código (P1..P4) é o que a API usa; o rótulo
+//: explica-o, porque "P2" não diz nada a quem vê a lista pela primeira vez.
+export const PRIORIDADES = [
+  { valor: "P1", rotulo: "P1 — urgente" },
+  { valor: "P2", rotulo: "P2 — elevada" },
+  { valor: "P3", rotulo: "P3 — normal" },
+  { valor: "P4", rotulo: "P4 — planeada" },
+];
+
 export const SEVERIDADES = [
   { valor: "CRITICA", rotulo: "Crítica" },
   { valor: "ALTA", rotulo: "Alta" },

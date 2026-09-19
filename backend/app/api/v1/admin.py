@@ -334,6 +334,27 @@ async def audit_actions(
     return [a for (a,) in result.all()]
 
 
+@audit_router.get(
+    "/resource-types",
+    response_model=list[str],
+    summary="Tipos de recurso registados",
+    description=(
+        "Lidos do próprio registo, e não de uma lista fixa: um tipo que deixasse "
+        "de ser escrito continuaria a ser oferecido como filtro, e um tipo novo "
+        "não apareceria. Inclui valores históricos — se um deles não parecer um "
+        "tipo de recurso, é porque foi escrito assim e o registo é imutável."
+    ),
+)
+async def audit_resource_types(
+    session: SessionDep,
+    _: Annotated[object, Depends(require(Permission.AUDIT_READ))],
+) -> list[str]:
+    result = await session.execute(
+        select(AuditLog.resource_type).distinct().order_by(AuditLog.resource_type)
+    )
+    return [t for (t,) in result.all()]
+
+
 # --------------------------------------------------------------- integrações
 class IntegrationRead(ApiModel):
     id: uuid.UUID

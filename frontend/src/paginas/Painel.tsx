@@ -15,7 +15,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
-import { pedir } from "@/api/cliente";
+import { consulta, pedir } from "@/api/cliente";
 import type {
   CargaDeAnalista,
   Distribuicao,
@@ -30,6 +30,7 @@ import {
   duracaoLegivel,
   SerieTemporal,
 } from "@/componentes/graficos";
+import { CampoDeSelecao, useFiltros } from "@/componentes/listagem";
 
 function Indicador({
   rotulo,
@@ -64,10 +65,24 @@ function Indicador({
   return <div className={classe}>{conteudo}</div>;
 }
 
+//: Janelas oferecidas. A API aceita 1 a 365; estas são as que se usam ao
+//: responder a "como corremos" — a semana, o mês, o trimestre, o ano.
+const JANELAS = [
+  { valor: "7", rotulo: "7 dias" },
+  { valor: "30", rotulo: "30 dias" },
+  { valor: "90", rotulo: "90 dias" },
+  { valor: "365", rotulo: "1 ano" },
+];
+
 export function Painel() {
+  const { ler, definir } = useFiltros();
+  // A janela vai na barra de endereço, e não em estado local, para que um painel
+  // possa ser partilhado por ligação com a janela que quem o enviou estava a ver.
+  const dias = ler("dias", "30");
+
   const { data, isPending, error } = useQuery({
-    queryKey: ["painel"],
-    queryFn: () => pedir<DadosDoPainel>("/dashboard"),
+    queryKey: ["painel", dias],
+    queryFn: () => pedir<DadosDoPainel>(`/dashboard${consulta({ dias })}`),
     // Uma sala de operações quer números frescos; 30 segundos é o compromisso
     // entre estar actualizado e não martelar a base de dados.
     refetchInterval: 30_000,
@@ -76,18 +91,18 @@ export function Painel() {
   // Consultas separadas de propósito: cada uma é uma agregação distinta e
   // falhar uma não deve deixar o painel inteiro em branco.
   const distribuicao = useQuery({
-    queryKey: ["painel-distribuicao"],
-    queryFn: () => pedir<Distribuicao>("/dashboard/distribution"),
+    queryKey: ["painel-distribuicao", dias],
+    queryFn: () => pedir<Distribuicao>(`/dashboard/distribution${consulta({ dias })}`),
     refetchInterval: 60_000,
   });
   const tendencia = useQuery({
-    queryKey: ["painel-tendencia"],
-    queryFn: () => pedir<PontoDaTendencia[]>("/dashboard/trend"),
+    queryKey: ["painel-tendencia", dias],
+    queryFn: () => pedir<PontoDaTendencia[]>(`/dashboard/trend${consulta({ dias })}`),
     refetchInterval: 60_000,
   });
   const metricas = useQuery({
-    queryKey: ["painel-metricas"],
-    queryFn: () => pedir<MetricasDeResposta>("/dashboard/response-metrics"),
+    queryKey: ["painel-metricas", dias],
+    queryFn: () => pedir<MetricasDeResposta>(`/dashboard/response-metrics${consulta({ dias })}`),
     refetchInterval: 60_000,
   });
   const carga = useQuery({
@@ -109,8 +124,18 @@ export function Painel() {
           <p className="pagina__descricao">
             Situação dos últimos {data.periodo_dias} dias. Todos os valores são
             contados na base de dados no momento do pedido — não há números em
-            cache.
+            cache. A janela é a que está escolhida à direita; o número mostrado
+            vem do servidor, pelo que confirma qual foi de facto aplicada.
           </p>
+        </div>
+        <div className="pagina__accoes">
+          <CampoDeSelecao
+            etiqueta="Janela"
+            valor={dias}
+            opcoes={JANELAS}
+            aoMudar={(v) => definir({ dias: v || "30" })}
+            todos="30 dias"
+          />
         </div>
       </div>
 
