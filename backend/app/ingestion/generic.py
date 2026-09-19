@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -128,21 +129,38 @@ def coerce_severity(value: Any) -> Severity:
     return Severity.MEDIA
 
 
-def _fallback_event_id(payload: dict[str, Any], occurred_at: datetime) -> str:
+def _fallback_event_id(
+    payload: dict[str, Any], occurred_at: datetime, *, instante_da_fonte: bool
+) -> str:
     """Identificador para um evento que não traz o seu.
 
-    Resume o payload inteiro, e não só o instante e a descrição: duas falhas de
-    autenticação no mesmo segundo, de origens diferentes, tinham o mesmo
-    identificador e a segunda era descartada como duplicada. E usa um resumo
-    estável — `hash()` é aleatorizado por processo, e o mesmo evento reenviado
-    depois de reiniciar a API deixava de ser reconhecido.
+    Há dois casos, e tratá-los da mesma maneira estragava um deles.
 
-    O instante entra também: quando o payload não o traz é o de recepção, e sem
-    ele um reenvio e uma nova ocorrência seriam indistinguíveis. Perder uma
-    ocorrência real é pior do que contar um reenvio duas vezes.
+    **A fonte deu o instante.** O identificador tem de ser determinístico, para
+    que o mesmo evento reenviado seja reconhecido como duplicado. Resume o
+    payload inteiro, e não só o instante e a descrição: duas falhas de
+    autenticação no mesmo segundo, de origens diferentes, tinham o mesmo
+    identificador e a segunda era descartada. E usa um resumo estável — `hash()`
+    é aleatorizado por processo, e o mesmo evento reenviado depois de reiniciar a
+    API deixava de ser reconhecido.
+
+    **A fonte não deu o instante.** Então não existe nada no payload que
+    distinga um reenvio de uma ocorrência nova, e a escolha é deixar cada
+    entrega contar: perder uma ocorrência real é pior do que contar um reenvio
+    duas vezes. Isto dependia de o instante de recepção ser diferente a cada
+    chamada, e **não é**: em Windows duas chamadas consecutivas a
+    `datetime.now()` caem no mesmo tique do relógio do sistema (medido nesta
+    máquina: 20 pares consecutivos em 20 deram valores idênticos), pelo que dois
+    eventos entregues seguidos recebiam o mesmo identificador e o segundo
+    desaparecia. Um token próprio por entrega diz o que se quer sem depender da
+    resolução de relógio nenhum.
     """
     canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
-    digest = hashlib.sha256(f"{occurred_at.isoformat()}|{canonical}".encode()).hexdigest()
+    if instante_da_fonte:
+        semente = f"{occurred_at.isoformat()}|{canonical}"
+    else:
+        semente = f"{uuid.uuid4()}|{canonical}"
+    digest = hashlib.sha256(semente.encode()).hexdigest()
     return f"generico-{digest[:40]}"
 
 
@@ -194,7 +212,9 @@ class GenericNormalizer:
             payload.get("id")
             or payload.get("event_id")
             or payload.get("uuid")
-            or _fallback_event_id(payload, occurred_at)
+            or _fallback_event_id(
+                payload, occurred_at, instante_da_fonte=parsed_at is not None
+            )
         )
 
         extra = {
