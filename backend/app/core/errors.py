@@ -96,10 +96,21 @@ class AuthorizationError(SheisaError):
 class NotFoundError(SheisaError):
     status_code = status.HTTP_404_NOT_FOUND
     code = "NAO_ENCONTRADO"
-    message = "Recurso não encontrado."
+    message = "Recurso inexistente."
 
     def __init__(self, resource: str = "Recurso", identifier: Any = None, **kwargs: Any) -> None:
-        msg = f"{resource} não encontrado."
+        # "inexistente" e nao "nao encontrado": o adjectivo e invariavel em
+        # genero, e a mensagem e construida com o nome do recurso, que tanto e
+        # masculino ("Alerta", "Incidente") como feminino ("Equipa", "Acção",
+        # "Comunicação"). Metade das mensagens da plataforma dizia "Equipa nao
+        # encontrado" e "Evidência nao encontrado" -- num produto cuja regra e
+        # ser inteiramente em portugues, e um erro que se le.
+        #
+        # A alternativa era passar o genero em cada chamada, o que exigiria
+        # acertar em vinte sitios e continuaria a falhar no vigesimo primeiro.
+        # Inferir da terminacao nao serve: "Alerta" termina em "a" e e
+        # masculino. O adjectivo invariavel resolve os vinte e tres de uma vez.
+        msg = f"{resource} inexistente."
         details = kwargs.pop("details", {}) or {}
         if identifier is not None:
             details["identificador"] = str(identifier)

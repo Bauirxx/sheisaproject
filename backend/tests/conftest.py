@@ -104,6 +104,9 @@ def semente() -> dict:
 async def _preparar() -> dict:
     from sqlalchemy import select
 
+    # `Permission` colide com o modelo do mesmo nome; a alcunha deixa claro que
+    # é o enum do código e não a linha da base de dados.
+    from app.core.permissions import Permission as CorePermission
     from app.models.identity import Role, User
     from app.services import bootstrap
 
@@ -113,8 +116,25 @@ async def _preparar() -> dict:
 
         factory = async_sessionmaker(bind=motor, expire_on_commit=False)
         async with factory() as sessao:
+            # Os códigos criados têm de ser passados adiante: `sync_roles` só
+            # concede aos perfis **existentes** as permissões que nasceram nesta
+            # execução, e o conftest descartava o valor de retorno. O efeito era
+            # silencioso e persistente — a permissão era criada na primeira
+            # corrida depois de ser acrescentada ao código, e a partir daí
+            # deixava de ser "nova", pelo que os perfis nunca a recebiam. Testes
+            # de autorização passavam a falhar com 403 sem que nada no código de
+            # produção estivesse errado.
+            #
+            # Passa-se **todos** os códigos e não só os criados: numa base de
+            # teste, o estado tem de espelhar `ROLE_PERMISSIONS` exactamente,
+            # porque é contra esse mapa que os testes afirmam. Em produção a
+            # prudência de só acrescentar o que é novo faz sentido — respeita
+            # ajustes deliberados de um administrador —, mas aqui qualquer
+            # divergência torna um teste de permissões indistinguível de um
+            # que passa por acidente.
             await bootstrap.sync_permissions(sessao)
-            await bootstrap.sync_roles(sessao)
+            todos = [p.value for p in CorePermission]
+            await bootstrap.sync_roles(sessao, todos)
             equipa = await bootstrap.ensure_default_team(sessao)
 
             identificadores: dict[str, uuid.UUID] = {}
