@@ -789,3 +789,69 @@ export interface VistaDoCentroDeOperacoes {
     prazo: string | null;
   }[];
 }
+
+// ------------------------------- comunicações de incidente (§5 · §37 · RTIR)
+
+/** Estado devolvido a quem comunicou, sem dados internos (§37). */
+export interface EstadoPublicoDaComunicacao {
+  referencia: string;
+  estado: string;
+  /** Frase escrita para ser lida por alguém de fora da organização. */
+  situacao: string;
+  recebida_em: string;
+  avaliada_em: string | null;
+  aviso_de_recepcao_enviado: boolean;
+}
+
+/** Resposta à submissão. O código aparece uma única vez. */
+export interface ComunicacaoSubmetida {
+  referencia: string;
+  codigo_de_acompanhamento: string;
+  aviso: string;
+}
+
+/** Incidente ligado a uma comunicação, no mínimo para navegar até ele. */
+export interface IncidenteDaComunicacao {
+  id: string;
+  reference: string;
+  title: string;
+  status: string;
+  severity: string;
+}
+
+/**
+ * Linha da fila de comunicações.
+ *
+ * `claimed_*` é o que **quem comunicou afirmou** — nunca a avaliação da
+ * plataforma. A interface tem de manter essa distinção visível, senão uma
+ * afirmação de terceiros passa por conclusão própria.
+ */
+export interface ComunicacaoResumo {
+  id: string;
+  reference: string;
+  status: string;
+  channel: string;
+  subject: string;
+  reporter_name: string;
+  reporter_email: string;
+  reporter_organisation: string;
+  claimed_category: string | null;
+  claimed_severity: Severidade | null;
+  received_at: string;
+  triaged_at: string | null;
+  /** Quantas vezes quem comunicou foi ver o estado. */
+  tracking_views: number;
+  acknowledged_at: string | null;
+  incidents: IncidenteDaComunicacao[];
+}
+
+export interface Comunicacao extends ComunicacaoResumo {
+  description: string;
+  reporter_phone: string;
+  reported_indicators: string;
+  submitted_from_ip: string | null;
+  channel_metadata: Record<string, unknown>;
+  triage_note: string;
+  duplicate_of_reference: string | null;
+  triaged_by_email: string | null;
+}

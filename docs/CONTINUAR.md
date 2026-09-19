@@ -9,7 +9,7 @@
 > completo de decisões e defeitos, use [`ESTADO.md`](ESTADO.md). Este ficheiro é
 > o mais curto dos três de propósito: se crescer demasiado, deixa de ser lido.
 >
-> Última actualização: 2026-09-19 (requisitos RNF07, RNF12 e RF16).
+> Última actualização: 2026-09-19 (portal externo e comunicações de incidente).
 
 ---
 
@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 484 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 512 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -111,9 +111,9 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 484 a passar, 93% de cobertura |
+| Testes | 512 a passar |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
-| Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr — 48 quando a fila de aprovação está vazia, porque três só se verificam com pedidos pendentes |
+| Contrato | `verificar_contrato.py` confere 58 vistas contra a API a correr — menos três quando a fila de aprovação está vazia, porque só se verificam com pedidos pendentes |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
 
 **Cobertura de interface fechada.** Das 109 operações, 7 não têm ecrã e **não
@@ -335,6 +335,59 @@ auditoria de hoje que a versão ingénua perdia — um intervalo que corta o úl
 dia em silêncio é pior do que não ter filtro, porque dá um número que parece
 completo.
 
+### 4.7 Comunicações de incidente e portal externo — **feito** (§5 · §37)
+
+Era a única lacuna face ao RTIR que eu recomendaria construir, e é a que separa
+uma ferramenta de SOC interno de uma de CSIRT: **quem comunica um incidente não
+tem conta na plataforma, e não deve precisar de uma.** Um regulador recebe
+comunicações de constituintes que nunca serão utilizadores.
+
+**O modelo conserva a distinção que o RTIR acerta:** a comunicação não é o
+incidente, é matéria-prima. A relação é muitos-para-muitos porque as duas
+direcções acontecem — várias comunicações sobre a mesma campanha convergem num
+incidente, e uma comunicação sobre um ataque a vários sistemas pode dar origem a
+mais do que um. Um campo `incident_id` forçaria uma escolha que não existe.
+
+**`/comunicar` é a única rota fora do `ExigirSessao`**, e `POST /api/public/reports`
+a única escrita da plataforma sem autenticação. Tratada como tal: classe própria
+no limitador de taxa (20/min, contra 300 do geral — verificado a travar com 429
+à 19.ª submissão), limites de tamanho em todos os campos, e o endereço de origem
+registado para permitir investigar abuso.
+
+**O §37 diz que o utilizador externo nunca deve aceder a dados internos**, e é a
+regra com mais vigilância: `ReportPublicStatus` é um esquema **separado** do
+interno, com seis campos, e o que o define é o que não traz — nem o incidente
+ligado, nem quem avaliou, nem a nota de triagem. Dois testes verificam-no por
+*ausência* (procuram `INC-\d+`, endereços de analista, a nota e identificadores
+internos no corpo da resposta), e o `verificar_contrato.py` repete a verificação
+contra a API a correr. Um teste que confirmasse os campos certos continuaria a
+passar depois de alguém acrescentar um campo interno — foi assim que se escolheu
+verificar ausências.
+
+**O que o comunicante afirma fica separado do que a equipa conclui.** Os campos
+`claimed_category` e `claimed_severity` guardam a classificação de terceiros, e a
+interface marca-a com a etiqueta "afirma". Os indicadores que escreve ficam em
+texto e **não** são promovidos a IOC: um valor não verificado no catálogo global
+contaminaria a triagem de tudo o que o tocasse.
+
+**`ACEITE` exige um incidente ligado**, e a guarda vive numa passagem única
+(`_aplicar_estado`) por onde toda a mudança de estado tem de ir — não dentro de
+cada decisão. É a lição do defeito 54: uma regra guardada numa porta é uma regra
+que as outras portas esquecem.
+
+O código de acompanhamento é mostrado **uma única vez** (a base guarda o resumo
+SHA-256), a comparação é em tempo constante, e uma referência inexistente dá a
+mesma resposta que um código errado — as referências são sequenciais e
+distingui-los permitiria enumerá-las.
+
+**O que fica por fazer neste tema:** o canal de email. O modelo já tem
+`ReportChannel.EMAIL` e `channel_metadata` para preservar cabeçalhos, e
+`acknowledged_at` fica `None` enquanto nada for enviado — nunca se assume envio
+sem confirmação do servidor. Mas não há SMTP nem leitura de caixa: uma
+comunicação por email tem hoje de ser registada por um analista com canal
+`MANUAL`. Construí-lo exige um servidor de correio e credenciais, e a regra do §4
+manda que até lá o canal `EMAIL` não seja apresentado como disponível.
+
 ### 4.6 Parâmetros da API que a interface não usa
 
 Auditoria nova, ao nível do parâmetro (a anterior era ao nível da operação).
@@ -547,6 +600,41 @@ Confirme antes de assumir:
 from datetime import datetime, UTC
 print(sum(datetime.now(UTC) == datetime.now(UTC) for _ in range(20)), '/20 iguais')"
 ```
+
+### 5.18 Uma permissão nova não chega sozinha aos perfis que já existem
+
+`sync_roles` só concede aos perfis **existentes** as permissões que
+`sync_permissions` acabou de criar **nessa chamada** — e é o comportamento certo
+em produção, porque respeita ajustes deliberados de um administrador. Mas o
+`conftest` descartava o valor de retorno, pelo que os perfis de teste nunca
+recebiam nada de novo.
+
+O efeito é silencioso e persistente: a permissão nasce na primeira corrida
+depois de ser acrescentada ao código e, a partir daí, deixa de ser "nova". Testes
+de autorização passam a falhar com 403 sem que nada no código de produção esteja
+errado — e, na direcção oposta, um teste que verifique que alguém **não** tem uma
+permissão passa por acidente.
+
+O `conftest` passa agora **todos** os códigos, não só os criados: numa base de
+teste o estado tem de espelhar `ROLE_PERMISSIONS` exactamente, porque é contra
+esse mapa que os testes afirmam. Depois de acrescentar uma permissão, confirme
+com:
+
+```bash
+docker compose exec -T db-test psql -U sheisa -d sheisa_test -c   "select r.name, count(*) from roles r join role_permissions rp on rp.role_id=r.id group by 1 order by 1"
+```
+
+### 5.19 `NotFoundError` construía a mensagem no masculino
+
+`f"{recurso} não encontrado."` produzia "Equipa não encontrado" e "Evidência não
+encontrado" — metade dos vinte e três recursos da plataforma é feminina. Num
+produto cuja regra é ser inteiramente em português, é um erro que se lê, e passou
+a ser visível a quem comunica de fora.
+
+Resolvido com **"inexistente"**, que é invariável em género e serve os vinte e
+três de uma vez. Passar o género em cada chamada exigiria acertar em vinte sítios
+e continuaria a falhar no vigésimo primeiro; inferir da terminação não serve,
+porque "Alerta" termina em "a" e é masculino.
 
 ---
 

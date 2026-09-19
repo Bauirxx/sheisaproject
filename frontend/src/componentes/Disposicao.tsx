@@ -44,6 +44,13 @@ const NAVEGACAO: Grupo[] = [
       { para: "/alertas", rotulo: "Alertas", icone: "◆", permissoes: ["alerts:read"] },
       // Logo abaixo dos alertas de propósito: é a camada de que eles são feitos.
       { para: "/eventos", rotulo: "Eventos", icone: "·", permissoes: ["events:read"] },
+      // Matéria-prima vinda de fora, ao lado da que vem das ferramentas.
+      {
+        para: "/comunicacoes",
+        rotulo: "Comunicações",
+        icone: "✉",
+        permissoes: ["reports_inbox:read"],
+      },
       {
         para: "/incidentes",
         rotulo: "Incidentes",

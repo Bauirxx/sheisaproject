@@ -8,7 +8,8 @@
 > do detalhe ou do histórico de uma decisão.
 >
 > Última actualização: 2026-09-19 (relatórios, aplicação de recomendações,
-> ingestão genérica, defeitos 54 a 57; requisitos RNF07, RNF12 e RF16)
+> ingestão genérica, defeitos 54 a 57, requisitos RNF07/RNF12/RF16;
+> comunicações de incidente e portal externo)
 
 ---
 
@@ -19,7 +20,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 484 a passar, 93% de cobertura · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva (48 com a fila de aprovação vazia) |
+| **Testes** | 512 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 58 vistas do frontend contra a API viva |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -806,6 +807,70 @@ de desenvolvimento.
 Na mesma passagem, `taccica` passou a `tactica` em `GET /api/mitre/techniques`
 (erro ortográfico num contrato público, num projecto cuja regra é português), e
 os parâmetros da API sem uso na interface baixaram de 30 para 13.
+
+---
+
+### Portal externo e comunicações de incidente (2026-09-19)
+
+Fecha a única lacuna face ao RTIR que merecia ser construída: **quem comunica um
+incidente não tem conta na plataforma.** É a diferença de natureza entre uma
+ferramenta de SOC interno e uma de CSIRT — um regulador recebe comunicações de
+constituintes que nunca serão utilizadores. Estava especificado no briefing (§5 e
+§37) e nunca tinha sido feito.
+
+Novo domínio: `IncidentReport` com ciclo de vida próprio
+(`RECEBIDA → EM_TRIAGEM → ACEITE / RECUSADA / DUPLICADA`), ligação
+**muitos-para-muitos** a incidentes, código de acompanhamento guardado em resumo,
+seis rotas internas e duas públicas, migração `0006_comunicacoes`, duas
+permissões novas, 28 testes.
+
+Três decisões que importam mais do que o código:
+
+**A verificação do §37 é por ausência.** *O utilizador externo nunca deve aceder a
+dados internos.* `ReportPublicStatus` é um esquema separado do interno — não um
+`exclude` na rota — e os testes procuram `INC-\d+`, endereços de analista, a nota
+de triagem e identificadores internos **no corpo da resposta**. Confirmado por
+reversão: acrescentar a nota ao esquema público faz o teste falhar. Um teste que
+confirmasse os campos certos continuaria a passar depois de alguém acrescentar um
+campo interno, que é exactamente como uma fuga destas acontece.
+
+**A guarda de `ACEITE` vive numa passagem única.** `_aplicar_estado` é o único
+sítio por onde uma mudança de estado passa, e é lá que se verifica
+`REPORT_STATES_REQUIRING_INCIDENT`. Não está dentro de `aceitar` de propósito: foi
+a regra guardada numa porta que se perdeu nos alertas (defeito 54), e repetir a
+estrutura repetiria o defeito.
+
+**O canal de email fica declarado e não disponível.** `ReportChannel.EMAIL` existe
+no modelo, `channel_metadata` está pronto para preservar cabeçalhos e
+`acknowledged_at` fica `None` enquanto nada for enviado. Mas não há SMTP, e por
+isso o canal não é apresentado como funcional em lado nenhum — §4.
+
+Dois defeitos encontrados a construir isto, ambos noutras partes da plataforma:
+
+58. **O `conftest` descartava os códigos de permissão criados.** `sync_roles` só
+    concede aos perfis existentes o que `sync_permissions` acabou de criar nessa
+    chamada, e o valor de retorno não era passado. O efeito é silencioso e
+    persistente: a permissão nasce na primeira corrida depois de ser acrescentada
+    e deixa logo de ser "nova", pelo que os perfis de teste nunca a recebem.
+    Catorze testes falharam com 403 sem nada estar errado no produto — e, na
+    direcção oposta, um teste que verifique a **ausência** de uma permissão
+    passaria por acidente. O `conftest` passa agora todos os códigos: numa base de
+    teste o estado tem de espelhar `ROLE_PERMISSIONS` exactamente. Ver a armadilha
+    5.18.
+
+59. **`NotFoundError` construía a mensagem no masculino.** "Equipa não
+    encontrado", "Evidência não encontrado" — metade dos vinte e três recursos da
+    plataforma é feminina. Resolvido com "inexistente", invariável em género, que
+    serve os vinte e três de uma vez. Passar o género em cada chamada exigiria
+    acertar em vinte sítios e falharia no vigésimo primeiro; inferir da
+    terminação não serve, porque "Alerta" termina em "a" e é masculino. Ver a
+    armadilha 5.19.
+
+Ao construir, o defeito 11 voltou a aparecer no caminho novo — `triaged_by_email`
+vinha `null` logo depois de assumir a avaliação, porque alterar a chave
+estrangeira não actualiza uma relação `lazy="selectin"` já em memória. Corrigido
+com o mesmo `flush` + `refresh` total, num auxiliar por onde as cinco operações
+passam, e com teste.
 
 ---
 

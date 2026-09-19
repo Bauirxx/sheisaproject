@@ -19,6 +19,8 @@ import { Auditoria } from "@/paginas/Auditoria";
 import { CentroDeOperacoes } from "@/paginas/CentroDeOperacoes";
 import { Activos, Indicadores, Mitre } from "@/paginas/Catalogo";
 import { Aprovacoes } from "@/paginas/Aprovacoes";
+import { Comunicacoes } from "@/paginas/Comunicacoes";
+import { Comunicar } from "@/paginas/Comunicar";
 import { Entrada } from "@/paginas/Entrada";
 import { Eventos } from "@/paginas/Eventos";
 import { IncidenteDetalhe } from "@/paginas/IncidenteDetalhe";
@@ -56,6 +58,10 @@ function Encaminhamento() {
   return (
     <Routes>
       <Route path="/entrar" element={<Entrada />} />
+      {/* Portal externo (§37): fora do `ExigirSessao` de propósito. Quem
+          comunica um incidente não tem conta nem deve precisar de uma, e é a
+          única parte da aplicação nessas condições. */}
+      <Route path="/comunicar" element={<Comunicar />} />
       <Route
         element={
           <ExigirSessao>
@@ -66,6 +72,7 @@ function Encaminhamento() {
         <Route path="/painel" element={<Painel />} />
         <Route path="/centro" element={<CentroDeOperacoes />} />
         <Route path="/alertas" element={<Alertas />} />
+        <Route path="/comunicacoes" element={<Comunicacoes />} />
         <Route path="/eventos" element={<Eventos />} />
         <Route path="/incidentes" element={<Incidentes />} />
         <Route path="/incidentes/novo" element={<IncidenteNovo />} />
