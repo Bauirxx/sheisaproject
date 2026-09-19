@@ -9,7 +9,7 @@
 > completo de decisões e defeitos, use [`ESTADO.md`](ESTADO.md). Este ficheiro é
 > o mais curto dos três de propósito: se crescer demasiado, deixa de ser lido.
 >
-> Última actualização: 2026-09-19.
+> Última actualização: 2026-09-19 (requisitos RNF07, RNF12 e RF16).
 
 ---
 
@@ -30,12 +30,22 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 479 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 484 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
 cd ../frontend
 npm run verificar                                        # tsc + eslint + relógio
+```
+
+Cópia de segurança (RNF12) — o `criar` verifica o ficheiro restaurando-o de facto:
+
+```bash
+cd backend
+./scripts/backup.sh criar                    # var/backups/sheisa-<instante>.dump
+./scripts/backup.sh listar
+./scripts/backup.sh verificar <ficheiro>     # codigo de saida 1 se nao restaurar
+./scripts/backup.sh restaurar <ficheiro>     # destrutivo, pede confirmacao
 ```
 
 **O projecto corre em duas máquinas, com ambientes diferentes** — ambos
@@ -101,7 +111,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 479 a passar, 93% de cobertura |
+| Testes | 484 a passar, 93% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr — 48 quando a fila de aprovação está vazia, porque três só se verificam com pedidos pendentes |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -291,6 +301,62 @@ para o `analytics_service`, que estava a 76%:
 >    evidências (incluindo eliminá-las) continuam a poder ser alterados. Decidir
 >    o que deve ficar fechado — e se as notas posteriores ao encerramento são
 >    permitidas — é uma escolha de processo, não uma correcção.
+
+### 4.5 Requisitos da monografia — o que estava em falta, e está feito
+
+Uma verificação dos 20 requisitos funcionais e 14 não funcionais do §4.7/§4.8
+contra o sistema a correr encontrou três em falta. Estão feitos (2026-09-19):
+
+**RNF12 — cópia de segurança.** Não existia nada. `scripts/backup.sh` faz
+`criar`, `listar`, `verificar` e `restaurar`. O `verificar` **restaura de facto**,
+para uma base temporária que apaga a seguir, e o `criar` corre-o
+automaticamente: uma cópia que nunca foi restaurada não é uma cópia, é um
+ficheiro. Confirmado que detecta corrupção — um ficheiro truncado dá código de
+saída 1, um bom dá 0, o que permite usá-lo num agendador. O `pg_dump` corre dentro
+do contentor, pelo que a versão do cliente coincide sempre com a do servidor.
+`var/` está no `.gitignore`: as cópias contêm dados reais e nunca vão para o
+repositório.
+
+**RNF07 — desempenho.** Não havia medição nenhuma. `TempoDeRespostaMiddleware`
+põe `X-Tempo-Resposta-ms` em todas as respostas, inclusive nas de erro — o pedido
+lento que acaba em erro é justamente o suspeito. Usa `perf_counter`, que é
+monótono: com `time()` um ajuste do relógio daria duração negativa. Acima de
+`LIMIAR_DE_LENTIDAO_MS` (1000 ms) o pedido é registado com o `request_id`, que é
+o que o liga à entrada de auditoria. Medido nesta máquina: `/api/health` 1 ms,
+`/api/audit` 59 ms, `/api/incidents` 118 ms, `/api/dashboard` 200 ms, `/api/soc`
+377 ms (faz sete consultas).
+
+**RF16 — filtrar por período.** O requisito nomeia "período" e a interface não o
+oferecia. `FiltroDePeriodo`, `desdeISO` e `ateISO` em `componentes/listagem.tsx`,
+aplicados a incidentes, alertas, eventos e auditoria. **A subtileza está no
+`ateISO`:** enviar a data crua daria a meia-noite, pelo que "até hoje" excluía
+tudo o que aconteceu hoje. Medido na base de desenvolvimento: 8 registos de
+auditoria de hoje que a versão ingénua perdia — um intervalo que corta o último
+dia em silêncio é pior do que não ter filtro, porque dá um número que parece
+completo.
+
+### 4.6 Parâmetros da API que a interface não usa
+
+Auditoria nova, ao nível do parâmetro (a anterior era ao nível da operação).
+Eram **30**; são **13**. Os que foram ligados: `dias` no painel (a janela estava
+presa nos 30 dias, embora a API aceite 1 a 365), `desde`/`ate` em quatro páginas,
+`actor` e `tipo_recurso` na auditoria, `prioridade` nos incidentes,
+`sem_incidente` e `pontuacao_minima` nos alertas.
+
+A lista de tipos de recurso vem de `GET /audit/resource-types`, acrescentado para
+o efeito — uma lista fixa no código ofereceria filtros para tipos que já ninguém
+escreve e faltaria os que aparecessem.
+
+A **verificação inversa deu limpa**, e era a preocupante: nada do que a interface
+envia é ignorado em silêncio pela API (armadilha 5.2 sem nenhuma instância viva).
+
+Os 13 que restam são de valor marginal — `risco` nas acções, `profundidade` no
+grafo, `responsavel_id` ("os meus incidentes"), `alerta_id` nos eventos,
+`avistamentos_minimos`/`incluir_permitidos` nos indicadores, `alvo_id` e
+`confianca_minima` nas recomendações, `tactica` no MITRE, `recurso_id` e
+`por_triar`. Para refazer a auditoria, note que a detecção tem de reconhecer a
+notação abreviada (`consulta({ dias })` não tem dois-pontos), senão reporta
+falhas falsas.
 
 ### 4.4 Ideias que foram deixadas de fora deliberadamente
 

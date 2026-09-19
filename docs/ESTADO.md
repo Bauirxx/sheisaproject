@@ -7,8 +7,8 @@
 > curto e accionável. Este é o registo completo, para consultar quando precisar
 > do detalhe ou do histórico de uma decisão.
 >
-> Última actualização: 2026-09-19 (relatórios, aplicação de recomendações e
-> ingestão genérica; defeitos 54 a 57)
+> Última actualização: 2026-09-19 (relatórios, aplicação de recomendações,
+> ingestão genérica, defeitos 54 a 57; requisitos RNF07, RNF12 e RF16)
 
 ---
 
@@ -19,7 +19,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 479 a passar, 93% de cobertura · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva (48 com a fila de aprovação vazia) |
+| **Testes** | 484 a passar, 93% de cobertura · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva (48 com a fila de aprovação vazia) |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -761,6 +761,51 @@ concluir); a importação do QRadar e do NetScout, que nada chama embora o catá
 diga que importa; os comandos de resposta activa do Wazuh, não verificados e em
 parte aparentemente errados; e um playbook que encerra incidentes sem que quem o
 corre tenha `incidents:close`.
+
+---
+
+### Três requisitos da monografia em falta, e um índice a caminho de ser apagado (2026-09-19)
+
+Uma verificação dos 20 requisitos funcionais e 14 não funcionais contra o sistema
+a correr — em vez de contra o que os documentos afirmavam — encontrou três em
+falta, e duas coisas que já estavam quebradas.
+
+**A base de desenvolvimento estava duas versões atrás dos modelos.** A migração
+`0005_instantes_reais` veio num pull e nunca foi aplicada aqui, pelo que o defeito
+da armadilha 5.12 — `now()` do PostgreSQL devolver a hora de início da transacção
+e a linha temporal contar a história ao contrário — estava vivo exactamente na
+base que se usaria numa demonstração. Aplicada.
+
+**Quatro índices existiam na base sem estarem declarados nos modelos**, pelo que
+`alembic check` propunha removê-los: os três de pesquisa textual (`pg_trgm`) e
+`uq_recommendations_pendente_por_alvo`, que é o que impede o motor de empilhar
+propostas duplicadas. Foram criados por SQL directo nas migrações 0002 e 0004, e o
+autogenerate compara o esquema com o metadata: o que existe na base sem estar no
+metadata é lido como "a mais". A próxima migração gerada apagaria a regra sem que
+nada falhasse. Declarados nos modelos, e `test_infraestrutura.py` passa a comparar
+o esquema migrado com o metadata a cada corrida — desfazer qualquer declaração faz
+o teste falhar com o nome do índice em questão.
+
+**RNF12 (cópia de segurança) não existia.** `scripts/backup.sh`, com `criar`,
+`listar`, `verificar` e `restaurar`. O `verificar` restaura de facto para uma base
+temporária e confirma que as tabelas e a versão da migração chegaram; o `criar`
+corre-o automaticamente. Confirmado que distingue um ficheiro bom de um
+truncado pelo código de saída, o que o torna utilizável num agendador.
+
+**RNF07 (desempenho) não tinha medição nenhuma.** `TempoDeRespostaMiddleware` põe
+`X-Tempo-Resposta-ms` em todas as respostas, inclusive nas de erro, e regista as
+que passam de 1000 ms com o `request_id`. Medido: `/api/health` 1 ms,
+`/api/audit` 59 ms, `/api/incidents` 118 ms, `/api/dashboard` 200 ms, `/api/soc`
+377 ms.
+
+**RF16 (filtrar por período) não estava na interface**, embora a API o suportasse.
+O detalhe que importa está no `ateISO`: a data crua daria a meia-noite, e "até
+hoje" excluía tudo o que aconteceu hoje — 8 registos de auditoria, medidos na base
+de desenvolvimento.
+
+Na mesma passagem, `taccica` passou a `tactica` em `GET /api/mitre/techniques`
+(erro ortográfico num contrato público, num projecto cuja regra é português), e
+os parâmetros da API sem uso na interface baixaram de 30 para 13.
 
 ---
 
