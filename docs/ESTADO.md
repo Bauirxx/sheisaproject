@@ -7,8 +7,8 @@
 > curto e accionável. Este é o registo completo, para consultar quando precisar
 > do detalhe ou do histórico de uma decisão.
 >
-> Última actualização: 2026-09-17 (eventos brutos, centro de operações,
-> chaves de ingestão, sessões, equipas e limiares do motor)
+> Última actualização: 2026-09-19 (relatórios, aplicação de recomendações e
+> ingestão genérica; defeitos 54 a 57)
 
 ---
 
@@ -19,7 +19,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 460 a passar, 92% de cobertura · ruff limpo em todo o repositório · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva (48 com a fila de aprovação vazia) |
+| **Testes** | 479 a passar, 93% de cobertura · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 51 vistas do frontend contra a API viva (48 com a fila de aprovação vazia) |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -685,6 +685,67 @@ Desfazer a correcção faz falhar: 52, um teste; 53, oito. Os defeitos 27 a 30, 
 de desenvolvimento, que correu sem alterar nada. A base de desenvolvimento não
 tinha alertas inconsistentes (0 de 27 PROMOVIDO ou CORRELACIONADO sem incidente). `verificar_contrato.py`
 continua a confirmar as 51 vistas.
+
+### Defeitos encontrados ao terminar os últimos três módulos (2026-09-19)
+
+Os três candidatos que faltavam — `api/v1/reports.py`, `recommendation_service`
+e `reporting/pdf.py` — estavam a meio no commit `a8af680` ("versao nao
+terminada"), com testes escritos e três a falhar. Terminar esse trabalho rendeu
+mais quatro defeitos. Três deles são o mesmo padrão da armadilha 5.15: **uma
+regra aplicada numa porta e esquecida nas outras.**
+
+54. **A triagem por recomendação não tinha a guarda da triagem à mão.** Aceitar
+    uma proposta de `ALTERAR_ESTADO_ALERTA` para PROMOVIDO ou CORRELACIONADO
+    mudava só o estado, deixando um alerta "promovido" **sem incidente nenhum**:
+    saía da fila de triagem como se tivesse sido tratado e não aparecia em
+    incidente algum, pelo que o trabalho desaparecia sem deixar rasto. É o
+    defeito 34 noutra porta. A regra estava definida dentro de
+    `api/v1/alerts.py`, que é exactamente a razão por que a outra porta a
+    esqueceu — passou para `core/enums.py`, ao lado de `ALERT_TRANSITIONS`, como
+    `ALERT_STATES_REQUIRING_INCIDENT`. O motor não gera hoje uma proposta destas,
+    mas a regra não pode depender disso.
+
+55. **Uma recomendação vencida podia ser aceite e aplicada.** A validade era
+    imposta só pelo recálculo global, o que fazia depender uma regra de um
+    varrimento periódico: entre o vencimento e o recálculo seguinte, a proposta
+    continuava na fila como PENDENTE e, aceite, alterava o alvo com base em
+    indícios que já não valiam. É o defeito 47 das aprovações caducadas, noutra
+    porta. Agora `decidir` recusa com 409, marca a recomendação como EXPIRADA e
+    **registra a tentativa na auditoria** — com `session.commit()` antes de
+    levantar, que é o procedimento que `require()` já usava para o acesso negado,
+    porque a excepção faz rollback e levaria o registo com ela.
+
+56. **A fila mostrava recomendações vencidas, e passar o filtro à mão contornava
+    a correcção.** A primeira parte é o mesmo defeito visto do lado da leitura:
+    `status` é uma denormalização e o facto autoritativo é `expires_at`. A
+    segunda foi introduzida ao corrigir a primeira e encontrada a seguir: a
+    exclusão só se aplicava quando `estado` era omitido, pelo que
+    `?estado=PENDENTE` — que é o que a interface envia ao mostrar o filtro
+    escolhido — voltava a trazê-las. Vale para o estado pedido, não para a
+    omissão.
+
+57. **Em Windows, "cada envio conta" não contava.** Na ingestão genérica, um
+    evento sem identificador nem instante recebe um identificado sintético que
+    inclui o instante de recepção, precisamente para que um reenvio e uma
+    ocorrência nova não se confundam — "perder uma ocorrência real é pior do que
+    contar um reenvio duas vezes". Só que duas chamadas consecutivas a
+    `datetime.now()` devolvem o **mesmo** valor: medido nesta máquina, 20 pares
+    em 20. Dois eventos entregues seguidos recebiam o mesmo identificador e o
+    segundo desaparecia como duplicado — a garantia declarada não se cumpria, e o
+    teste que a afirmava vinha a falhar. A causa era juntar dois casos num só
+    digest; agora separam-se: com instante da fonte o identificador é
+    determinístico (para reconhecer reenvios), sem instante leva um token próprio
+    por entrega, sem depender da resolução de relógio nenhum.
+
+Todos verificados por reversão, um a um: desfazer cada correcção faz falhar
+exactamente o teste correspondente. No caso 57, os **dois** ramos são
+necessários — sempre determinístico perde ocorrências, sempre único deixa de
+reconhecer reenvios e quebra a estabilidade entre processos.
+
+Cobertura depois: `api/v1/reports.py` 80% -> 100%, `recommendation_service`
+77% -> 94%, `reporting/pdf.py` 77% -> 85%. Suite a **479 testes, 93%**, ruff
+limpo, `verificar_contrato.py` confirma as 51 vistas e o frontend passa
+`tsc + eslint + relógio` sem erros.
 
 O conector Wazuh foi confrontado com o gestor 4.12.0 do laboratório antes de se
 escreverem os seus testes: com a verificação de certificado ligada falha

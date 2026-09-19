@@ -9,7 +9,7 @@
 > completo de decisões e defeitos, use [`ESTADO.md`](ESTADO.md). Este ficheiro é
 > o mais curto dos três de propósito: se crescer demasiado, deixa de ser lido.
 >
-> Última actualização: 2026-09-17.
+> Última actualização: 2026-09-19.
 
 ---
 
@@ -30,7 +30,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 460 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 479 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -101,7 +101,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 460 a passar, 92% de cobertura |
+| Testes | 479 a passar, 93% de cobertura |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 51 vistas contra a API a correr — 48 quando a fila de aprovação está vazia, porque três só se verificam com pedidos pendentes |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -209,14 +209,23 @@ vida do alerta; a promoção e a ligação não o consultavam. Ver a armadilha 5
 Aplicá-la ao resto do código encontrou logo mais um caso: os playbooks mudavam o
 estado do incidente sem passar pela transição (defeito 39).
 
-**Próximos candidatos**, medidos com a suite completa (460 testes, 92%). Tudo o
-resto está acima de 85%, excepto o que fica fora pelas razões já ditas:
+**Os três candidatos que esta secção listava estão feitos** (2026-09-19), e com
+eles mais quatro defeitos — ver [`ESTADO.md`](ESTADO.md) §4, defeitos 54 a 57:
 
-| Módulo | Cobertura | Porque importa |
+| Módulo | Antes | Agora |
 |---|---|---|
-| `reporting/pdf.py` | 77% | o relatório exportado |
-| `services/recommendation_service.py` | 77% | aplicação das recomendações aceites |
-| `api/v1/reports.py` | 80% | |
+| `api/v1/reports.py` | 80% | 100% |
+| `services/recommendation_service.py` | 77% | 94% |
+| `reporting/pdf.py` | 77% | 85% |
+
+Medido com a suite completa: **479 testes, 93%**. Tudo o resto está acima de 85%,
+excepto o que fica fora pelas razões já ditas.
+
+**Não há um próximo candidato óbvio por cobertura.** O que resta abaixo de 85% é
+`reporting/pdf.py` (as ramificações de formatação de um relatório sem dados) e os
+módulos que ficam fora por natureza. A partir daqui vale mais procurar por
+*padrão* do que por percentagem — a armadilha 5.15 (uma regra aplicada numa porta
+e esquecida nas outras) já rendeu três defeitos e não está esgotada.
 
 `core/database.py`, `siem_connectors`, `integrations/base.py` e `main.py` ficam
 fora: ligação e arranque, ou código que nada chama.
@@ -448,6 +457,30 @@ chame `reject_nulls_for_required(objecto, alteracoes)`** de
 `app/core/partial_update.py` antes do `setattr`: lê a nulabilidade do próprio
 modelo e responde 422. A interface nunca o desencadeia — só envia o que mudou —,
 por isso só um teste o apanha.
+
+### 5.17 `datetime.now()` não distingue duas chamadas seguidas
+
+Em Windows a granularidade do relógio do sistema é de cerca de um milissegundo, e
+duas chamadas consecutivas devolvem o **mesmo** valor — medido nesta máquina, 20
+pares em 20. Qualquer coisa que use o instante como elemento distintivo — um
+identificador sintético, uma chave de deduplicação, uma ordenação por chegada —
+trata dois acontecimentos como um só. Foi assim que a ingestão genérica perdia o
+segundo de dois eventos entregues seguidos, apesar de o código dizer
+explicitamente que preferia contar um reenvio duas vezes a perder uma ocorrência.
+
+**Para "cada um conta", use um token próprio** (`uuid4()`), não o relógio. E
+repare que isto é o oposto da armadilha 5.12: lá o problema era o `now()` do
+PostgreSQL ser demasiado *grosseiro* dentro de uma transacção; aqui é o `now()`
+de Python ser demasiado grosseiro entre duas chamadas. Em ambos os casos a
+correcção é a mesma: não fazer a identidade depender do tempo.
+
+Confirme antes de assumir:
+
+```bash
+./.venv/Scripts/python.exe -c "
+from datetime import datetime, UTC
+print(sum(datetime.now(UTC) == datetime.now(UTC) for _ in range(20)), '/20 iguais')"
+```
 
 ---
 
