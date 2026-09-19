@@ -211,6 +211,7 @@ from app.api.v1 import incidents as incident_routes  # noqa: E402
 from app.api.v1 import ingest as ingest_routes  # noqa: E402
 from app.api.v1 import investigation as investigation_routes  # noqa: E402
 from app.api.v1 import recommendations as recommendation_routes  # noqa: E402
+from app.api.v1 import reporting as reporting_routes  # noqa: E402
 from app.api.v1 import reports as report_routes  # noqa: E402
 from app.api.v1 import response as response_routes  # noqa: E402
 
@@ -238,5 +239,9 @@ for _router in (
     admin_routes.audit_router,
     admin_routes.integration_router,
     admin_routes.notification_router,
+    # O portal externo vai por último para deixar claro, ao ler a lista, que é
+    # o único encaminhador sem autenticação.
+    reporting_routes.inbox_router,
+    reporting_routes.public_router,
 ):
     app.include_router(_router, prefix=settings.api_prefix)

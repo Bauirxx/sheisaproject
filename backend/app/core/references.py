@@ -20,6 +20,10 @@ class ReferenceKind:
     ACTION = ("ACT", "action_reference_seq", 6)
     PLAYBOOK_EXECUTION = ("EXE", "playbook_execution_reference_seq", 6)
     REPORT = ("REL", "report_reference_seq", 5)
+    #: Comunicação de incidente vinda de fora. `COM` e não `REL`, que já é dos
+    #: relatórios: o comunicante cita esta referência ao pedir o estado, e duas
+    #: famílias com o mesmo prefixo levariam a procurar no sítio errado.
+    INCIDENT_REPORT = ("COM", "incident_report_reference_seq", 5)
 
 
 async def next_reference(session: AsyncSession, kind: tuple[str, str, int]) -> str:

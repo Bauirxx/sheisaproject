@@ -36,6 +36,7 @@ from app.models.investigation import (
     Task,
     task_dependencies,
 )
+from app.models.reporting import IncidentReport, report_incidents
 from app.models.response import (
     Action,
     ActionApproval,
@@ -67,6 +68,7 @@ __all__ = [
     "Evidence",
     "Incident",
     "IncidentRelation",
+    "IncidentReport",
     "IncidentTechnique",
     "Integration",
     "Ioc",
@@ -87,6 +89,7 @@ __all__ = [
     "User",
     "UserSession",
     "incident_assets",
+    "report_incidents",
     "role_permissions",
     "task_dependencies",
 ]

@@ -163,6 +163,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return "auth", settings.rate_limit_auth_per_minute
         if "/ingest" in path:
             return "ingest", settings.rate_limit_ingest_per_minute
+        # O portal externo é a única escrita da plataforma sem autenticação, e
+        # portanto a superfície mais abusável: um limite generoso deixaria
+        # qualquer pessoa enchê-la de comunicações por um formulário aberto.
+        # Restritivo mas não hostil — quem comunica um incidente a sério não
+        # submete vinte vezes por minuto.
+        if "/public" in path:
+            return "publico", settings.rate_limit_public_per_minute
         return "default", settings.rate_limit_default_per_minute
 
     def _identity(self, request: Request, klass: str) -> str:

@@ -382,6 +382,76 @@ else:
     else:
         print(f"  ok  MetaDoMotor.limiares ({len(obtidos)} limiares explicados)")
 
+# ------------------------------------------- comunicacoes externas (§5 · §37)
+# O portal e a unica escrita sem autenticacao, pelo que se submete de facto uma
+# comunicacao para conferir os dois esquemas: o interno e -- sobretudo -- o
+# publico, cuja caracteristica principal e o que NAO traz.
+print("\n== comunicacoes externas ==")
+estado, submetida = pedir("/public/reports", metodo="POST", corpo={
+    "reporter_name": "Verificacao de contrato",
+    "reporter_email": "contrato@exemplo.local",
+    "reporter_organisation": "Verificacao automatica",
+    "subject": "Submissao de verificacao do contrato da API",
+    "description": (
+        "Comunicacao criada por scripts/verificar_contrato.py para confirmar "
+        "que os campos que o portal externo le existem na resposta."
+    ),
+    "claimed_category": "OUTRO",
+    "claimed_severity": "BAIXA",
+})
+if estado != 201:
+    falhas.append(f"ComunicacaoSubmetida: HTTP {estado} em /public/reports")
+else:
+    conferir("ComunicacaoSubmetida", submetida,
+             ["referencia", "codigo_de_acompanhamento", "aviso"])
+
+    estado, publico = pedir(
+        f"/public/reports/{submetida['referencia']}"
+        f"?codigo={submetida['codigo_de_acompanhamento']}"
+    )
+    if estado != 200:
+        falhas.append(f"EstadoPublicoDaComunicacao: HTTP {estado}")
+    else:
+        conferir("EstadoPublicoDaComunicacao", publico,
+                 ["referencia", "estado", "situacao", "recebida_em",
+                  "avaliada_em", "aviso_de_recepcao_enviado"])
+        # O §37 exige que o exterior nao veja dados internos. Verifica-se por
+        # ausencia: um campo interno acrescentado ao esquema publico passaria
+        # despercebido a uma verificacao que so confirmasse os campos certos.
+        proibidos = [
+            c for c in (
+                "incidents", "triage_note", "triaged_by_email", "reporter_email",
+                "submitted_from_ip", "tracking_views", "id",
+            ) if c in publico
+        ]
+        if proibidos:
+            falhas.append(
+                "EstadoPublicoDaComunicacao expoe dados internos ao exterior "
+                f"(§37): {proibidos}"
+            )
+        else:
+            print("  ok  EstadoPublicoDaComunicacao nao expoe dados internos")
+
+estado, fila = pedir("/reports-inbox", token)
+if estado != 200:
+    falhas.append(f"ComunicacaoResumo: HTTP {estado} em /reports-inbox")
+elif fila.get("itens"):
+    conferir("ComunicacaoResumo", fila["itens"][0],
+             ["id", "reference", "status", "channel", "subject", "reporter_name",
+              "reporter_email", "reporter_organisation", "claimed_category",
+              "claimed_severity", "received_at", "triaged_at", "tracking_views",
+              "acknowledged_at", "incidents"])
+    estado, detalhe = pedir(f"/reports-inbox/{fila['itens'][0]['id']}", token)
+    if estado != 200:
+        falhas.append(f"Comunicacao: HTTP {estado}")
+    else:
+        conferir("Comunicacao", detalhe,
+                 ["description", "reporter_phone", "reported_indicators",
+                  "submitted_from_ip", "channel_metadata", "triage_note",
+                  "duplicate_of_reference", "triaged_by_email"])
+else:
+    print("  --  ComunicacaoResumo: fila vazia")
+
 estado, accoes_auditadas = pedir("/audit/actions", token)
 if estado == 200 and isinstance(accoes_auditadas, list):
     print(f"  ok  /audit/actions ({len(accoes_auditadas)} accoes distintas)")

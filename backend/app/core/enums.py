@@ -188,6 +188,72 @@ ALERT_STATES_REQUIRING_INCIDENT = frozenset({
 })
 
 
+# ------------------------------------------------- comunicações de incidente
+class ReportChannel(StrEnum):
+    """Por onde a comunicação entrou.
+
+    Registado de propósito e nunca inferido: uma comunicação que chegou por
+    email não tem a mesma confiança de origem que uma submetida no portal com
+    referência e código, e quem tria precisa de o saber. `EMAIL` só é usado
+    quando a caixa de correio está de facto configurada e verificada.
+    """
+
+    PORTAL = "PORTAL"          # formulário público, sem conta na plataforma
+    EMAIL = "EMAIL"            # caixa de segurança (abuse@/cert@)
+    API = "API"                # sistema de terceiros, com chave
+    MANUAL = "MANUAL"          # registada por um analista a partir de outro meio
+
+
+class ReportStatus(StrEnum):
+    """Ciclo de vida de uma comunicação de incidente (§5 · RTIR).
+
+    A distinção que o RTIR acerta e que se conserva aqui: **a comunicação não é
+    o incidente.** É matéria-prima. Várias comunicações podem descrever o mesmo
+    incidente, e uma comunicação pode não descrever incidente nenhum.
+
+    `ACEITE` significa que foi ligada a pelo menos um incidente — nunca se marca
+    aceite sem essa ligação existir, senão o estado afirmaria um trabalho que
+    não foi feito.
+    """
+
+    RECEBIDA = "RECEBIDA"      # entrou, ninguém olhou ainda
+    EM_TRIAGEM = "EM_TRIAGEM"  # um analista está a avaliá-la
+    ACEITE = "ACEITE"          # ligada a um ou mais incidentes
+    RECUSADA = "RECUSADA"      # sem relevância operacional, com justificação
+    DUPLICADA = "DUPLICADA"    # já descrita por outra comunicação
+
+
+#: Transições permitidas para uma comunicação.
+#:
+#: `RECUSADA` e `DUPLICADA` voltam a `EM_TRIAGEM` porque uma decisão de triagem
+#: pode ser revista — ao contrário de `ACEITE`, que só se desfaz desligando o
+#: incidente, operação que tem o seu próprio registo.
+REPORT_TRANSITIONS: dict[ReportStatus, frozenset[ReportStatus]] = {
+    ReportStatus.RECEBIDA: frozenset({
+        ReportStatus.EM_TRIAGEM, ReportStatus.ACEITE,
+        ReportStatus.RECUSADA, ReportStatus.DUPLICADA,
+    }),
+    ReportStatus.EM_TRIAGEM: frozenset({
+        ReportStatus.ACEITE, ReportStatus.RECUSADA, ReportStatus.DUPLICADA,
+    }),
+    ReportStatus.ACEITE: frozenset({ReportStatus.EM_TRIAGEM}),
+    ReportStatus.RECUSADA: frozenset({ReportStatus.EM_TRIAGEM}),
+    ReportStatus.DUPLICADA: frozenset({ReportStatus.EM_TRIAGEM}),
+}
+
+#: Estados em que a comunicação ainda espera decisão.
+REPORT_OPEN_STATUSES = frozenset({
+    ReportStatus.RECEBIDA, ReportStatus.EM_TRIAGEM,
+})
+
+#: Estado que só se atinge com pelo menos um incidente ligado.
+#:
+#: Mesma razão de `ALERT_STATES_REQUIRING_INCIDENT`: marcar aceite sem ligação
+#: deixaria a comunicação fora da fila e fora de qualquer incidente, e o
+#: trabalho desaparecia sem deixar rasto.
+REPORT_STATES_REQUIRING_INCIDENT = frozenset({ReportStatus.ACEITE})
+
+
 class TaskStatus(StrEnum):
     PENDENTE = "PENDENTE"
     EM_CURSO = "EM_CURSO"
@@ -450,6 +516,10 @@ class IncidentOrigin(StrEnum):
     CORRELACAO = "CORRELACAO"
     PLAYBOOK = "PLAYBOOK"
     ESCALAMENTO = "ESCALAMENTO"
+    #: Nasceu de uma comunicação externa aceite em triagem. Distinto de
+    #: REGISTO_MANUAL: o que o originou não foi um analista a observar algo, foi
+    #: alguém de fora a comunicá-lo, e a origem tem de o dizer.
+    COMUNICACAO_EXTERNA = "COMUNICACAO_EXTERNA"
 
 
 class ActionKind(StrEnum):

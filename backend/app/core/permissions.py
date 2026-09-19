@@ -23,6 +23,10 @@ class Permission(StrEnum):
     EVENTS_READ = "events:read"
     EVENTS_INGEST = "events:ingest"          # usado por chaves de API de fontes
 
+    # --- comunicações de incidente vindas de fora (§5 · §37) ---
+    REPORTS_INBOX_READ = "reports_inbox:read"
+    REPORTS_INBOX_TRIAGE = "reports_inbox:triage"   # aceitar, recusar, duplicar
+
     # --- incidentes ---
     INCIDENTS_READ = "incidents:read"
     INCIDENTS_CREATE = "incidents:create"
@@ -96,6 +100,7 @@ P = Permission
 #: Leitura transversal partilhada pelos perfis operacionais.
 _READ_OPERACIONAL: Final[frozenset[Permission]] = frozenset({
     P.ALERTS_READ, P.EVENTS_READ, P.INCIDENTS_READ, P.TASKS_READ,
+    P.REPORTS_INBOX_READ,
     P.EVIDENCE_READ, P.IOCS_READ, P.THREATINTEL_READ, P.MITRE_READ,
     P.ASSETS_READ, P.PLAYBOOKS_READ, P.ACTIONS_READ,
     P.RECOMMENDATIONS_READ, P.DASHBOARD_READ, P.REPORTS_READ,
@@ -112,6 +117,7 @@ ROLE_PERMISSIONS: Final[dict[RoleName, frozenset[Permission]]] = {
     # resposta mas não aprovar as suas próprias - separação de funções.
     RoleName.ANALISTA_SOC: _READ_OPERACIONAL | {
         P.ALERTS_TRIAGE, P.ALERTS_PROMOTE,
+        P.REPORTS_INBOX_TRIAGE,
         P.INCIDENTS_CREATE, P.INCIDENTS_UPDATE, P.INCIDENTS_TRANSITION,
         P.INCIDENTS_ASSIGN, P.INCIDENTS_RELATE,
         P.COMMENTS_CREATE, P.TASKS_MANAGE,
@@ -126,6 +132,7 @@ ROLE_PERMISSIONS: Final[dict[RoleName, frozenset[Permission]]] = {
     # encerramento de incidentes.
     RoleName.INVESTIGADOR: _READ_OPERACIONAL | {
         P.ALERTS_TRIAGE, P.ALERTS_PROMOTE,
+        P.REPORTS_INBOX_TRIAGE,
         P.INCIDENTS_CREATE, P.INCIDENTS_UPDATE, P.INCIDENTS_TRANSITION,
         P.INCIDENTS_ASSIGN, P.INCIDENTS_RELATE, P.INCIDENTS_CLOSE,
         P.COMMENTS_CREATE, P.TASKS_MANAGE,
@@ -192,6 +199,10 @@ PERMISSION_DESCRIPTIONS: Final[dict[Permission, str]] = {
     P.ALERTS_PROMOTE: "Promover alertas a incidente",
     P.EVENTS_READ: "Consultar eventos brutos",
     P.EVENTS_INGEST: "Submeter eventos para ingestão",
+    P.REPORTS_INBOX_READ: "Consultar comunicações de incidente recebidas de fora",
+    P.REPORTS_INBOX_TRIAGE: (
+        "Triar comunicações externas (aceitar ligando a incidente, recusar, duplicar)"
+    ),
     P.INCIDENTS_READ: "Consultar incidentes",
     P.INCIDENTS_CREATE: "Registar incidentes",
     P.INCIDENTS_UPDATE: "Editar incidentes",

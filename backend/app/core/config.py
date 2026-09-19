@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     rate_limit_default_per_minute: int = 300
     rate_limit_auth_per_minute: int = 10
     rate_limit_ingest_per_minute: int = 1200
+    #: Portal externo (§37): escrita sem autenticação.
+    rate_limit_public_per_minute: int = 20
 
     # ------------------------------------------------------------ evidências
     evidence_storage_path: Path = PROJECT_ROOT / "backend" / "var" / "evidence"
