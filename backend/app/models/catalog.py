@@ -88,6 +88,14 @@ class Ioc(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("ioc_type", "value", name="uq_iocs_type_value"),
         Index("ix_iocs_reputation_type", "reputation", "ioc_type"),
+        # Índice de pesquisa textual (`pg_trgm`, criado na migração 0002).
+        # Declarado aqui porque o autogenerate compara o esquema com o metadata:
+        # um índice que existe na base mas não nos modelos é lido como "a mais" e
+        # a migração seguinte apagava-o em silêncio.
+        Index(
+            "ix_iocs_value_trgm", "value",
+            postgresql_using="gin", postgresql_ops={"value": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()

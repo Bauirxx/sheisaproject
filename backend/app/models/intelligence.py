@@ -26,6 +26,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +39,16 @@ class Recommendation(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_recommendations_target", "target_type", "target_id"),
         Index("ix_recommendations_status_kind", "status", "kind"),
+        # Índice único parcial (migração 0004): impede o motor de empilhar duas
+        # propostas PENDENTES do mesmo tipo sobre o mesmo alvo. Declarado aqui
+        # pela razão mais séria das quatro — sem estar no metadata, a próxima
+        # migração gerada por autogenerate apagava a regra, e o motor voltava a
+        # poder acumular duplicados sem que nada falhasse.
+        Index(
+            "uq_recommendations_pendente_por_alvo",
+            "kind", "target_type", "target_id",
+            unique=True, postgresql_where=text("status = 'PENDENTE'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()

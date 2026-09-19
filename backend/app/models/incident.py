@@ -65,6 +65,14 @@ class Incident(Base, TimestampMixin):
         Index("ix_incidents_status_severity", "status", "severity"),
         Index("ix_incidents_assignee_status", "assignee_id", "status"),
         Index("ix_incidents_open_priority", "status", "priority", "detected_at"),
+        # Índice de pesquisa textual (`pg_trgm`, criado na migração 0002).
+        # Declarado aqui porque o autogenerate compara o esquema com o metadata:
+        # um índice que existe na base mas não nos modelos é lido como "a mais" e
+        # a migração seguinte apagava-o em silêncio.
+        Index(
+            "ix_incidents_title_trgm", "title",
+            postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()

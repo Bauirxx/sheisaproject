@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
 from app.core.config import settings
+from app.models import Base
 from app.models.identity import User
 from tests.conftest import cabecalho
 
@@ -63,3 +66,42 @@ async def test_autenticacao_das_quatro_contas(cliente):
         resposta = await cliente.get("/api/auth/me", headers=cabecalho(token))
         assert resposta.status_code == 200, resposta.text
         assert resposta.json()["email"] == f"{alcunha}@teste.local"
+
+
+async def test_o_esquema_migrado_corresponde_aos_modelos(ligacao):
+    """O metadata dos modelos tem de descrever o esquema que as migrações criam.
+
+    Não é zelo: o autogenerate compara os dois, e o que existe na base sem estar
+    no metadata é lido como **a mais**. Quatro índices criados por SQL directo
+    nas migrações 0002 e 0004 não estavam declarados, pelo que a próxima migração
+    gerada os apagaria em silêncio — incluindo
+    `uq_recommendations_pendente_por_alvo`, que é o que impede o motor de
+    empilhar propostas duplicadas. Nada falharia; o motor voltava simplesmente a
+    poder acumular duplicados.
+
+    Compara-se contra a base de teste, que é migrada pelo `conftest` a partir do
+    zero, pelo que o que aqui se vê é exactamente o que as migrações produzem.
+    """
+    def _diferencas(sync_conn):
+        contexto = MigrationContext.configure(
+            sync_conn,
+            opts={"include_object": _ignorar_alheios, "compare_type": True},
+        )
+        return compare_metadata(contexto, Base.metadata)
+
+    diferencas = await ligacao.run_sync(_diferencas)
+
+    assert not diferencas, (
+        "o esquema e os modelos divergiram. Um índice ou coluna criado por SQL "
+        "directo numa migração tem de ser declarado no modelo, senão o "
+        f"autogenerate propõe removê-lo: {diferencas}"
+    )
+
+
+def _ignorar_alheios(obj, name, type_, reflected, compare_to) -> bool:
+    """Exclui o que não pertence ao esquema da aplicação.
+
+    `alembic_version` é do próprio Alembic e `spatial_ref_sys` vem de extensões;
+    nenhum consta dos modelos, e compará-los daria uma diferença permanente.
+    """
+    return not (type_ == "table" and name in {"alembic_version", "spatial_ref_sys"})

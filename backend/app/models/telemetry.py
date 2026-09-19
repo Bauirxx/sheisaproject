@@ -126,6 +126,14 @@ class Alert(Base, TimestampMixin):
     __tablename__ = "alerts"
     __table_args__ = (
         Index("ix_alerts_status_severity", "status", "severity"),
+        # Índice de pesquisa textual (`pg_trgm`, criado na migração 0002).
+        # Declarado aqui porque o autogenerate compara o esquema com o metadata:
+        # um índice que existe na base mas não nos modelos é lido como "a mais" e
+        # a migração seguinte apagava-o em silêncio.
+        Index(
+            "ix_alerts_title_trgm", "title",
+            postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"},
+        ),
         Index("ix_alerts_dedup_open", "dedup_key", "status"),
         Index("ix_alerts_triage_queue", "status", "triage_score", "last_event_at"),
     )
