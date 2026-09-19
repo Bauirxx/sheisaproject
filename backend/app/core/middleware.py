@@ -1,10 +1,12 @@
 """Middlewares transversais (§23).
 
-Inclui identificação de pedidos, limitação de taxa e cabeçalhos de segurança.
+Inclui identificação de pedidos, medição de tempo de resposta, limitação de taxa
+e cabeçalhos de segurança.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from collections import defaultdict, deque
@@ -15,6 +17,15 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
+
+logger = logging.getLogger("sheisa")
+
+#: Acima deste tempo o pedido é registado como lento.
+#:
+#: 1000 ms não é uma medição: é o limite a partir do qual um analista sente a
+#: espera. Serve para o registo apontar o que merece ser olhado, não para
+#: afirmar que o resto é rápido — isso lê-se nos números, não no limiar.
+LIMIAR_DE_LENTIDAO_MS = 1000.0
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -38,6 +49,42 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         response = await call_next(request)
         response.headers["X-Request-Id"] = request_id
+        return response
+
+
+class TempoDeRespostaMiddleware(BaseHTTPMiddleware):
+    """Mede quanto tempo cada pedido levou (RNF07).
+
+    O requisito pede "tempo de resposta aceitável", e um requisito que não se
+    mede não se pode afirmar cumprido nem incumprido. Cada resposta leva o
+    cabeçalho `X-Tempo-Resposta-ms`, pelo que o número é observável no próprio
+    navegador, em `curl` e em qualquer registo de acesso — não é uma estatística
+    que a plataforma calcula sobre si mesma e pede que se acredite.
+
+    Usa `perf_counter`, que é monótono: `time()` pode andar para trás quando o
+    relógio do sistema é ajustado, e um pedido com duração negativa é pior do que
+    nenhuma medição.
+
+    Pedidos acima de `LIMIAR_DE_LENTIDAO_MS` ficam registados com o método, o
+    caminho e o identificador do pedido, que é o que permite ligá-los à entrada
+    de auditoria correspondente.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        inicio = time.perf_counter()
+        response = await call_next(request)
+        decorrido_ms = (time.perf_counter() - inicio) * 1000.0
+
+        response.headers["X-Tempo-Resposta-ms"] = f"{decorrido_ms:.1f}"
+
+        if decorrido_ms >= LIMIAR_DE_LENTIDAO_MS:
+            logger.warning(
+                "Pedido lento: %s %s levou %.0f ms (request_id=%s)",
+                request.method,
+                request.url.path,
+                decorrido_ms,
+                getattr(request.state, "request_id", "desconhecido"),
+            )
         return response
 
 

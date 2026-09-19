@@ -157,3 +157,91 @@ async def test_o_identificador_do_pedido_so_aceita_um_uuid_do_cliente(cliente):
     for resposta in (injectado, sem_nada):
         assert str(uuid.UUID(resposta.headers["X-Request-Id"])) == resposta.headers["X-Request-Id"]
     assert injectado.headers["X-Request-Id"] != sem_nada.headers["X-Request-Id"]
+
+
+# ------------------------------------------------------- tempo de resposta
+async def test_toda_a_resposta_leva_o_tempo_que_levou(cliente):
+    """RNF07: o requisito pede tempo de resposta aceitável.
+
+    Um requisito que não se mede não se pode afirmar cumprido. O número vai no
+    cabeçalho, pelo que é observável em `curl` e no navegador — não é uma
+    estatística que a plataforma calcula sobre si mesma e pede que se acredite.
+    """
+    resposta = await cliente.get("/api/health")
+
+    assert "X-Tempo-Resposta-ms" in resposta.headers
+    decorrido = float(resposta.headers["X-Tempo-Resposta-ms"])
+    assert decorrido > 0, "uma duração de zero significa que nada foi medido"
+    assert decorrido < 30_000, "a medição não pode devolver um valor absurdo"
+
+
+async def test_tambem_mede_as_respostas_de_erro(cliente):
+    """Um pedido que falha é o que mais interessa cronometrar.
+
+    Se a medição vivesse dentro do tratamento do caso feliz, o pedido lento que
+    acaba em erro — precisamente o suspeito — sairia sem número.
+    """
+    resposta = await cliente.get("/api/incidents")
+
+    assert resposta.status_code == 401, resposta.text
+    assert "X-Tempo-Resposta-ms" in resposta.headers
+
+
+async def test_o_pedido_lento_fica_registado(cliente, monkeypatch):
+    """O limiar existe para o registo apontar o que merece ser olhado.
+
+    Baixa-se o limiar a zero em vez de tornar um pedido lento de propósito: o
+    que se verifica é a decisão de registar, não a lentidão.
+
+    Substitui-se o `logger` do módulo em vez de usar o `caplog`, que nesta suite
+    não devolve registo nenhum — nem de um `warning` emitido directamente no
+    teste, apesar de o registo não estar desligado e de o `caplog` ter ouvintes
+    ligados. A substituição também é mais directa sobre o que está a ser
+    afirmado: que o middleware decide registar, e com que conteúdo.
+    """
+    from app.core import middleware
+
+    chamadas: list[tuple] = []
+
+    class LoggerDeTeste:
+        def warning(self, *argumentos, **_) -> None:
+            chamadas.append(argumentos)
+
+    monkeypatch.setattr(middleware, "LIMIAR_DE_LENTIDAO_MS", 0.0)
+    monkeypatch.setattr(middleware, "logger", LoggerDeTeste())
+
+    await cliente.get("/api/health")
+
+    assert chamadas, "com o limiar a zero, qualquer pedido devia ficar registado"
+    modelo, metodo, caminho, decorrido, request_id = chamadas[0]
+    assert "Pedido lento" in modelo
+    assert (metodo, caminho) == ("GET", "/api/health")
+    assert decorrido > 0
+    # O identificador do pedido tem de constar, senão não se liga o registo à
+    # entrada de auditoria correspondente.
+    assert request_id != "desconhecido", (
+        "o identificador do pedido não chegou ao registo — a medição está a "
+        "correr por fora do RequestIdMiddleware"
+    )
+
+
+async def test_o_pedido_rapido_nao_enche_o_registo(cliente, monkeypatch):
+    """Abaixo do limiar não se regista nada.
+
+    Sem isto, o limiar não estaria a ser consultado e cada pedido deixaria uma
+    linha — um registo que avisa de tudo não avisa de nada.
+    """
+    from app.core import middleware
+
+    chamadas: list[tuple] = []
+
+    class LoggerDeTeste:
+        def warning(self, *argumentos, **_) -> None:
+            chamadas.append(argumentos)
+
+    monkeypatch.setattr(middleware, "LIMIAR_DE_LENTIDAO_MS", 60_000.0)
+    monkeypatch.setattr(middleware, "logger", LoggerDeTeste())
+
+    await cliente.get("/api/health")
+
+    assert not chamadas, chamadas

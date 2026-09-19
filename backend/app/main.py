@@ -18,6 +18,7 @@ from app.core.middleware import (
     RateLimitMiddleware,
     RequestIdMiddleware,
     SecurityHeadersMiddleware,
+    TempoDeRespostaMiddleware,
 )
 
 logging.basicConfig(
@@ -77,6 +78,10 @@ app.state.trust_proxy_headers = False
 # e o 429 que ela devolve saía sem nenhum deles.
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+# A medição fica por dentro do identificador de pedido, para poder citá-lo ao
+# registar um pedido lento, e por fora de tudo o resto, para que o tempo inclua
+# a limitação de taxa e a serialização da resposta.
+app.add_middleware(TempoDeRespostaMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 app.add_middleware(
@@ -85,7 +90,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-Id"],
-    expose_headers=["X-Request-Id"],
+    # Sem estar exposto, um cabeçalho de resposta é invisível ao JavaScript do
+    # navegador, mesmo chegando na resposta: medir e não conseguir ler a medição
+    # seria o mesmo que não medir.
+    expose_headers=["X-Request-Id", "X-Tempo-Resposta-ms"],
     max_age=600,
 )
 
