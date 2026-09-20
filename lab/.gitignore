@@ -6,3 +6,8 @@ config/ossec.conf
 
 # Dados dos contentores, se alguem os montar localmente.
 data/
+
+# Chave de ingestao do Suricata, gerada por preparar.sh. Mesma razao do
+# ossec.conf: uma chave em claro num repositorio publico e uma chave
+# comprometida.
+suricata/ingestao.env

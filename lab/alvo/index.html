@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portal de Clientes — Serviço de Exemplo</title>
+</head>
+<body>
+  <!--
+    Alvo do laboratório SHEISA (§26).
+
+    Não é uma aplicação real nem pretende ser: é uma superfície para uma máquina
+    Kali atacar. Serve uma página com um formulário de acesso e alguns caminhos
+    plausíveis para que ferramentas de reconhecimento (nikto, gobuster) e de
+    exploração (sqlmap) tenham onde bater — o que o Suricata deteta é o tráfego
+    que elas geram, não o que esta página faz.
+  -->
+  <h1>Portal de Clientes</h1>
+  <p>Serviço de exemplo para o laboratório de detecção.</p>
+
+  <form action="/login" method="post">
+    <label>Utilizador <input type="text" name="utilizador"></label>
+    <label>Palavra-passe <input type="password" name="palavra_passe"></label>
+    <button type="submit">Entrar</button>
+  </form>
+
+  <ul>
+    <li><a href="/admin">Área de administração</a></li>
+    <li><a href="/api/clientes">API de clientes</a></li>
+  </ul>
+</body>
+</html>

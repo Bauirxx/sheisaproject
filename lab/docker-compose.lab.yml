@@ -99,8 +99,79 @@ services:
     cap_add:
       - SYS_PTRACE
 
+  # ------------------------------------------------- alvo do laboratório
+  # O que a máquina Kali ataca. Um nginx a servir uma página com alguma
+  # superfície (um formulário de acesso, caminhos plausíveis) para que
+  # ferramentas de reconhecimento e exploração tenham onde bater.
+  #
+  # Expõe a 8080 do anfitrião: é para aqui que a VM Kali dispara
+  # (`http://<ip-do-anfitrião>:8080`). O Suricata partilha o stack de rede
+  # deste contentor, pelo que vê todo o tráfego que lhe chega.
+  alvo:
+    image: nginx:alpine
+    container_name: sheisa-lab-alvo
+    hostname: alvo-web-lab
+    restart: unless-stopped
+    volumes:
+      - ./alvo/index.html:/usr/share/nginx/html/index.html:ro
+    ports:
+      - "8080:80"
+
+  # ------------------------------------------------- sensor Suricata
+  # Partilha o stack de rede do alvo (`network_mode: service:alvo`): assim
+  # captura na interface por onde o tráfego chega ao alvo, sem precisar de ver
+  # a interface física do anfitrião — que num Docker Desktop não é alcançável a
+  # partir de um contentor. É o desenho validado antes de o escrever.
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: sheisa-lab-suricata
+    restart: unless-stopped
+    depends_on:
+      - alvo
+    network_mode: "service:alvo"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    volumes:
+      - ./suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - ./suricata/local.rules:/etc/suricata/rules/local.rules:ro
+      - ./suricata/entrada.sh:/entrada.sh:ro
+      - lab-suricata-logs:/var/log/suricata
+      - lab-suricata-rules:/var/lib/suricata/rules
+    entrypoint: ["/bin/sh", "/entrada.sh"]
+
+  # ------------------------------------------------- integrador do Suricata
+  # Segue o eve.json que o sensor escreve e entrega os alertas à plataforma.
+  # É o equivalente Suricata do `custom-sheisa` do Wazuh — a diferença é que o
+  # Suricata escreve um fluxo contínuo em vez de invocar um script por evento.
+  suricata-integrador:
+    image: python:3.12-alpine
+    container_name: sheisa-lab-suricata-integrador
+    restart: unless-stopped
+    depends_on:
+      - suricata
+    env_file:
+      # Escrito por lab/preparar.sh; contém SHEISA_SURICATA_KEY. Ignorado pelo
+      # git, como a chave do Wazuh.
+      - ./suricata/ingestao.env
+    environment:
+      SHEISA_HOOK_URL: "http://host.docker.internal:8099/api/ingest/suricata"
+      SHEISA_API_KEY: "${SHEISA_SURICATA_KEY}"
+      EVE_PATH: /var/log/suricata/eve.json
+    volumes:
+      - ./integrations/suricata-sheisa.py:/suricata-sheisa.py:ro
+      - lab-suricata-logs:/var/log/suricata:ro
+      - lab-suricata-posicao:/var/lib/suricata-integrador
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python3", "/suricata-sheisa.py"]
+
 volumes:
   lab-logs:
   lab-manager-etc:
   lab-manager-logs:
   lab-manager-queue:
+  lab-suricata-logs:
+  lab-suricata-rules:
+  lab-suricata-posicao:

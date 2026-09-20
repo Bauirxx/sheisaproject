@@ -1,0 +1,127 @@
+%YAML 1.1
+---
+# Configuração do Suricata para o laboratório SHEISA (§26).
+#
+# Mínima de propósito. A imagem oficial traz uma configuração de ~2000 linhas
+# feita para produção; aqui fica só o que o laboratório precisa, para que a
+# configuração seja legível de uma vez e cada decisão seja visível.
+#
+# O Suricata corre como IDS (observa, não bloqueia), captura na interface que
+# partilha com o alvo, e escreve `eve.json` — o fluxo de eventos que o
+# integrador segue e entrega à plataforma.
+
+vars:
+  address-groups:
+    # O alvo é o que se defende; tudo o resto é potencial atacante. Deixá-lo
+    # em "any" faz as regras que distinguem origem de destino (a maioria das de
+    # scan e exploração) dispararem na direcção certa.
+    HOME_NET: "any"
+    EXTERNAL_NET: "any"
+    # As restantes são as que o conjunto Emerging Threats Open espera encontrar.
+    # Sem elas, milhares de regras são desactivadas no arranque com "unknown
+    # source address var". Aqui apontam todas para a rede que defendemos — no
+    # laboratório, o alvo é ao mesmo tempo o servidor HTTP, SQL, DNS, etc.
+    HTTP_SERVERS: "$HOME_NET"
+    SMTP_SERVERS: "$HOME_NET"
+    SQL_SERVERS: "$HOME_NET"
+    DNS_SERVERS: "$HOME_NET"
+    TELNET_SERVERS: "$HOME_NET"
+    AIM_SERVERS: "$EXTERNAL_NET"
+    DC_SERVERS: "$HOME_NET"
+    DNP3_SERVER: "$HOME_NET"
+    DNP3_CLIENT: "$HOME_NET"
+    MODBUS_CLIENT: "$HOME_NET"
+    MODBUS_SERVER: "$HOME_NET"
+    ENIP_CLIENT: "$HOME_NET"
+    ENIP_SERVER: "$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
+    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: 21
+    GENEVE_PORTS: 6081
+    VXLAN_PORTS: 4789
+    TEREDO_PORTS: 3544
+
+default-log-dir: /var/log/suricata
+
+# ------------------------------------------------------------------- saídas
+outputs:
+  # O EVE é a única saída que interessa ao laboratório: é JSON por linha, e é
+  # exactamente o formato que o normalizador Suricata da plataforma lê.
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      types:
+        - alert:
+            # O payload que disparou a regra vai junto: é a prova de que a
+            # detecção não foi inventada, o equivalente ao raw_payload de um
+            # evento na plataforma.
+            payload: yes
+            payload-printable: yes
+            metadata: yes
+        - http:
+            extended: yes
+        - dns
+        - tls
+        - flow
+
+  # Um registo humano, para diagnóstico dentro do contentor.
+  - fast:
+      enabled: yes
+      filename: fast.log
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes
+
+# --------------------------------------------------------------- captura
+# AF_PACKET na interface partilhada com o alvo. `cluster-type: cluster_flow`
+# mantém os pacotes do mesmo fluxo na mesma thread, que é o que permite ao
+# Suricata reconstruir sessões TCP e ver um pedido HTTP inteiro.
+af-packet:
+  - interface: eth0
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    use-mmap: yes
+    tpacket-v3: yes
+
+# --------------------------------------------------------------- camadas
+# As análises de aplicação que dão significado ao tráfego. HTTP é o que mais
+# importa aqui — é onde vivem as assinaturas de scan e exploração web que uma
+# Kali dispara.
+app-layer:
+  protocols:
+    http:
+      enabled: yes
+    tls:
+      enabled: yes
+    dns:
+      enabled: yes
+    ssh:
+      enabled: yes
+    ftp:
+      enabled: yes
+
+# ---------------------------------------------------------------- regras
+default-rule-path: /var/lib/suricata/rules
+rule-files:
+  # As regras próprias do laboratório, sempre presentes.
+  - /etc/suricata/rules/local.rules
+  # O conjunto Emerging Threats Open, obtido por `suricata-update` no arranque.
+  # Vem em `suricata.rules`; se o download falhar (sem rede), o Suricata arranca
+  # à mesma com as regras locais — o ficheiro em falta é um aviso, não um erro
+  # fatal.
+  - suricata.rules
+
+# O motor precisa de saber classificar e referenciar as regras do ET Open.
+classification-file: /etc/suricata/classification.config
+reference-config-file: /etc/suricata/reference.config
