@@ -15,6 +15,7 @@ deve aceder a dados internos*).
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime
 from typing import Annotated
@@ -31,6 +32,7 @@ from app.core.enums import (
     ReportStatus,
     Severity,
 )
+from app.core.errors import IntegrationNotAvailableError, ValidationError
 from app.core.pagination import Page, PageParams, apply_sort, page_params, paginate
 from app.core.permissions import Permission
 from app.models.identity import User
@@ -46,7 +48,7 @@ from app.schemas.reporting import (
     ReportSubmit,
     ReportSubmitted,
 )
-from app.services import report_inbox_service
+from app.services import email_service, report_inbox_service
 
 public_router = APIRouter(prefix="/public", tags=["Portal externo"])
 inbox_router = APIRouter(prefix="/reports-inbox", tags=["Comunicações recebidas"])
@@ -152,6 +154,76 @@ def _para_leitura(relato: IncidentReport) -> ReportRead:
         relato.triaged_by.email if relato.triaged_by else None
     )
     return ReportRead.model_validate(dados)
+
+
+@inbox_router.get(
+    "/canal-de-email",
+    summary="Estado do canal de correio electrónico",
+    description=(
+        "Diz o que está configurado, e **não** contacta o servidor: apresentar o "
+        "canal como activo sem o provar é exactamente o que o §4 proíbe. Use "
+        "`POST /canal-de-email/testar` para o provar."
+    ),
+)
+async def estado_do_canal_de_email(
+    _: Annotated[object, Depends(require(Permission.REPORTS_INBOX_READ))],
+) -> dict:
+    return email_service.estado_do_canal()
+
+
+@inbox_router.post(
+    "/canal-de-email/testar",
+    summary="Testar o envio de correio",
+    description=(
+        "Envia uma mensagem real para o endereço indicado e devolve o "
+        "`Message-ID` que o servidor atribuiu. Um `true` não provaria nada; o "
+        "identificador permite encontrar a mensagem no servidor."
+    ),
+)
+async def testar_canal_de_email(
+    destino: Annotated[str, Query(min_length=3, max_length=254)],
+    _: Annotated[object, Depends(require(Permission.REPORTS_INBOX_TRIAGE))],
+) -> dict:
+    try:
+        identificador = await asyncio.to_thread(email_service.testar_envio, destino)
+    except email_service.EmailNaoConfigurado as exc:
+        raise ValidationError(str(exc), code="CANAL_NAO_CONFIGURADO") from exc
+    except Exception as exc:
+        # 503 e não 500: o serviço externo falhou, não a plataforma. E a
+        # explicação vai no corpo — "erro interno" não diz a ninguém o que
+        # corrigir na configuração do servidor de correio.
+        raise IntegrationNotAvailableError(
+            "Correio electrónico",
+            f"o servidor recusou ou não respondeu: {exc}",
+        ) from exc
+    return {"enviada": True, "para": destino, "message_id": identificador}
+
+
+@inbox_router.post(
+    "/recolher-email",
+    summary="Recolher comunicações da caixa de segurança",
+    description=(
+        "Lê a caixa configurada e cria uma comunicação por mensagem nova. "
+        "Devolve o que aconteceu item a item: um número não diria se as "
+        "restantes foram duplicados ou falhas. "
+        "Duplicados são detectados pelo `Message-ID` — o POP3 não guarda estado "
+        "de lida, e uma reentrega criaria uma comunicação nova."
+    ),
+)
+async def recolher_email(
+    session: SessionDep,
+    ctx: AuditDep,
+    _: Annotated[object, Depends(require(Permission.REPORTS_INBOX_TRIAGE))],
+) -> dict:
+    try:
+        return await report_inbox_service.recolher_do_email(session, ctx)
+    except email_service.EmailNaoConfigurado as exc:
+        raise ValidationError(str(exc), code="CANAL_NAO_CONFIGURADO") from exc
+    except Exception as exc:
+        raise IntegrationNotAvailableError(
+            "Correio electrónico",
+            f"a caixa de correio não respondeu: {exc}",
+        ) from exc
 
 
 @inbox_router.get(

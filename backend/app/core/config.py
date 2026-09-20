@@ -65,6 +65,45 @@ class Settings(BaseSettings):
     #: Portal externo (§37): escrita sem autenticação.
     rate_limit_public_per_minute: int = 20
 
+    # ------------------------------------------------- correio electrónico (§37)
+    #
+    # O canal de email tem duas direcções e as duas precisam de configuração: a
+    # plataforma **envia** o aviso de recepção por SMTP e **lê** a caixa de
+    # segurança por POP3. Sem `smtp_host` o envio não é tentado e o canal fica
+    # NAO_CONFIGURADA — nunca se finge um envio (§4).
+    smtp_host: str = ""
+    smtp_port: int = 1025
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = False
+    smtp_timeout_segundos: int = 15
+    mail_from: str = ""
+    mail_from_name: str = "Equipa de Resposta a Incidentes"
+
+    pop3_host: str = ""
+    pop3_port: int = 1110
+    pop3_user: str = ""
+    pop3_password: str = ""
+    pop3_tls: bool = False
+    pop3_timeout_segundos: int = 20
+    #: Quantas mensagens são recolhidas de cada vez. Um limite existe para uma
+    #: caixa com milhares de mensagens não bloquear a recolha inteira.
+    pop3_max_por_recolha: int = 50
+
+    @property
+    def envio_de_email_configurado(self) -> bool:
+        """Verdadeiro quando há o mínimo para tentar enviar.
+
+        Propriedade e não constante: a configuração vem do ambiente e pode
+        mudar entre arranques. Quem pergunta é o catálogo de integrações, que
+        não pode apresentar o canal como activo sem isto.
+        """
+        return bool(self.smtp_host and self.mail_from)
+
+    @property
+    def recolha_de_email_configurada(self) -> bool:
+        return bool(self.pop3_host and self.pop3_user and self.pop3_password)
+
     # ------------------------------------------------------------ evidências
     evidence_storage_path: Path = PROJECT_ROOT / "backend" / "var" / "evidence"
     evidence_max_bytes: int = 64 * 1024 * 1024  # 64 MiB

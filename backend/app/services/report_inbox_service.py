@@ -23,7 +23,9 @@ de qualquer incidente, e o trabalho desaparecia sem deixar rasto.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import logging
 import secrets
 import uuid
 from datetime import UTC, datetime
@@ -33,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.audit import AuditContext
+from app.core.config import settings
 from app.core.enums import (
     REPORT_STATES_REQUIRING_INCIDENT,
     REPORT_TRANSITIONS,
@@ -49,7 +52,9 @@ from app.core.security import constant_time_equals
 from app.models.identity import User
 from app.models.incident import Incident
 from app.models.reporting import IncidentReport
-from app.services import incident_service
+from app.services import email_service, incident_service
+
+logger = logging.getLogger("sheisa")
 
 #: Comprimento do código de acompanhamento em bytes de entropia.
 #:
@@ -136,7 +141,177 @@ async def submit(
         new_value={"estado": relato.status.value, "canal": channel.value},
         changed_fields=["status"],
     )
+
+    await _avisar_da_recepcao(session, relato, codigo)
     return relato, codigo
+
+
+async def _avisar_da_recepcao(
+    session: AsyncSession, relato: IncidentReport, codigo: str
+) -> None:
+    """Envia o aviso de recepção, se o canal estiver configurado.
+
+    **Nunca faz falhar a submissão.** Perder uma comunicação porque o servidor de
+    correio está em baixo seria trocar o essencial pelo acessório: a comunicação
+    já está registada e tem referência. Uma falha de envio é registada e
+    `acknowledged_at` fica `None`, que é a resposta honesta — a interface mostra
+    "aviso não enviado" em vez de afirmar um envio que não houve.
+
+    O SMTP é síncrono e bloqueia; corre numa linha de execução separada para não
+    parar o ciclo de eventos enquanto o servidor responde.
+    """
+    if not settings.envio_de_email_configurado:
+        return
+
+    # Construído por linhas e unido no fim: uma cadeia com sequências de
+    # escape atravessa várias camadas de ferramentas até chegar ao ficheiro,
+    # e é uma fonte fiável de erros. Uma lista não tem esse problema.
+    corpo = "\n".join([
+        f"{relato.reporter_name},",
+        "",
+        "A sua comunicação foi recebida e está na fila para ser avaliada por",
+        "um analista.",
+        "",
+        f"Referência: {relato.reference}",
+        f"Código de acompanhamento: {codigo}",
+        "",
+        "Guarde os dois: é com eles que pode consultar o estado. O código não",
+        "pode voltar a ser mostrado, porque guardamos apenas o seu resumo.",
+        "",
+        f"Assunto comunicado: {relato.subject}",
+        "",
+        "Se tiver informação nova, responda a esta mensagem.",
+        "",
+        "-- ",
+        "Mensagem gerada automaticamente ao receber a sua comunicação.",
+    ])
+
+    try:
+        await asyncio.to_thread(
+            email_service.enviar,
+            para=relato.reporter_email,
+            assunto=f"[{relato.reference}] Comunicação recebida",
+            corpo=corpo,
+        )
+    except Exception:
+        # Registado e não levantado: a submissão está feita e não se desfaz por
+        # causa disto. O estado fica visível em `acknowledged_at`.
+        logger.exception(
+            "Falhou o aviso de recepção da comunicação %s para %s",
+            relato.reference,
+            relato.reporter_email,
+        )
+        return
+
+    relato.acknowledged_at = datetime.now(UTC)
+    await session.flush()
+
+
+# ===================================================== recolha do correio
+async def recolher_do_email(
+    session: AsyncSession, ctx: AuditContext
+) -> dict:
+    """Lê a caixa de segurança e cria uma comunicação por mensagem nova.
+
+    Devolve o que aconteceu, item a item, em vez de um número: quem corre isto
+    precisa de saber *o que* foi criado e *o que* foi ignorado e porquê. Um
+    "recolhidas: 3" não diz se as outras sete foram duplicados ou falhas.
+
+    **O duplicado é detectado pelo `Message-ID`.** O POP3 não guarda estado de
+    lida, e uma mensagem reentregue pelo servidor de origem chegaria outra vez.
+    Sem esta verificação, cada reentrega criava uma comunicação nova e quem
+    comunicou recebia outro aviso de recepção com outra referência.
+
+    O SMTP e o POP3 são síncronos e bloqueiam; a recolha corre numa linha de
+    execução separada para não parar o ciclo de eventos.
+    """
+    if not settings.recolha_de_email_configurada:
+        raise email_service.EmailNaoConfigurado(
+            "A recolha de correio não está configurada: faltam SHEISA_POP3_HOST, "
+            "SHEISA_POP3_USER ou SHEISA_POP3_PASSWORD."
+        )
+
+    mensagens = await asyncio.to_thread(email_service.recolher)
+    resultados: list[dict] = []
+
+    for mensagem in mensagens:
+        # O que a plataforma enviou, respostas automáticas e devoluções não são
+        # comunicações de ninguém. Registado com o motivo em vez de descartado em
+        # silêncio: "ignorada" sem razão é indistinguível de "perdida".
+        if mensagem.motivo_para_ignorar:
+            resultados.append({
+                "estado": "ignorada",
+                "remetente": mensagem.remetente_email,
+                "assunto": mensagem.assunto,
+                "detalhe": mensagem.motivo_para_ignorar,
+            })
+            continue
+
+        if mensagem.message_id:
+            ja_existe = await session.execute(
+                select(IncidentReport.reference).where(
+                    IncidentReport.channel_metadata["message_id"].astext
+                    == mensagem.message_id
+                )
+            )
+            anterior = ja_existe.scalar_one_or_none()
+            if anterior is not None:
+                resultados.append({
+                    "estado": "duplicado_ignorado",
+                    "remetente": mensagem.remetente_email,
+                    "assunto": mensagem.assunto,
+                    "detalhe": f"Já registada como {anterior}.",
+                })
+                continue
+
+        # O assunto e o corpo entram como estão. A plataforma não classifica por
+        # palavras-chave: uma categoria inferida do assunto seria apresentada com
+        # a mesma confiança de uma afirmada, e o §4 proíbe-o.
+        descricao = mensagem.corpo or "(mensagem sem corpo legível)"
+        if mensagem.truncada:
+            descricao += (
+                "\n\n[A mensagem original excedeu o limite e foi truncada. "
+                "Os cabeçalhos completos estão preservados nos metadados.]"
+            )
+        if mensagem.anexos:
+            descricao += (
+                "\n\nAnexos indicados na mensagem, não recolhidos como "
+                "evidência: " + ", ".join(mensagem.anexos)
+            )
+
+        relato, _codigo = await submit(
+            session,
+            ctx,
+            reporter_name=mensagem.remetente_nome or mensagem.remetente_email,
+            reporter_email=mensagem.remetente_email,
+            subject=mensagem.assunto,
+            description=descricao,
+            channel=ReportChannel.EMAIL,
+            channel_metadata={
+                "message_id": mensagem.message_id,
+                # Prova de origem, como o `raw_payload` de um evento. Inclui os
+                # cabeçalhos de autenticação, que a plataforma **não**
+                # interpreta — o campo `From` de um email é trivial de
+                # falsificar, e quem tria é que decide se acredita.
+                "cabecalhos": mensagem.cabecalhos,
+                "anexos": mensagem.anexos,
+                "truncada": mensagem.truncada,
+            },
+        )
+        resultados.append({
+            "estado": "criada",
+            "referencia": relato.reference,
+            "remetente": mensagem.remetente_email,
+            "assunto": mensagem.assunto,
+        })
+
+    criadas = sum(1 for r in resultados if r["estado"] == "criada")
+    return {
+        "lidas": len(mensagens),
+        "criadas": criadas,
+        "ignoradas": len(mensagens) - criadas,
+        "resultados": resultados,
+    }
 
 
 # ================================================================ acompanhamento

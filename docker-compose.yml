@@ -44,5 +44,52 @@ services:
       timeout: 5s
       retries: 20
 
+  # Servidor de correio do ambiente de desenvolvimento (§37).
+  #
+  # **Porque um servidor a sério e não um simulador.** O canal de email tem duas
+  # direcções, e as duas têm de funcionar para o canal poder ser apresentado como
+  # funcional: a plataforma **envia** o aviso de recepção, e **lê** as
+  # comunicações que chegam à caixa de segurança. O Mailpit faz as duas — SMTP
+  # para receber o que a plataforma envia, POP3 para a plataforma ler o que lhe
+  # foi enviado — e traz uma interface web onde as mensagens se vêem, o que é o
+  # que permite demonstrar o ciclo em vez de o afirmar.
+  #
+  # **Não é um servidor de produção e não pretende ser.** Aceita qualquer
+  # autenticação SMTP e está preso a loopback. Numa instalação real, as variáveis
+  # `SHEISA_SMTP_*` e `SHEISA_POP3_*` apontam para o servidor da organização; o
+  # código é o mesmo, muda a configuração.
+  mail:
+    image: axllent/mailpit:latest
+    container_name: sheisa-mail
+    restart: unless-stopped
+    # O ficheiro de autenticação do POP3 é escrito no arranque a partir do
+    # ambiente: é o que liga o servidor POP3, e commitá-lo colocaria uma
+    # credencial no repositório.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        echo "$$MP_POP3_USER:$$MP_POP3_PASS" > /tmp/pop3.auth &&
+        exec /mailpit --listen "[::]:8025" --smtp "[::]:1025"
+        --pop3 "[::]:1110" --smtp-auth-accept-any
+        --smtp-auth-allow-insecure --pop3-auth-file /tmp/pop3.auth
+        --disable-version-check
+    environment:
+      MP_POP3_USER: ${SHEISA_POP3_USER:-cert@sheisa.local}
+      MP_POP3_PASS: ${SHEISA_POP3_PASSWORD:?SHEISA_POP3_PASSWORD tem de estar definido no .env}
+      # Guarda as mensagens em memória: o laboratório começa limpo a cada
+      # arranque, como a base de dados de teste.
+      MP_MAX_MESSAGES: "500"
+    ports:
+      # Interface web onde as mensagens se vêem.
+      - "127.0.0.1:${SHEISA_MAIL_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${SHEISA_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${SHEISA_POP3_PORT:-1110}:1110"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   sheisa-db-data:
