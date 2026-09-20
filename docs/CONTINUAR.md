@@ -9,7 +9,7 @@
 > completo de decisões e defeitos, use [`ESTADO.md`](ESTADO.md). Este ficheiro é
 > o mais curto dos três de propósito: se crescer demasiado, deixa de ser lido.
 >
-> Última actualização: 2026-09-20 (canal de correio electrónico a funcionar).
+> Última actualização: 2026-09-20 (detecção Suricata com máquina Kali; recolha de correio por IMAP para servidor real).
 
 ---
 
@@ -40,7 +40,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 539 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 544 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -121,7 +121,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 539 a passar |
+| Testes | 544 a passar |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 58 vistas contra a API a correr — menos três quando a fila de aprovação está vazia, porque só se verificam com pedidos pendentes |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -396,7 +396,20 @@ As duas direcções funcionam contra um servidor a sério, não um simulador. O
 `docker-compose` traz um serviço `mail` (Mailpit) que faz SMTP **e** POP3 e mostra
 as mensagens em <http://127.0.0.1:8025> — é o que permite demonstrar o ciclo em
 vez de o afirmar. Numa instalação real as variáveis `SHEISA_SMTP_*` e
-`SHEISA_POP3_*` apontam para o servidor da organização; o código é o mesmo.
+`SHEISA_IMAP_*`/`SHEISA_POP3_*` apontam para o servidor da organização; o código
+é o mesmo.
+
+**Servidor real (Gmail).** A recolha suporta POP3 e IMAP —
+`SHEISA_MAIL_COLLECT_PROTOCOL` escolhe. O Mailpit usa POP3; um servidor real usa
+IMAP, porque o POP costuma estar desligado e o IMAP marca as mensagens como
+lidas (`\Seen`) sem as apagar, o que importa numa caixa partilhada. Para o
+Gmail: activar a verificação em duas etapas, gerar uma **palavra-passe de
+aplicação** de 16 caracteres em <https://myaccount.google.com/apppasswords>
+(não é a palavra-passe normal), e preencher o bloco comentado do `.env.example`.
+A app password é um segredo — vive só no `.env`. Provado o quê: a lógica de
+selecção de protocolo e o despacho têm testes; o IMAP contra o Gmail só se
+confirma pondo a credencial e correndo o teste de ligação, e isso fica do lado
+de quem tem a conta.
 
 **Enviar.** Quem comunica pelo portal recebe um aviso com a referência e o código.
 `acknowledged_at` só é escrito **depois** de o servidor aceitar a mensagem, e uma
@@ -435,6 +448,47 @@ plataforma são ignorados com o motivo à vista.
 tomada (aceite, recusada, duplicada). O envio já existe e é uma chamada; falta
 decidir o que se diz em cada caso, que é uma escolha de processo — uma recusa
 mal redigida faz mais dano do que silêncio.
+
+### 4.9 Detecção de rede com Suricata e máquina Kali — **feito** (2026-09-20)
+
+O laboratório passa a ter uma segunda camada de detecção, a par do Wazuh: o
+**Suricata** observa o *tráfego de rede* que chega a um alvo e aplica-lhe
+assinaturas reais (Emerging Threats Open, o conjunto que um SOC usa, mais regras
+locais do laboratório). É o caminho natural de uma máquina Kali, que produz
+tráfego e não registos.
+
+**Arquitectura, validada empiricamente antes de a escrever.** Um contentor-alvo
+(nginx) expõe a porta 8080; o sensor Suricata **partilha o stack de rede do
+alvo** (`network_mode: service:alvo`), o que lhe dá acesso à interface por onde o
+tráfego chega sem precisar de ver a interface física do anfitrião — que num
+Docker Desktop não é alcançável a partir de um contentor. O sensor escreve
+`eve.json`; o integrador `suricata-sheisa.py` segue-o e entrega os alertas em
+lote a `POST /api/ingest/suricata`. Ver [`lab/README.md`](../../lab/README.md).
+
+**A máquina Kali é externa** (a forma escolhida). O `lab/README.md` documenta
+como a ligar — adaptador *bridged*, atacar `<anfitrião>:8080` com nmap, nikto,
+sqlmap, hydra — e a limitação honesta do NAT: o Docker Desktop substitui o IP de
+origem pelo do gateway no reencaminhamento, pelo que as assinaturas disparam mas
+o "atacante" aparece como o gateway. Preservar o IP real exige rede `macvlan` num
+anfitrião Linux, ou correr a Kali na mesma máquina.
+
+**Reprodutível sem a Kali.** `lab/atacar-suricata.sh` dispara os mesmos padrões
+de contentores efémeros na rede do laboratório (o que preserva o IP), para a
+cadeia se poder demonstrar e verificar. Foi como se validou tudo: 152 eventos
+reais, 7 regras locais e **10 regras ET Open genuínas** — incluindo a detecção
+do nmap (`ET SCAN Nmap User-Agent`, sondas a portas MSSQL/PostgreSQL/mySQL), o
+`/etc/passwd` na URI, e o acesso ao `.env`. Atacante e alvo chegam à plataforma
+nos papéis certos, com o alerta Suricata original preservado em `raw_payload`.
+
+**Chaves separadas.** `preparar.sh` cria uma chave de ingestão própria do tipo
+SURICATA (`lab/suricata/ingestao.env`, ignorado pelo git), distinta da do Wazuh:
+cada fonte é atribuível e revogável isoladamente.
+
+**O que fica por fazer:** o normalizador Suricata tem testes unitários, mas a
+cadeia laboratório→plataforma não tem um teste automatizado (depende de
+contentores). É verificável à mão com `atacar-suricata.sh`; um teste de
+integração exigiria orquestrar o Docker a partir do pytest, o que ainda não se
+faz para nenhuma parte do laboratório.
 
 ### 4.6 Parâmetros da API que a interface não usa
 

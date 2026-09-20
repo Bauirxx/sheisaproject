@@ -143,6 +143,12 @@ export function CanalDeEmail() {
               <span className="propriedade__rotulo">Caixa lida</span>
               <span className="propriedade__valor mono">{canal.caixa ?? "—"}</span>
             </div>
+            <div className="propriedade">
+              <span className="propriedade__rotulo">Protocolo</span>
+              <span className="propriedade__valor mono">
+                {canal.protocolo_de_recolha}
+              </span>
+            </div>
           </div>
 
           {canal.variaveis_em_falta.length > 0 ? (

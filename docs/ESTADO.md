@@ -7,7 +7,8 @@
 > curto e accionável. Este é o registo completo, para consultar quando precisar
 > do detalhe ou do histórico de uma decisão.
 >
-> Última actualização: 2026-09-19 (relatórios, aplicação de recomendações,
+> Última actualização: 2026-09-20 (canal de correio a funcionar, detecção
+> Suricata com máquina Kali; antes: relatórios, aplicação de recomendações,
 > ingestão genérica, defeitos 54 a 57, requisitos RNF07/RNF12/RF16;
 > comunicações de incidente, portal externo e canal de correio)
 
@@ -20,7 +21,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 539 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 58 vistas do frontend contra a API viva |
+| **Testes** | 544 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 58 vistas do frontend contra a API viva |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -916,6 +917,42 @@ comunicação recolhida chega sem classificação, e é o analista que a dá.
 27 testes. Os que exigem o servidor saltam-se com uma mensagem clara quando ele
 não está de pé, em vez de falharem: um teste vermelho por falta de infraestrutura
 ensina a ignorar testes vermelhos.
+
+---
+
+### Detecção de rede com Suricata e máquina Kali (2026-09-20)
+
+O laboratório ganha uma segunda camada de detecção a par do Wazuh: o Suricata
+observa **tráfego de rede** e aplica-lhe assinaturas reais (Emerging Threats
+Open mais regras locais), enquanto o Wazuh observa registos. É o caminho natural
+de uma máquina Kali, que produz tráfego e não logs.
+
+A arquitectura foi validada empiricamente antes de escrita: um alvo nginx, o
+sensor Suricata a partilhar o stack de rede do alvo (`network_mode: service:alvo`
+— o único modo que captura em Docker Desktop sem ver a interface física do
+anfitrião), e um integrador que segue o `eve.json` e entrega em lote a
+`/api/ingest/suricata`. A máquina Kali é externa (a forma escolhida): o
+`lab/README.md` documenta como a ligar e a limitação do NAT do Docker Desktop
+sobre o IP de origem. `lab/atacar-suricata.sh` reproduz os ataques de contentores
+efémeros, o que preserva o IP e permite verificar a cadeia sem a VM.
+
+Verificado a correr: 152 eventos, 7 regras locais e **10 regras ET Open
+genuínas** — a detecção real do nmap (User-Agent, sondas a portas de base de
+dados), `/etc/passwd` na URI, acesso ao `.env`. O alerta Suricata original fica
+em `raw_payload`, e atacante/alvo chegam nos papéis certos. Exercita, pela
+primeira vez ponta a ponta, o normalizador Suricata que existia e nunca tinha
+sido usado com tráfego real.
+
+### Canal de correio: suporte a servidor real por IMAP (2026-09-20)
+
+A recolha passa a suportar IMAP a par do POP3 (`SHEISA_MAIL_COLLECT_PROTOCOL`
+escolhe). O Mailpit do laboratório usa POP3; um servidor real como o Gmail usa
+IMAP — o POP costuma estar desligado, e o IMAP marca as mensagens como lidas
+(`\Seen`) sem as apagar, o que importa numa caixa partilhada. O `.env.example`
+traz um bloco Gmail comentado, com a nota de que exige verificação em duas
+etapas e uma palavra-passe de aplicação. A lógica de selecção de protocolo e o
+despacho têm testes; o IMAP contra o Gmail confirma-se pondo a credencial e
+correndo o teste de ligação, que é do lado de quem tem a conta.
 
 ---
 

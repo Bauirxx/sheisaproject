@@ -866,6 +866,8 @@ export interface Comunicacao extends ComunicacaoResumo {
 export interface EstadoDoCanalDeEmail {
   envio_configurado: boolean;
   recolha_configurada: boolean;
+  /** "POP3" (laboratório) ou "IMAP" (servidor real como o Gmail). */
+  protocolo_de_recolha: string;
   remetente: string | null;
   caixa: string | null;
   variaveis_em_falta: string[];

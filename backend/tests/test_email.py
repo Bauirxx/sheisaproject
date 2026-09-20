@@ -315,3 +315,67 @@ def test_a_recolha_apaga_e_nao_repete():
 
     assert len(primeira) == 1
     assert segunda == [], "a mensagem voltou a ser lida depois de apagada"
+
+
+# ============================================================= protocolo IMAP
+# O Mailpit não fala IMAP, pelo que a recolha IMAP contra um servidor a sério só
+# é exercida quando alguém configura o Gmail. O que se pode — e deve — fixar
+# aqui é a lógica de selecção de protocolo: qual servidor conta, o que falta, e
+# que `recolher()` despacha para o caminho certo.
+def test_config_imap_escolhe_o_servidor_imap(monkeypatch):
+    monkeypatch.setattr(settings, "mail_collect_protocol", "IMAP")
+    monkeypatch.setattr(settings, "imap_host", "imap.gmail.com")
+    monkeypatch.setattr(settings, "pop3_host", "")
+
+    assert settings.usa_imap is True
+    assert settings.servidor_de_recolha == "imap.gmail.com"
+    # Sem pop3_host, mas com imap_host e credenciais, a recolha está configurada:
+    # o servidor que conta é o do protocolo escolhido.
+    monkeypatch.setattr(settings, "pop3_user", "cert@gmail.com")
+    monkeypatch.setattr(settings, "pop3_password", "app-password")
+    assert settings.recolha_de_email_configurada is True
+
+
+def test_estado_do_canal_nomeia_a_variavel_imap_em_falta(monkeypatch):
+    """Com IMAP escolhido e sem imap_host, manda configurar o IMAP, não o POP3."""
+    monkeypatch.setattr(settings, "mail_collect_protocol", "IMAP")
+    monkeypatch.setattr(settings, "imap_host", "")
+
+    em_falta = ems.estado_do_canal()["variaveis_em_falta"]
+
+    assert "SHEISA_IMAP_HOST" in em_falta
+    assert "SHEISA_POP3_HOST" not in em_falta, (
+        "com IMAP escolhido, mandar configurar o POP3 aponta a variável errada"
+    )
+    assert ems.estado_do_canal()["protocolo_de_recolha"] == "IMAP"
+
+
+def test_recolher_despacha_para_imap(monkeypatch):
+    """`recolher()` tem de ir pelo caminho IMAP quando é esse o protocolo."""
+    monkeypatch.setattr(settings, "mail_collect_protocol", "IMAP")
+    chamados: list[str] = []
+    monkeypatch.setattr(ems, "_recolher_imap", lambda **_: chamados.append("imap") or [])
+    monkeypatch.setattr(ems, "_recolher_pop3", lambda **_: chamados.append("pop3") or [])
+
+    ems.recolher()
+
+    assert chamados == ["imap"]
+
+
+def test_recolher_despacha_para_pop3_por_omissao(monkeypatch):
+    monkeypatch.setattr(settings, "mail_collect_protocol", "POP3")
+    chamados: list[str] = []
+    monkeypatch.setattr(ems, "_recolher_imap", lambda **_: chamados.append("imap") or [])
+    monkeypatch.setattr(ems, "_recolher_pop3", lambda **_: chamados.append("pop3") or [])
+
+    ems.recolher()
+
+    assert chamados == ["pop3"]
+
+
+def test_recolha_imap_sem_configuracao_levanta(monkeypatch):
+    monkeypatch.setattr(settings, "mail_collect_protocol", "IMAP")
+    monkeypatch.setattr(settings, "imap_host", "")
+
+    with pytest.raises(ems.EmailNaoConfigurado):
+        ems._recolher_imap(marcar_lida=True)

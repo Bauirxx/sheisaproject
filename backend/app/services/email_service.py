@@ -31,6 +31,7 @@ não os mostrar.
 
 from __future__ import annotations
 
+import contextlib
 import email
 import email.utils
 import logging
@@ -365,14 +366,24 @@ def desmontar(bruto: bytes) -> MensagemRecolhida:
 def recolher(*, apagar: bool = True) -> list[MensagemRecolhida]:
     """Lê a caixa e devolve as mensagens desmontadas.
 
-    `apagar=True` porque o POP3 não guarda estado de "lida": sem apagar, cada
-    recolha traria as mesmas mensagens e criaria comunicações duplicadas a cada
-    execução. O apagar acontece **depois** de a mensagem ser desmontada com
-    êxito, pelo que uma mensagem que falhe a desmontagem fica na caixa para ser
-    olhada — perder uma comunicação é pior do que a recolher duas vezes.
+    Despacha para POP3 ou IMAP conforme a configuração. As duas partilham a
+    mesma regra: uma mensagem só sai da fila de "por processar" **depois** de
+    ser desmontada com êxito — uma que falhe a desmontagem fica para ser olhada,
+    porque perder uma comunicação é pior do que a recolher duas vezes. E o
+    `Message-ID` sobrevive em `channel_metadata`, o que apanha um duplicado caso
+    a mensagem volte a chegar.
+    """
+    if settings.usa_imap:
+        return _recolher_imap(marcar_lida=apagar)
+    return _recolher_pop3(apagar=apagar)
 
-    O `Message-ID` sobrevive em `channel_metadata`, o que permite detectar um
-    duplicado caso a mensagem volte a chegar.
+
+def _recolher_pop3(*, apagar: bool) -> list[MensagemRecolhida]:
+    """POP3: o servidor não guarda estado de "lida", pelo que se apaga.
+
+    Sem apagar, cada recolha traria as mesmas mensagens e criaria duplicados. É
+    o comportamento certo para o servidor de laboratório (Mailpit), que é uma
+    caixa efémera e de um só consumidor.
     """
     recolhidas: list[MensagemRecolhida] = []
     ligacao = _ligar_pop3()
@@ -399,6 +410,72 @@ def recolher(*, apagar: bool = True) -> list[MensagemRecolhida]:
     return recolhidas
 
 
+def _recolher_imap(*, marcar_lida: bool) -> list[MensagemRecolhida]:
+    """IMAP: lê as não lidas e marca-as como lidas, sem apagar.
+
+    É o que serve uma caixa real e partilhada (`cert@`): as mensagens ficam no
+    servidor para quem as queira ver no webmail, e o critério de "por processar"
+    é a flag `\\Seen` em vez do apagamento. Ler só as `UNSEEN` é o equivalente
+    IMAP de não reprocessar o histórico a cada recolha.
+
+    `marcar_lida=False` (a partir de um teste, por exemplo) lê sem marcar, e a
+    próxima recolha volta a vê-las — o análogo de `apagar=False` no POP3.
+    """
+    import imaplib
+
+    if not settings.recolha_de_email_configurada:
+        raise EmailNaoConfigurado(
+            "A recolha por IMAP não está configurada: faltam SHEISA_IMAP_HOST, "
+            "SHEISA_POP3_USER ou SHEISA_POP3_PASSWORD."
+        )
+
+    recolhidas: list[MensagemRecolhida] = []
+    if settings.imap_tls:
+        ligacao = imaplib.IMAP4_SSL(
+            settings.imap_host, settings.imap_port, timeout=settings.pop3_timeout_segundos
+        )
+    else:
+        ligacao = imaplib.IMAP4(
+            settings.imap_host, settings.imap_port, timeout=settings.pop3_timeout_segundos
+        )
+    try:
+        ligacao.login(settings.pop3_user, settings.pop3_password)
+        ligacao.select("INBOX")
+        estado, dados = ligacao.search(None, "UNSEEN")
+        if estado != "OK":
+            logger.warning("IMAP: a pesquisa de mensagens não lidas falhou (%s)", estado)
+            return recolhidas
+
+        ids = dados[0].split()[: settings.pop3_max_por_recolha]
+        for ident in ids:
+            # `BODY.PEEK[]` lê sem marcar como lida — a marcação é decisão nossa,
+            # e só depois de a desmontagem correr. Um `RFC822` marcaria a
+            # mensagem como lida no próprio acto de a buscar, e uma falha a
+            # seguir deixá-la-ia lida sem ter sido processada.
+            estado, corpo = ligacao.fetch(ident, "(BODY.PEEK[])")
+            if estado != "OK" or not corpo or not corpo[0]:
+                logger.warning("IMAP: não foi possível buscar a mensagem %s", ident)
+                continue
+            bruto = corpo[0][1]
+            try:
+                recolhidas.append(desmontar(bruto))
+            except Exception:
+                logger.exception(
+                    "Falhou a desmontagem da mensagem %s; fica por ler", ident
+                )
+                continue
+            if marcar_lida:
+                ligacao.store(ident, "+FLAGS", "\\Seen")
+    finally:
+        # Fechar a pasta pode falhar se a sessão já caiu; não deixar isso
+        # mascarar um erro real da recolha.
+        with contextlib.suppress(Exception):
+            ligacao.close()
+        ligacao.logout()
+
+    return recolhidas
+
+
 # ================================================================== diagnóstico
 def estado_do_canal() -> dict:
     """Descreve o estado do canal sem nada inventar (§4 · §26).
@@ -411,7 +488,12 @@ def estado_do_canal() -> dict:
         em_falta.append("SHEISA_SMTP_HOST")
     if not settings.mail_from:
         em_falta.append("SHEISA_MAIL_FROM")
-    if not settings.pop3_host:
+    # O servidor de recolha em falta depende do protocolo escolhido: nomear o
+    # POP3 quando está configurado IMAP mandaria configurar a variável errada.
+    if settings.usa_imap:
+        if not settings.imap_host:
+            em_falta.append("SHEISA_IMAP_HOST")
+    elif not settings.pop3_host:
         em_falta.append("SHEISA_POP3_HOST")
     if not settings.pop3_user:
         em_falta.append("SHEISA_POP3_USER")
@@ -421,6 +503,7 @@ def estado_do_canal() -> dict:
     return {
         "envio_configurado": settings.envio_de_email_configurado,
         "recolha_configurada": settings.recolha_de_email_configurada,
+        "protocolo_de_recolha": "IMAP" if settings.usa_imap else "POP3",
         "remetente": settings.mail_from or None,
         "caixa": settings.pop3_user or None,
         "variaveis_em_falta": em_falta,

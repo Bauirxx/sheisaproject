@@ -80,6 +80,16 @@ class Settings(BaseSettings):
     mail_from: str = ""
     mail_from_name: str = "Equipa de Resposta a Incidentes"
 
+    #: Protocolo de recolha da caixa: "POP3" ou "IMAP".
+    #:
+    #: POP3 serve o servidor de laboratório (Mailpit). Um servidor real — Gmail,
+    #: por exemplo — usa IMAP: o POP costuma estar desligado, e o IMAP permite
+    #: marcar as mensagens como lidas sem as apagar, o que importa numa caixa
+    #: partilhada onde outros as podem querer ver no webmail.
+    mail_collect_protocol: str = "POP3"
+
+    #: Credenciais da caixa, partilhadas pelos dois protocolos — é a mesma conta.
+    #: O nome mantém `pop3_` por compatibilidade com o que já estava configurado.
     pop3_host: str = ""
     pop3_port: int = 1110
     pop3_user: str = ""
@@ -89,6 +99,11 @@ class Settings(BaseSettings):
     #: Quantas mensagens são recolhidas de cada vez. Um limite existe para uma
     #: caixa com milhares de mensagens não bloquear a recolha inteira.
     pop3_max_por_recolha: int = 50
+
+    #: IMAP. Só o host e a porta diferem do POP3; as credenciais são as de cima.
+    imap_host: str = ""
+    imap_port: int = 993
+    imap_tls: bool = True
 
     @property
     def envio_de_email_configurado(self) -> bool:
@@ -101,8 +116,19 @@ class Settings(BaseSettings):
         return bool(self.smtp_host and self.mail_from)
 
     @property
+    def usa_imap(self) -> bool:
+        return self.mail_collect_protocol.strip().upper() == "IMAP"
+
+    @property
+    def servidor_de_recolha(self) -> str:
+        """O host da caixa, conforme o protocolo escolhido."""
+        return self.imap_host if self.usa_imap else self.pop3_host
+
+    @property
     def recolha_de_email_configurada(self) -> bool:
-        return bool(self.pop3_host and self.pop3_user and self.pop3_password)
+        return bool(
+            self.servidor_de_recolha and self.pop3_user and self.pop3_password
+        )
 
     # ------------------------------------------------------------ evidências
     evidence_storage_path: Path = PROJECT_ROOT / "backend" / "var" / "evidence"
