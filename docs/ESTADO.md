@@ -9,7 +9,7 @@
 >
 > Última actualização: 2026-09-19 (relatórios, aplicação de recomendações,
 > ingestão genérica, defeitos 54 a 57, requisitos RNF07/RNF12/RF16;
-> comunicações de incidente e portal externo)
+> comunicações de incidente, portal externo e canal de correio)
 
 ---
 
@@ -20,7 +20,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 512 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 58 vistas do frontend contra a API viva |
+| **Testes** | 539 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 58 vistas do frontend contra a API viva |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -871,6 +871,51 @@ vinha `null` logo depois de assumir a avaliação, porque alterar a chave
 estrangeira não actualiza uma relação `lazy="selectin"` já em memória. Corrigido
 com o mesmo `flush` + `refresh` total, num auxiliar por onde as cinco operações
 passam, e com teste.
+
+---
+
+### Canal de correio electrónico a funcionar (2026-09-20)
+
+O que ficava declarado e não disponível passa a funcionar nas duas direcções,
+contra um servidor a sério e não um simulador. O `docker-compose` traz um serviço
+`mail` (Mailpit) com SMTP, POP3 e uma interface web em <http://127.0.0.1:8025> —
+essa última é o que torna o canal **demonstrável**: as mensagens vêem-se.
+
+`app/services/email_service.py` faz o envio e a recolha; `estado_do_canal()`
+descreve configuração sem contactar o servidor, e o teste de ligação devolve o
+`Message-ID` que o servidor atribuiu, porque um `true` não prova nada. O aviso de
+recepção nunca faz falhar uma submissão, e `acknowledged_at` só é escrito depois de
+o servidor aceitar a mensagem.
+
+**O defeito que só um servidor a sério revelaria.** A caixa de segurança é
+normalmente o mesmo endereço que a plataforma usa como remetente. Na primeira
+recolha real, três avisos de recepção voltaram e tornaram-se três comunicações,
+cada uma gerando outro aviso: um ciclo que se alimenta a si mesmo. Um duplo de
+teste nunca mostraria isto — provaria que o código chama a biblioteca certa, não
+que a caixa devolve o que lhe foi enviado.
+
+60. **A recolha transformava as mensagens da própria plataforma em comunicações.**
+    Corrigido com quatro sinais de descarte, cada um registando o seu motivo: a
+    marca própria `X-SHEISA-Origem`, o `Auto-Submitted` do RFC 3834 (e o
+    `Precedence` antigo), o `multipart/report; report-type=delivery-status` do RFC
+    3464, e a convenção dos remetentes de sistema. A mensagem que sai leva também
+    `Auto-Submitted: auto-generated`, que pede ao outro lado que não responda
+    automaticamente. Ver a armadilha 5.20.
+
+61. **`decode_header` levanta `HeaderParseError`, que não é `ValueError`.** Um
+    assunto com base64 inválido fazia a desmontagem falhar, e a mensagem era
+    descartada — o oposto do que o comentário ao lado prometia. Encontrado pelo
+    teste que afirma que um cabeçalho mal formado não pode perder a mensagem. Ver
+    a armadilha 5.21.
+
+Uma decisão de desenho que vale registar: **a plataforma não classifica por
+palavras-chave.** Uma categoria inferida do assunto de um email seria apresentada
+com a mesma confiança de uma afirmada por quem comunica, e o §4 proíbe-o. Uma
+comunicação recolhida chega sem classificação, e é o analista que a dá.
+
+27 testes. Os que exigem o servidor saltam-se com uma mensagem clara quando ele
+não está de pé, em vez de falharem: um teste vermelho por falta de infraestrutura
+ensina a ignorar testes vermelhos.
 
 ---
 

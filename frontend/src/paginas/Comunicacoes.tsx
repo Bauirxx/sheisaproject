@@ -33,6 +33,7 @@ import type {
   Pagina,
 } from "@/api/tipos";
 import { useSessao } from "@/autenticacao/contexto";
+import { CanalDeEmail } from "@/componentes/CanalDeEmail";
 import {
   Carregando,
   DistintivoDeSeveridade,
@@ -617,6 +618,8 @@ export function Comunicacoes() {
           </p>
         </div>
       </div>
+
+      <CanalDeEmail />
 
       <div className="filtros">
         <div className="campo">

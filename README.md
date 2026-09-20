@@ -65,7 +65,7 @@ cp .env.example .env
 # Gere segredos reais:
 #   python -c "import secrets; print(secrets.token_urlsafe(48))"
 
-docker compose up -d db db-test
+docker compose up -d db db-test mail
 
 cd backend
 python -m venv .venv
@@ -91,6 +91,8 @@ npm run dev
 | Interface | http://127.0.0.1:5500 |
 | API | http://127.0.0.1:8099 |
 | Documentação da API | http://127.0.0.1:8099/api/docs |
+| Portal externo (sem conta) | http://127.0.0.1:5500/comunicar |
+| Caixa de correio do laboratório | http://127.0.0.1:8025 |
 
 > **Porta 5500 e não a 5173 habitual do Vite.** O Windows reserva intervalos de
 > portas para o Hyper-V/WSL e a 5173 cai dentro de um deles em algumas

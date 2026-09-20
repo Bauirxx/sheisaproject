@@ -9,7 +9,7 @@
 > completo de decisões e defeitos, use [`ESTADO.md`](ESTADO.md). Este ficheiro é
 > o mais curto dos três de propósito: se crescer demasiado, deixa de ser lido.
 >
-> Última actualização: 2026-09-19 (portal externo e comunicações de incidente).
+> Última actualização: 2026-09-20 (canal de correio electrónico a funcionar).
 
 ---
 
@@ -17,10 +17,20 @@
 
 ```bash
 cd sheisa_project
-docker compose up -d db db-test          # PostgreSQL 16 em :15433 e :15434
+docker compose up -d db db-test mail     # PostgreSQL e servidor de correio
 cd backend && ./scripts/api.sh start     # API em :8099
 cd ../frontend && npm run dev            # interface em :5500
 ```
+
+| | |
+|---|---|
+| Interface | <http://127.0.0.1:5500> |
+| Portal externo (sem sessão) | <http://127.0.0.1:5500/comunicar> |
+| API | <http://127.0.0.1:8099> |
+| **Caixa de correio do laboratório** | <http://127.0.0.1:8025> |
+
+A última é onde se **vêem** as mensagens que a plataforma envia e as que lhe são
+enviadas — é o que torna o canal de email demonstrável em vez de afirmado.
 
 Confirmar que está de pé, por esta ordem — cada passo só faz sentido se o
 anterior passou:
@@ -30,7 +40,7 @@ curl http://127.0.0.1:8099/api/health/ready
 # {"estado":"pronto","base_dados":"acessivel"}
 
 cd backend
-./.venv/Scripts/python.exe -m pytest -q                  # 512 a passar
+./.venv/Scripts/python.exe -m pytest -q                  # 539 a passar
 ./.venv/Scripts/python.exe -m ruff check .               # All checks passed!
 ./.venv/Scripts/python.exe scripts/verificar_contrato.py <palavra-passe>
 
@@ -111,7 +121,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 512 a passar |
+| Testes | 539 a passar |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` confere 58 vistas contra a API a correr — menos três quando a fila de aprovação está vazia, porque só se verificam com pedidos pendentes |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -380,13 +390,51 @@ SHA-256), a comparação é em tempo constante, e uma referência inexistente d�
 mesma resposta que um código errado — as referências são sequenciais e
 distingui-los permitiria enumerá-las.
 
-**O que fica por fazer neste tema:** o canal de email. O modelo já tem
-`ReportChannel.EMAIL` e `channel_metadata` para preservar cabeçalhos, e
-`acknowledged_at` fica `None` enquanto nada for enviado — nunca se assume envio
-sem confirmação do servidor. Mas não há SMTP nem leitura de caixa: uma
-comunicação por email tem hoje de ser registada por um analista com canal
-`MANUAL`. Construí-lo exige um servidor de correio e credenciais, e a regra do §4
-manda que até lá o canal `EMAIL` não seja apresentado como disponível.
+### 4.8 Canal de correio electrónico — **feito e a funcionar** (2026-09-20)
+
+As duas direcções funcionam contra um servidor a sério, não um simulador. O
+`docker-compose` traz um serviço `mail` (Mailpit) que faz SMTP **e** POP3 e mostra
+as mensagens em <http://127.0.0.1:8025> — é o que permite demonstrar o ciclo em
+vez de o afirmar. Numa instalação real as variáveis `SHEISA_SMTP_*` e
+`SHEISA_POP3_*` apontam para o servidor da organização; o código é o mesmo.
+
+**Enviar.** Quem comunica pelo portal recebe um aviso com a referência e o código.
+`acknowledged_at` só é escrito **depois** de o servidor aceitar a mensagem, e uma
+falha de envio nunca faz falhar a submissão — perder uma comunicação porque o
+correio está em baixo seria trocar o essencial pelo acessório. O teste de ligação
+devolve o `Message-ID` que o servidor atribuiu, porque um `true` não prova nada.
+
+**Recolher.** `POST /api/reports-inbox/recolher-email` lê a caixa e cria uma
+comunicação por mensagem nova, com os cabeçalhos preservados em
+`channel_metadata` — prova de origem, como o `raw_payload` de um evento.
+Duplicados são detectados pelo `Message-ID`, porque o POP3 não guarda estado de
+lida e uma reentrega criaria uma comunicação nova.
+
+**O defeito que o servidor a sério revelou, e que um simulador esconderia.** A
+caixa de segurança é normalmente o **mesmo endereço** que a plataforma usa como
+remetente. Na primeira recolha real, três avisos de recepção voltaram e tornaram-se
+três comunicações — cada uma gerando outro aviso. Um ciclo que se alimenta a si
+mesmo. Corrigido com quatro sinais de descarte, cada um com o seu motivo
+registado: a marca própria `X-SHEISA-Origem`, o `Auto-Submitted` do RFC 3834, o
+`multipart/report` de uma notificação de entrega, e a convenção dos remetentes de
+sistema (`MAILER-DAEMON`, `postmaster`, `no-reply`). A mensagem que sai leva também
+`Auto-Submitted: auto-generated`, que pede ao outro lado que não responda
+automaticamente — metade da prevenção do ciclo é nossa, a outra metade é pedida.
+
+**A plataforma não classifica por palavras-chave.** Uma categoria inferida do
+assunto seria apresentada com a mesma confiança de uma afirmada, e o §4 proíbe-o:
+uma comunicação recolhida por email chega sem classificação, e é o analista que a
+dá.
+
+Verificado a correr, ponta a ponta: uma pessoa escreve para `cert@sheisa.local`,
+a mensagem torna-se `COM-00034` com os cabeçalhos preservados, e o aviso de
+recepção chega — enquanto uma devolução, um `no-reply` e o próprio aviso da
+plataforma são ignorados com o motivo à vista.
+
+**O que fica por fazer neste tema:** avisar quem comunicou quando a decisão é
+tomada (aceite, recusada, duplicada). O envio já existe e é uma chamada; falta
+decidir o que se diz em cada caso, que é uma escolha de processo — uma recusa
+mal redigida faz mais dano do que silêncio.
 
 ### 4.6 Parâmetros da API que a interface não usa
 
@@ -635,6 +683,44 @@ Resolvido com **"inexistente"**, que é invariável em género e serve os vinte 
 três de uma vez. Passar o género em cada chamada exigiria acertar em vinte sítios
 e continuaria a falhar no vigésimo primeiro; inferir da terminação não serve,
 porque "Alerta" termina em "a" e é masculino.
+
+### 5.20 A caixa de segurança recebe as mensagens da própria plataforma
+
+`cert@` é ao mesmo tempo a caixa que se lê e o endereço de onde se envia. Tudo o
+que a plataforma manda pode voltar — por devolução, por resposta automática, ou
+porque o servidor de desenvolvimento entrega tudo na mesma caixa. Sem descarte, o
+aviso de recepção era recolhido como comunicação nova, que gerava outro aviso:
+**um ciclo que se alimenta a si mesmo.** Observado a correr: três avisos, três
+comunicações.
+
+Quatro sinais, por ordem de fiabilidade, cada um registando o seu motivo:
+
+1. `X-SHEISA-Origem: plataforma` — a marca própria. Mais fiável do que comparar o
+   remetente, porque o `From` de uma devolução é o do servidor que devolveu.
+2. `Auto-Submitted` (RFC 3834) e `Precedence` — respostas automáticas e listas.
+3. `Content-Type: multipart/report; report-type=delivery-status` (RFC 3464) — é
+   estrutura da mensagem, não convenção.
+4. Remetentes de sistema (`MAILER-DAEMON`, `postmaster`, `no-reply`).
+
+**A ausência de `Return-Path` não é sinal de nada.** É o servidor receptor que o
+escreve, e muita mensagem legítima chega sem ele; só o `<>` explícito indica
+devolução. Tratar a ausência como devolução descartaria comunicações reais, e o
+efeito seria invisível — uma comunicação descartada não deixa rasto na fila.
+
+Ao testar isto, note que `smtplib.send_message` usa o `From` como remetente de
+envelope, pelo que **não** consegue simular uma devolução: use
+`sendmail("", [destino], msg.as_string())`. E o Mailpit não escreve
+`Return-Path: <>` nem para um envelope vazio, pelo que esse sinal em particular só
+se observa contra um MTA a sério.
+
+### 5.21 `decode_header` levanta uma excepção que não é `ValueError`
+
+Um assunto `=?utf-8?B?...?=` com base64 inválido faz `decode_header` levantar
+`email.errors.HeaderParseError`, que **não** é subclasse de `ValueError`. Apanhar
+só `(UnicodeDecodeError, LookupError, ValueError)` deixava a desmontagem falhar, e
+uma mensagem com um assunto mal codificado era descartada — o oposto do que o
+comentário ao lado prometia. Encontrado pelo teste que afirma precisamente que um
+cabeçalho mal formado não pode perder a mensagem.
 
 ---
 

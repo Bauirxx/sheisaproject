@@ -855,3 +855,32 @@ export interface Comunicacao extends ComunicacaoResumo {
   duplicate_of_reference: string | null;
   triaged_by_email: string | null;
 }
+
+/**
+ * Estado do canal de correio (`GET /reports-inbox/canal-de-email`).
+ *
+ * Descreve **configuração**, não disponibilidade: a rota não contacta o
+ * servidor, porque dizer "activo" sem o provar é o que o §4 proíbe. Quem prova
+ * é o teste de ligação.
+ */
+export interface EstadoDoCanalDeEmail {
+  envio_configurado: boolean;
+  recolha_configurada: boolean;
+  remetente: string | null;
+  caixa: string | null;
+  variaveis_em_falta: string[];
+}
+
+/** Resultado de uma recolha da caixa de segurança. */
+export interface ResultadoDaRecolha {
+  lidas: number;
+  criadas: number;
+  ignoradas: number;
+  resultados: {
+    estado: string;
+    referencia?: string;
+    remetente: string;
+    assunto: string;
+    detalhe?: string;
+  }[];
+}
