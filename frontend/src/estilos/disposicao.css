@@ -25,22 +25,29 @@
   margin-left: calc(-1 * var(--largura-barra-lateral));
 }
 
-.barra-lateral__logo {
-  display: block;
-  flex: none;
-}
-
 /* Fundo da gaveta: só existe em ecrã estreito (ver a media query no fim). */
 .barra-lateral__fundo {
   display: none;
 }
 
-/* Botão de abrir/fechar, no topo. Sempre visível: é a única forma de reabrir a
-   barra depois de fechada. */
+/* Botão de abrir/fechar, no topo. É o próprio logótipo, e é sempre visível:
+   depois de fechada, é a única forma de reabrir a barra. */
 .botao-menu {
-  font-size: var(--texto-lg);
-  line-height: 1;
-  padding: var(--espaco-2) var(--espaco-3);
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--raio);
+  background: transparent;
+  cursor: pointer;
+  flex: none;
+  transition: background var(--transicao);
+}
+.botao-menu:hover {
+  background: var(--superficie-elevada);
+}
+.botao-menu img {
+  display: block;
 }
 
 .barra-lateral__marca {

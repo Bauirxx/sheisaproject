@@ -186,13 +186,6 @@ export function Disposicao() {
     >
       <aside className="barra-lateral">
         <div className="barra-lateral__marca">
-          <img
-            src="/logo.svg"
-            alt="Logótipo"
-            className="barra-lateral__logo"
-            width="34"
-            height="34"
-          />
           <span className="terciario">Resposta a incidentes</span>
         </div>
 
@@ -236,13 +229,13 @@ export function Disposicao() {
         <header className="topo">
           <button
             type="button"
-            className="botao botao--discreto botao-menu"
+            className="botao-menu"
             onClick={alternarLateral}
             aria-label={lateralAberta ? "Fechar menu" : "Abrir menu"}
             aria-expanded={lateralAberta}
             title={lateralAberta ? "Fechar menu" : "Abrir menu"}
           >
-            ☰
+            <img src="/logo.svg" alt="" width="30" height="30" />
           </button>
           <div className="crescer" />
           <AlternarTema />
