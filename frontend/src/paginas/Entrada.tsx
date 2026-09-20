@@ -58,11 +58,13 @@ export function Entrada() {
     <div className="entrada-pagina">
       <form className="entrada-cartao" onSubmit={(e) => void submeter(e)}>
         <div className="entrada-cartao__marca">
-          <span className="barra-lateral__sigla">SH</span>
+          <img src="/logo.svg" alt="Logótipo" width="44" height="44" />
           <div className="pilha" style={{ gap: 0 }}>
-            <strong style={{ fontSize: "var(--texto-md)" }}>SHEISA</strong>
+            <strong style={{ fontSize: "var(--texto-md)" }}>
+              Gestão de Incidentes
+            </strong>
             <span className="terciario">
-              Gestão e resposta a incidentes cibernéticos
+              Resposta a incidentes cibernéticos
             </span>
           </div>
         </div>

@@ -12,9 +12,28 @@
  * desconfiar da interface.
  */
 
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useSessao } from "@/autenticacao/contexto";
+
+/** Largura abaixo da qual a barra é uma gaveta por cima, não uma coluna fixa. */
+const LARGURA_ESTREITA = 900;
+
+/**
+ * Estado inicial da barra lateral: lê a preferência guardada; na ausência dela,
+ * aberta em ecrã largo e fechada em ecrã estreito. Fechá-la por omissão num
+ * telemóvel evita que a gaveta tape o conteúdo logo à entrada.
+ */
+function lateralInicial(): boolean {
+  try {
+    const guardado = window.localStorage.getItem("sheisa.lateral");
+    if (guardado !== null) return guardado === "1";
+  } catch {
+    // Sem localStorage: cai para a regra por largura.
+  }
+  return window.innerWidth > LARGURA_ESTREITA;
+}
 
 interface Entrada {
   para: string;
@@ -130,6 +149,24 @@ function AlternarTema() {
 export function Disposicao() {
   const { utilizador, sair, pode } = useSessao();
   const navegar = useNavigate();
+  const [lateralAberta, definirLateralAberta] = useState(lateralInicial);
+
+  const alternarLateral = () =>
+    definirLateralAberta((aberta) => {
+      const nova = !aberta;
+      try {
+        window.localStorage.setItem("sheisa.lateral", nova ? "1" : "0");
+      } catch {
+        // Preferência não persistida: irrelevante para o funcionamento.
+      }
+      return nova;
+    });
+
+  // Ao seguir uma ligação num ecrã estreito, a gaveta fecha-se: caso contrário
+  // ficaria a tapar a página que se acabou de abrir.
+  const fecharSeEstreito = () => {
+    if (window.innerWidth <= LARGURA_ESTREITA) definirLateralAberta(false);
+  };
 
   const terminarSessao = async () => {
     await sair();
@@ -144,14 +181,19 @@ export function Disposicao() {
   })).filter((grupo) => grupo.entradas.length > 0);
 
   return (
-    <div className="disposicao">
+    <div
+      className={`disposicao${lateralAberta ? "" : " disposicao--lateral-fechada"}`}
+    >
       <aside className="barra-lateral">
         <div className="barra-lateral__marca">
-          <span className="barra-lateral__sigla">SH</span>
-          <div className="pilha" style={{ gap: 0 }}>
-            <strong>SHEISA</strong>
-            <span className="terciario">Resposta a incidentes</span>
-          </div>
+          <img
+            src="/logo.svg"
+            alt="Logótipo"
+            className="barra-lateral__logo"
+            width="34"
+            height="34"
+          />
+          <span className="terciario">Resposta a incidentes</span>
         </div>
 
         <nav className="barra-lateral__navegacao" aria-label="Navegação principal">
@@ -162,6 +204,7 @@ export function Disposicao() {
                 <NavLink
                   key={entrada.para}
                   to={entrada.para}
+                  onClick={fecharSeEstreito}
                   className={({ isActive }) =>
                     `barra-lateral__ligacao${isActive ? " barra-lateral__ligacao--activa" : ""}`
                   }
@@ -177,8 +220,30 @@ export function Disposicao() {
         </nav>
       </aside>
 
+      {/* Fundo escuro que fecha a gaveta num ecrã estreito. O CSS esconde-o em
+          ecrã largo, onde a barra é uma coluna e não uma sobreposição. */}
+      {lateralAberta ? (
+        <button
+          type="button"
+          className="barra-lateral__fundo"
+          aria-hidden="true"
+          tabIndex={-1}
+          onClick={alternarLateral}
+        />
+      ) : null}
+
       <div className="area">
         <header className="topo">
+          <button
+            type="button"
+            className="botao botao--discreto botao-menu"
+            onClick={alternarLateral}
+            aria-label={lateralAberta ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={lateralAberta}
+            title={lateralAberta ? "Fechar menu" : "Abrir menu"}
+          >
+            ☰
+          </button>
           <div className="crescer" />
           <AlternarTema />
           <div className="topo__identidade">

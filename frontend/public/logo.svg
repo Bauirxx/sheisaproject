@@ -1,0 +1,49 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logótipo">
+  <!--
+    Logótipo da plataforma: uma aranha no centro de uma rede hexagonal.
+    A aranha remete para a tela (a rede de sinais que se cruzam); o hexágono com
+    nós nos vértices remete para a topologia de uma rede de detecção. Em SVG e
+    não PNG porque um ícone tem de escalar do favicon (16px) à barra lateral sem
+    perder nitidez. Para usar antes a imagem PNG, ver o comentário em index.html.
+  -->
+  <defs>
+    <linearGradient id="azul" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Hexágono: arestas entre os seis nós. -->
+  <polygon points="100,26 164,63 164,137 100,174 36,137 36,63"
+           fill="none" stroke="url(#azul)" stroke-width="6"
+           stroke-linejoin="round"/>
+
+  <!-- Nós nos vértices. -->
+  <g fill="url(#azul)">
+    <circle cx="100" cy="26" r="12"/>
+    <circle cx="164" cy="63" r="12"/>
+    <circle cx="164" cy="137" r="12"/>
+    <circle cx="100" cy="174" r="12"/>
+    <circle cx="36" cy="137" r="12"/>
+    <circle cx="36" cy="63" r="12"/>
+  </g>
+
+  <!-- Aranha. -->
+  <g stroke="url(#azul)" stroke-width="6" stroke-linecap="round" fill="none">
+    <!-- pernas esquerdas -->
+    <path d="M86,96 L58,80 L44,88"/>
+    <path d="M84,106 L52,102 L40,112"/>
+    <path d="M84,116 L54,124 L44,138"/>
+    <path d="M88,126 L66,142 L60,156"/>
+    <!-- pernas direitas -->
+    <path d="M114,96 L142,80 L156,88"/>
+    <path d="M116,106 L148,102 L160,112"/>
+    <path d="M116,116 L146,124 L156,138"/>
+    <path d="M112,126 L134,142 L140,156"/>
+  </g>
+  <g fill="url(#azul)">
+    <!-- cabeça e abdómen -->
+    <circle cx="100" cy="88" r="12"/>
+    <ellipse cx="100" cy="116" rx="17" ry="22"/>
+  </g>
+</svg>

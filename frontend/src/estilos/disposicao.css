@@ -14,6 +14,33 @@
   background: var(--superficie);
   border-right: 1px solid var(--contorno);
   overflow-y: auto;
+  /* A transição da margem é o que faz a barra deslizar para fora ao fechar, em
+     vez de desaparecer de repente. */
+  transition: margin-left var(--transicao);
+}
+
+/* Fechada: desliza para fora pela esquerda. Em vez de `display:none`, mantém a
+   transição e não reflui o conteúdo bruscamente. */
+.disposicao--lateral-fechada .barra-lateral {
+  margin-left: calc(-1 * var(--largura-barra-lateral));
+}
+
+.barra-lateral__logo {
+  display: block;
+  flex: none;
+}
+
+/* Fundo da gaveta: só existe em ecrã estreito (ver a media query no fim). */
+.barra-lateral__fundo {
+  display: none;
+}
+
+/* Botão de abrir/fechar, no topo. Sempre visível: é a única forma de reabrir a
+   barra depois de fechada. */
+.botao-menu {
+  font-size: var(--texto-lg);
+  line-height: 1;
+  padding: var(--espaco-2) var(--espaco-3);
 }
 
 .barra-lateral__marca {
@@ -23,20 +50,6 @@
   height: var(--altura-topo);
   padding: 0 var(--espaco-4);
   border-bottom: 1px solid var(--contorno);
-  flex: none;
-}
-
-.barra-lateral__sigla {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--raio);
-  background: var(--primaria);
-  color: #fff;
-  font-size: var(--texto-sm);
-  font-weight: 700;
-  letter-spacing: 0.02em;
   flex: none;
 }
 
@@ -258,8 +271,32 @@
 }
 
 @media (max-width: 900px) {
+  /* Em ecrã estreito a barra deixa de ser uma coluna e passa a ser uma gaveta
+     que desliza por cima do conteúdo. Assim há sempre espaço para o trabalho, e
+     a navegação continua a um toque no botão de menu. */
   .barra-lateral {
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 60;
+    box-shadow: var(--sombra-elevada);
+  }
+
+  /* O fundo escurece o conteúdo por trás e fecha a gaveta ao ser tocado. */
+  .barra-lateral__fundo {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    border: 0;
+    padding: 0;
+    background: rgba(2, 6, 23, 0.5);
+  }
+
+  /* Fechada, a gaveta sai inteiramente de vista e o fundo não é renderizado. */
+  .disposicao--lateral-fechada .barra-lateral {
+    margin-left: calc(-1 * var(--largura-barra-lateral));
   }
 }
 
