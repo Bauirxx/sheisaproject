@@ -28,7 +28,8 @@ import uuid
 
 from sqlalchemy import select
 
-from app.core.enums import IncidentOrigin, ReportStatus
+from app.core.audit import AuditContext
+from app.core.enums import IncidentOrigin, ReportChannel, ReportStatus
 from app.models.incident import Incident
 from app.models.reporting import IncidentReport
 from tests.conftest import cabecalho
@@ -538,3 +539,52 @@ async def test_a_recepcao_fica_auditada(cliente, sessao):
     entrada = resultado.scalar_one()
     assert "PORTAL" in entrada.description
     assert SUBMISSAO["reporter_email"] in entrada.description
+
+
+async def test_recolha_por_email_nao_envia_aviso_automatico(
+    cliente, sessao, token_analista, monkeypatch
+):
+    """Regressão do envio em cadeia: recolher NÃO responde ao remetente.
+
+    Uma comunicação recolhida da caixa não dispara o aviso de recepção — só a
+    submissão deliberada no portal o faz. Responder automaticamente a tudo o que
+    entra numa caixa transforma-a numa máquina de auto-resposta: foi o que enviou
+    avisos em cadeia ao apontar a recolha a uma caixa com correio pessoal.
+
+    Verifica-se contando os envios: `submit` com `avisar=False` não pode chamar o
+    serviço de email de todo.
+    """
+    from app.services import email_service, report_inbox_service
+
+    enviados: list[str] = []
+    monkeypatch.setattr(
+        email_service, "enviar",
+        lambda **kw: enviados.append(kw.get("para", "")) or "<id>",
+    )
+    monkeypatch.setattr(email_service.settings, "smtp_host", "smtp.exemplo")
+    monkeypatch.setattr(email_service.settings, "mail_from", "cert@exemplo")
+
+    # Uma submissão do portal envia o aviso (o comportamento que se mantém).
+    await report_inbox_service.submit(
+        sessao,
+        AuditContext(actor_email="analista@teste.local", origin="teste"),
+        reporter_name="Pessoa do Portal",
+        reporter_email="pessoa@exemplo.co.mz",
+        subject="Comunicação pelo portal",
+        description="Descrição suficientemente longa para passar a validação.",
+    )
+    assert enviados == ["pessoa@exemplo.co.mz"], "o portal deve avisar"
+
+    # Uma recolhida da caixa não envia nada.
+    enviados.clear()
+    await report_inbox_service.submit(
+        sessao,
+        AuditContext(actor_email="analista@teste.local", origin="teste"),
+        reporter_name="Remetente de Email",
+        reporter_email="remetente@exemplo.co.mz",
+        subject="Comunicação por email",
+        description="Descrição suficientemente longa para passar a validação.",
+        channel=ReportChannel.EMAIL,
+        avisar=False,
+    )
+    assert enviados == [], "recolher não pode responder ao remetente"

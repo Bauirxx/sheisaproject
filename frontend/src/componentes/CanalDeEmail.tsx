@@ -149,6 +149,12 @@ export function CanalDeEmail() {
                 {canal.protocolo_de_recolha}
               </span>
             </div>
+            {canal.pasta ? (
+              <div className="propriedade">
+                <span className="propriedade__rotulo">Pasta lida</span>
+                <span className="propriedade__valor mono">{canal.pasta}</span>
+              </div>
+            ) : null}
           </div>
 
           {canal.variaveis_em_falta.length > 0 ? (

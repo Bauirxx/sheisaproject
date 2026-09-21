@@ -776,6 +776,24 @@ uma mensagem com um assunto mal codificado era descartada — o oposto do que o
 comentário ao lado prometia. Encontrado pelo teste que afirma precisamente que um
 cabeçalho mal formado não pode perder a mensagem.
 
+### 5.22 Recolher de uma caixa não é o mesmo que receber uma submissão
+
+A recolha por email chamava o mesmo `submit()` do portal, que envia um aviso de
+recepção ao remetente. Contra uma caixa **dedicada** isso é aceitável; contra uma
+caixa com correio pessoal, transforma a plataforma numa máquina de auto-resposta
+— envia "comunicação recebida" a toda a gente cujo email caia na caixa. Observado
+a correr ao apontar a recolha à INBOX de uma conta pessoal.
+
+`submit()` tem agora `avisar: bool`, e `recolher_do_email` passa `avisar=False`:
+uma comunicação recolhida **nunca** dispara envio automático; quem tria decide se
+responde. A submissão do portal mantém o aviso, porque aí quem preencheu o
+formulário está à espera da referência e do código.
+
+Duas defesas, não uma: além disto, aponte a recolha a uma **etiqueta dedicada**
+(`SHEISA_IMAP_MAILBOX`), nunca à INBOX de uma conta com correio pessoal — a
+recolha marca como lidas as mensagens que processa. No Gmail: criar uma etiqueta
+e um filtro que lhe aplique a etiqueta e salte a caixa de entrada.
+
 ---
 
 ## 6. Como trabalhar aqui

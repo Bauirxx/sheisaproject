@@ -870,6 +870,8 @@ export interface EstadoDoCanalDeEmail {
   protocolo_de_recolha: string;
   remetente: string | null;
   caixa: string | null;
+  /** Pasta/etiqueta lida (só no IMAP). "INBOX" é a caixa inteira. */
+  pasta: string | null;
   variaveis_em_falta: string[];
 }
 

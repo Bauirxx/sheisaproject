@@ -93,6 +93,7 @@ async def submit(
     channel: ReportChannel = ReportChannel.PORTAL,
     submitted_from_ip: str | None = None,
     channel_metadata: dict | None = None,
+    avisar: bool = True,
 ) -> tuple[IncidentReport, str]:
     """Registra uma comunicação e devolve-a com o código de acompanhamento.
 
@@ -142,7 +143,16 @@ async def submit(
         changed_fields=["status"],
     )
 
-    await _avisar_da_recepcao(session, relato, codigo)
+    # O aviso automático só faz sentido para uma submissão deliberada (o
+    # portal): quem preencheu o formulário fica à espera da referência e do
+    # código. Uma comunicação **recolhida da caixa** não o dispara, e é uma
+    # decisão de segurança, não de estilo: responder automaticamente a tudo o
+    # que entra numa caixa transforma-a numa máquina de auto-resposta — envia a
+    # newsletters, a notificações, a qualquer remetente. Quem tria decide se e
+    # quando responde. Foi o que causou o envio em cadeia observado ao apontar a
+    # recolha a uma caixa com correio pessoal.
+    if avisar:
+        await _avisar_da_recepcao(session, relato, codigo)
     return relato, codigo
 
 
@@ -297,6 +307,10 @@ async def recolher_do_email(
                 "anexos": mensagem.anexos,
                 "truncada": mensagem.truncada,
             },
+            # Não responde automaticamente ao remetente: ver a explicação em
+            # `submit`. É a diferença entre confirmar uma submissão do portal e
+            # responder a tudo o que cai numa caixa de correio.
+            avisar=False,
         )
         resultados.append({
             "estado": "criada",

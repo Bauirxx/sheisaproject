@@ -237,6 +237,10 @@ def test_sem_configuracao_o_envio_levanta(monkeypatch):
 
 
 def test_sem_configuracao_a_recolha_levanta(monkeypatch):
+    # Fixa o protocolo em vez de depender do .env: com o Gmail configurado por
+    # IMAP, limpar só o pop3_host não deixaria a recolha por configurar, e o
+    # teste passaria a contactar o servidor real.
+    monkeypatch.setattr(settings, "mail_collect_protocol", "POP3")
     monkeypatch.setattr(settings, "pop3_host", "")
 
     with pytest.raises(ems.EmailNaoConfigurado):

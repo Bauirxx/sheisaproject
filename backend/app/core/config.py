@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     imap_host: str = ""
     imap_port: int = 993
     imap_tls: bool = True
+    #: Pasta (no Gmail, etiqueta) que a recolha lê. "INBOX" é a caixa inteira.
+    #:
+    #: Apontar para uma etiqueta dedicada é o que permite usar uma conta que
+    #: também tem correio pessoal sem lhe tocar: um filtro no servidor põe as
+    #: comunicações nessa etiqueta, e a recolha lê só de lá. Ler a INBOX de uma
+    #: conta pessoal marcaria correio pessoal como lido e transformá-lo-ia em
+    #: comunicações — o contrário do que se quer.
+    imap_mailbox: str = "INBOX"
 
     @property
     def envio_de_email_configurado(self) -> bool:

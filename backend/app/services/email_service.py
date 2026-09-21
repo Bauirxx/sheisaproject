@@ -440,7 +440,16 @@ def _recolher_imap(*, marcar_lida: bool) -> list[MensagemRecolhida]:
         )
     try:
         ligacao.login(settings.pop3_user, settings.pop3_password)
-        ligacao.select("INBOX")
+        # Uma etiqueta do Gmail com espaços tem de ir entre aspas no IMAP.
+        pasta = settings.imap_mailbox
+        if " " in pasta and not pasta.startswith('"'):
+            pasta = f'"{pasta}"'
+        estado_sel, _ = ligacao.select(pasta)
+        if estado_sel != "OK":
+            raise EmailNaoConfigurado(
+                f"A pasta '{settings.imap_mailbox}' não existe na caixa. "
+                "Confirme o nome (no Gmail, é a etiqueta) em SHEISA_IMAP_MAILBOX."
+            )
         estado, dados = ligacao.search(None, "UNSEEN")
         if estado != "OK":
             logger.warning("IMAP: a pesquisa de mensagens não lidas falhou (%s)", estado)
@@ -506,5 +515,7 @@ def estado_do_canal() -> dict:
         "protocolo_de_recolha": "IMAP" if settings.usa_imap else "POP3",
         "remetente": settings.mail_from or None,
         "caixa": settings.pop3_user or None,
+        # A pasta só é significativa no IMAP; no POP3 lê-se sempre a caixa toda.
+        "pasta": settings.imap_mailbox if settings.usa_imap else None,
         "variaveis_em_falta": em_falta,
     }
