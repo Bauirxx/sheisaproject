@@ -252,6 +252,10 @@ async def delete_evidence(
     que permite, mais tarde, saber que a evidência existiu e o que continha.
     """
     incident = await session.get(Incident, evidence.incident_id)
+    if incident is not None:
+        from app.services import incident_service
+
+        incident_service.garantir_editavel(incident)
     path = absolute_path_for(evidence)
 
     await audit.record(

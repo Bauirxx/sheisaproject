@@ -130,6 +130,25 @@ async def get_by_reference(session: AsyncSession, reference: str) -> Incident:
     return incident
 
 
+def garantir_editavel(incident: Incident) -> None:
+    """Recusa mutações de conteúdo num incidente encerrado.
+
+    ENCERRADO é terminal — não tem transições de saída em `INCIDENT_TRANSITIONS`
+    — e existe para preservar o registo histórico: campos, tarefas, observações
+    e evidências deixam de poder mudar. Comentários continuam permitidos, porque
+    são notas de auditoria posteriores e não alteram o que aconteceu. Para
+    retomar o trabalho não se reabre este incidente (não é possível): cria-se um
+    incidente relacionado, como no ciclo de vida.
+    """
+    if incident.status is IncidentStatus.ENCERRADO:
+        raise ConflictError(
+            f"O incidente {incident.reference} está encerrado: o seu registo é "
+            "definitivo e não pode ser alterado. Para retomar o trabalho, crie "
+            "um incidente relacionado.",
+            code="INCIDENTE_ENCERRADO",
+        )
+
+
 async def create_incident(
     session: AsyncSession,
     ctx: AuditContext,

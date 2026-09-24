@@ -588,3 +588,74 @@ async def test_recolha_por_email_nao_envia_aviso_automatico(
         avisar=False,
     )
     assert enviados == [], "recolher não pode responder ao remetente"
+
+
+async def test_a_decisao_avisa_quem_comunicou(
+    cliente, sessao, token_analista, monkeypatch
+):
+    """Aceitar ou recusar responde a quem comunicou — não o deixa no escuro.
+
+    Mesmo contrato do aviso de recepção: só dispara com o canal configurado, e
+    vai para o endereço de quem comunicou.
+    """
+    from app.services import email_service
+
+    enviados: list[dict] = []
+    monkeypatch.setattr(
+        email_service, "enviar", lambda **kw: enviados.append(kw) or "<id>"
+    )
+    monkeypatch.setattr(email_service.settings, "smtp_host", "smtp.exemplo")
+    monkeypatch.setattr(email_service.settings, "mail_from", "cert@exemplo")
+
+    # Aceitar avisa.
+    corpo = await _submeter(cliente)  # dispara o aviso de recepção
+    relato = await _por_referencia(sessao, corpo["referencia"])
+    enviados.clear()
+    aceite = await cliente.post(
+        f"/api/reports-inbox/{relato.id}/accept",
+        json={"criar_incidente": True, "nota": "Confirmado por nós."},
+        headers=cabecalho(token_analista),
+    )
+    assert aceite.status_code == 200, aceite.text
+    assert [e["para"] for e in enviados] == [SUBMISSAO["reporter_email"]]
+    assert "Decisão" in enviados[0]["assunto"]
+    assert "aceite" in enviados[0]["corpo"]
+
+    # Recusar avisa.
+    outra = await _submeter(cliente)
+    relato2 = await _por_referencia(sessao, outra["referencia"])
+    enviados.clear()
+    recusa = await cliente.post(
+        f"/api/reports-inbox/{relato2.id}/reject",
+        json={"nota": "Fora de âmbito."},
+        headers=cabecalho(token_analista),
+    )
+    assert recusa.status_code == 200, recusa.text
+    assert [e["para"] for e in enviados] == [SUBMISSAO["reporter_email"]]
+    assert "não será tratada" in enviados[0]["corpo"]
+
+
+async def test_falha_no_aviso_de_decisao_nao_desfaz_a_decisao(
+    cliente, sessao, token_analista, monkeypatch
+):
+    """O essencial não se troca pelo acessório: se o correio falhar, a decisão
+    fica registada na mesma — como no aviso de recepção."""
+    from app.services import email_service
+
+    def rebenta(**kw):
+        raise RuntimeError("servidor de correio em baixo")
+
+    monkeypatch.setattr(email_service, "enviar", rebenta)
+    monkeypatch.setattr(email_service.settings, "smtp_host", "smtp.exemplo")
+    monkeypatch.setattr(email_service.settings, "mail_from", "cert@exemplo")
+
+    corpo = await _submeter(cliente)
+    relato = await _por_referencia(sessao, corpo["referencia"])
+
+    resposta = await cliente.post(
+        f"/api/reports-inbox/{relato.id}/reject",
+        json={"nota": "Fora de âmbito."},
+        headers=cabecalho(token_analista),
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["status"] == "RECUSADA"

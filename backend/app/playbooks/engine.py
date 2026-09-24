@@ -39,9 +39,17 @@ from app.core.enums import (
     Severity,
     TaskStatus,
 )
-from app.core.errors import ConflictError, NotFoundError, SheisaError, ValidationError
+from app.core.errors import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    SheisaError,
+    ValidationError,
+)
+from app.core.permissions import Permission
 from app.core.references import ReferenceKind, next_reference
 from app.models.catalog import Ioc
+from app.models.identity import Role, User
 from app.models.incident import Incident
 from app.models.investigation import Comment, Observation, Task
 from app.models.response import (
@@ -714,6 +722,22 @@ async def _change_incident_status(
     """
     from app.services import incident_service
 
+    # Encerrar retira o incidente das filas e fecha o registo: exige
+    # `incidents:close`, tal como a rota de transição. O motor chama o serviço
+    # directamente, pelo que a verificação da rota não o alcança — é aqui que a
+    # separação entre quem conduz e quem dá por terminado passa a valer também
+    # nos playbooks. Como `AuthorizationError` é um `SheisaError`, um refuso fica
+    # registado como falha honesta do passo (ou nota no resumo do estado final),
+    # em vez de encerrar o incidente à revelia da permissão.
+    if target is IncidentStatus.ENCERRADO and not await _actor_tem_permissao(
+        session, ctx, Permission.INCIDENTS_CLOSE
+    ):
+        raise AuthorizationError(
+            "O playbook não pode encerrar o incidente: quem o corre não tem a "
+            "permissão para encerrar.",
+            required=Permission.INCIDENTS_CLOSE.value,
+        )
+
     await incident_service.transition(
         session, ctx,
         incident=incident,
@@ -722,6 +746,28 @@ async def _change_incident_status(
         resolution_summary=resolution_summary,
         false_positive_reason=false_positive_reason,
     )
+
+
+async def _actor_tem_permissao(
+    session: AsyncSession, ctx: AuditContext, permissao: Permission
+) -> bool:
+    """Diz se o utilizador que corre o playbook detém a permissão dada.
+
+    Sem actor identificado não se pode afirmar autoridade nenhuma — devolve
+    falso, para que uma execução sem dono nunca encerre um incidente.
+    """
+    if ctx.actor_id is None:
+        return False
+    user = (
+        await session.execute(
+            select(User)
+            .where(User.id == ctx.actor_id)
+            .options(selectinload(User.role).selectinload(Role.permissions))
+        )
+    ).scalar_one_or_none()
+    if user is None or user.role is None:
+        return False
+    return any(p.code == permissao.value for p in user.role.permissions)
 
 
 async def _build_target(

@@ -182,6 +182,84 @@ async def test_analista_nao_encerra_incidentes(cliente, token_analista):
     assert resposta.status_code == 403
 
 
+async def test_incidente_encerrado_fica_trancado(cliente, token_analista, token_admin):
+    """ENCERRADO preserva o registo histórico: o conteúdo deixa de poder mudar.
+
+    Campos, tarefas e evidências ficam trancados (incluindo eliminá-las). Só os
+    comentários continuam — são notas de auditoria posteriores, não alteram o que
+    aconteceu. ENCERRADO é terminal: não se reabre.
+    """
+    incidente = await _criar(cliente, token_analista)
+    iid = incidente["id"]
+
+    # Conteúdo criado ANTES de encerrar, para depois tentar alterá-lo e eliminá-lo.
+    ev = await cliente.post(
+        "/api/evidence",
+        data={"incident_id": iid, "tipo": "LOG", "descricao": "Antes de encerrar"},
+        files={"ficheiro": ("a.log", b"linha de log\n" * 5, "application/octet-stream")},
+        headers=cabecalho(token_analista),
+    )
+    assert ev.status_code == 201, ev.text
+    ev_id = ev.json()["id"]
+
+    tarefa = await cliente.post(
+        f"/api/tasks?incident_id={iid}",
+        json={"title": "Tarefa antes de encerrar"},
+        headers=cabecalho(token_analista),
+    )
+    assert tarefa.status_code == 201, tarefa.text
+    tarefa_id = tarefa.json()["id"]
+
+    # Encerrar (só admin/investigador têm incidents:close).
+    await _transitar(cliente, token_analista, iid, "TRIAGEM")
+    await _transitar(cliente, token_analista, iid, "INVESTIGACAO")
+    await _transitar(
+        cliente, token_analista, iid, "RESOLVIDO", resolution_summary="Feito."
+    )
+    fechar = await _transitar(cliente, token_admin, iid, "ENCERRADO")
+    assert fechar.status_code == 200, fechar.text
+    assert fechar.json()["status"] == "ENCERRADO"
+
+    def _trancado(resp) -> None:
+        assert resp.status_code == 409, resp.text
+        assert resp.json()["erro"]["codigo"] == "INCIDENTE_ENCERRADO", resp.text
+
+    # Editar campos.
+    _trancado(await cliente.patch(
+        f"/api/incidents/{iid}", json={"title": "Novo título"},
+        headers=cabecalho(token_admin),
+    ))
+    # Criar tarefa.
+    _trancado(await cliente.post(
+        f"/api/tasks?incident_id={iid}",
+        json={"title": "Tarefa nova"}, headers=cabecalho(token_admin),
+    ))
+    # Actualizar a tarefa que já existia.
+    _trancado(await cliente.patch(
+        f"/api/tasks/{tarefa_id}", json={"title": "Renomeada"},
+        headers=cabecalho(token_admin),
+    ))
+    # Carregar nova evidência.
+    _trancado(await cliente.post(
+        "/api/evidence",
+        data={"incident_id": iid, "tipo": "LOG", "descricao": "Depois"},
+        files={"ficheiro": ("b.log", b"x\n", "application/octet-stream")},
+        headers=cabecalho(token_admin),
+    ))
+    # Eliminar a evidência que já existia.
+    _trancado(await cliente.delete(
+        f"/api/evidence/{ev_id}", headers=cabecalho(token_admin),
+    ))
+
+    # Comentar CONTINUA permitido — nota de auditoria posterior ao encerramento.
+    comentario = await cliente.post(
+        f"/api/incidents/{iid}/comments",
+        json={"body": "Nota registada após o encerramento."},
+        headers=cabecalho(token_admin),
+    )
+    assert comentario.status_code == 201, comentario.text
+
+
 async def test_atribuir_responsavel(cliente, token_analista, semente):
     incidente = await _criar(cliente, token_analista)
     alvo = str(semente["utilizadores"]["investigador"])

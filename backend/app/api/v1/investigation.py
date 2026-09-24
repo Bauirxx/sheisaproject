@@ -54,6 +54,7 @@ async def upload_evidence(
     recolhido_em: Annotated[datetime | None, Form()] = None,
 ) -> EvidenceRead:
     incident = await incident_service.get_incident(session, incident_id)
+    incident_service.garantir_editavel(incident)
     evidence = await evidence_service.store_evidence(
         session, ctx,
         incident=incident,
@@ -249,6 +250,7 @@ async def create_task(
     payload: TaskCreate = ...,
 ) -> TaskRead:
     incident = await incident_service.get_incident(session, incident_id)
+    incident_service.garantir_editavel(incident)
     await require_existing(session, User, payload.assignee_id, "Utilizador")
 
     highest = await session.execute(
@@ -319,6 +321,9 @@ async def update_task(
     task = result.scalar_one_or_none()
     if task is None:
         raise NotFoundError("Tarefa", task_id)
+    incident_service.garantir_editavel(
+        await incident_service.get_incident(session, task.incident_id)
+    )
 
     changes = payload.model_dump(exclude_unset=True)
     reject_nulls_for_required(task, changes)

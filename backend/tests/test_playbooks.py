@@ -564,7 +564,37 @@ async def test_estado_final_impossivel_fica_registado_em_vez_de_ignorado(
         passos=[PASSO_NOTA], closing_status="ENCERRADO",
     )
 
+    execucao = await _correr(cliente, token_admin, playbook, incidente)
+
+    assert execucao["status"] == PlaybookExecutionStatus.CONCLUIDA.value
+    # Quem corre (admin) tem incidents:close, logo o refuso é do ciclo de vida,
+    # não da permissão — NOVO não transita directamente para ENCERRADO.
+    assert "ENCERRADO não aplicado" in execucao["result_summary"], execucao["result_summary"]
+    assert "permissão para encerrar" not in execucao["result_summary"]
+
+
+async def test_playbook_nao_encerra_sem_a_permissao_de_encerrar(
+    cliente, token_admin, token_analista
+):
+    """O motor chama o serviço directamente, pelo que a verificação de
+    `incidents:close` da rota de transição não o alcança. Quem corre o playbook
+    tem de a deter para que o estado final ENCERRADO se aplique — senão o
+    incidente fica por encerrar e o resumo di-lo."""
+    incidente = await _incidente(cliente, token_analista)
+    playbook = await _playbook(
+        cliente, token_admin, nome="Playbook que tenta encerrar",
+        passos=[PASSO_NOTA], closing_status="ENCERRADO",
+    )
+
+    # O analista tem playbooks:execute mas não incidents:close.
     execucao = await _correr(cliente, token_analista, playbook, incidente)
 
     assert execucao["status"] == PlaybookExecutionStatus.CONCLUIDA.value
-    assert "ENCERRADO não aplicado" in execucao["result_summary"], execucao["result_summary"]
+    assert "não tem a permissão para encerrar" in execucao["result_summary"]
+    actual = (
+        await cliente.get(
+            f"/api/incidents/{incidente['id']}", headers=cabecalho(token_analista)
+        )
+    ).json()
+    assert actual["status"] == "NOVO"  # não foi encerrado
+    assert actual["closed_at"] is None

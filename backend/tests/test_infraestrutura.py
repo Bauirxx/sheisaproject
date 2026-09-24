@@ -6,7 +6,9 @@ revertida, e pior do que nenhum teste: da confianca sem a justificar.
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+import pytest
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
@@ -96,6 +98,42 @@ async def test_o_esquema_migrado_corresponde_aos_modelos(ligacao):
         "directo numa migração tem de ser declarado no modelo, senão o "
         f"autogenerate propõe removê-lo: {diferencas}"
     )
+
+
+async def test_a_base_recusa_um_valor_de_enumeracao_invalido(
+    cliente, sessao, token_analista
+):
+    """A restrição CHECK (migração 0007) fecha a porta que o ORM deixava aberta.
+
+    Um valor fora do domínio, escrito por SQL directo — sem passar pela validação
+    da aplicação —, é recusado pela própria base. Sem a restrição, passaria.
+    """
+    criado = await cliente.post(
+        "/api/incidents",
+        json={
+            "title": "Incidente para a restrição CHECK",
+            "description": "x",
+            "category": "INTRUSAO",
+            "severity": "ALTA",
+        },
+        headers=cabecalho(token_analista),
+    )
+    assert criado.status_code == 201, criado.text
+    iid = criado.json()["id"]
+
+    # Um valor do domínio passa (controlo).
+    async with sessao.begin_nested():
+        await sessao.execute(
+            text("UPDATE incidents SET status = 'ABERTO' WHERE id = :i"), {"i": iid}
+        )
+
+    # Um valor fora do domínio é recusado pela base.
+    with pytest.raises(IntegrityError):
+        async with sessao.begin_nested():
+            await sessao.execute(
+                text("UPDATE incidents SET status = 'INEXISTENTE' WHERE id = :i"),
+                {"i": iid},
+            )
 
 
 def _ignorar_alheios(obj, name, type_, reflected, compare_to) -> bool:

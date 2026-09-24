@@ -236,6 +236,7 @@ async def update_incident(
     _: Annotated[object, Depends(require(Permission.INCIDENTS_UPDATE))],
 ) -> IncidentRead:
     incident = await incident_service.get_incident(session, incident_id, with_details=True)
+    incident_service.garantir_editavel(incident)
 
     changes = payload.model_dump(exclude_unset=True)
     reject_nulls_for_required(incident, changes)
@@ -406,6 +407,7 @@ async def add_observation(
     from app.models.catalog import Ioc
 
     incident = await incident_service.get_incident(session, incident_id)
+    incident_service.garantir_editavel(incident)
     ioc = await session.get(Ioc, payload.ioc_id)
     if ioc is None:
         raise NotFoundError("Indicador", payload.ioc_id)

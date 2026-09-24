@@ -217,6 +217,61 @@ async def _avisar_da_recepcao(
     await session.flush()
 
 
+async def _avisar_da_decisao(relato: IncidentReport, *, nota: str) -> None:
+    """Avisa quem comunicou de que a comunicação foi decidida (aceite/recusada).
+
+    Mesmo contrato do aviso de recepção: só envia se o canal estiver
+    configurado, corre o SMTP fora do ciclo de eventos, e **nunca faz falhar a
+    decisão** — a comunicação já está decidida e registada na auditoria; um
+    servidor de correio em baixo não desfaz isso. A mensagem vai marcada com a
+    mesma origem que todas as nossas, pelo que a recolha a ignora e não se forma
+    o laço que já aconteceu.
+
+    Só avisa das decisões terminais que quem comunicou espera saber. Não inventa
+    campo de estado nenhum: uma falha fica no registo, não numa marca decorativa
+    na interface (§4).
+    """
+    if not settings.envio_de_email_configurado:
+        return
+
+    if relato.status is ReportStatus.ACEITE:
+        veredicto = "foi aceite e vai ser tratada."
+    elif relato.status is ReportStatus.RECUSADA:
+        veredicto = "foi avaliada e não será tratada como incidente."
+    else:
+        return
+
+    corpo = "\n".join([
+        f"{relato.reporter_name},",
+        "",
+        f"A comunicação {relato.reference} que nos enviou {veredicto}",
+        "",
+        *( [f"Nota do analista: {nota}", ""] if nota else [] ),
+        "Pode consultar o estado a qualquer momento com a referência e o código",
+        "de acompanhamento que recebeu quando comunicou.",
+        "",
+        "-- ",
+        "Mensagem gerada automaticamente ao registar a decisão sobre a sua "
+        "comunicação.",
+    ])
+
+    try:
+        await asyncio.to_thread(
+            email_service.enviar,
+            para=relato.reporter_email,
+            assunto=f"[{relato.reference}] Decisão sobre a sua comunicação",
+            corpo=corpo,
+        )
+    except Exception:
+        # Registado e não levantado: a decisão está feita e auditada, e não se
+        # desfaz por o correio ter falhado.
+        logger.exception(
+            "Falhou o aviso de decisão da comunicação %s para %s",
+            relato.reference,
+            relato.reporter_email,
+        )
+
+
 # ===================================================== recolha do correio
 async def recolher_do_email(
     session: AsyncSession, ctx: AuditContext
@@ -576,6 +631,7 @@ async def aceitar(
         new_value={"estado": relato.status.value, "incidente": incidente.reference},
         changed_fields=["status", "incidents"],
     )
+    await _avisar_da_decisao(relato, nota=nota.strip())
     await _recarregar(session, relato)
     return relato, incidente
 
@@ -618,6 +674,7 @@ async def recusar(
         new_value={"estado": relato.status.value},
         changed_fields=["status"],
     )
+    await _avisar_da_decisao(relato, nota=nota.strip())
     return await _recarregar(session, relato)
 
 

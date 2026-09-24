@@ -50,12 +50,16 @@ def enum_column(py_enum: type, **kwargs: Any) -> Any:
     ciclo de vida não exige um `ALTER TYPE`, que não pode correr dentro de uma
     transacção em versões mais antigas e complica os rollbacks.
 
-    **A base de dados não impõe os valores.** Este comentário dizia "com
-    restrição CHECK", mas no SQLAlchemy 2 o `Enum` não cria a restrição por
-    omissão (`create_constraint=False`), e o esquema não tem nenhuma — medido em
-    2026-09-17. A validação é do ORM (`validate_strings=True`): um valor inválido
-    escrito por SQL directo passa. Acrescentar um estado, como `CADUCADA` nas
-    aprovações, não precisa por isso de migração.
+    **A base de dados impõe os valores desde a migração `0007_check_enumeracoes`.**
+    No SQLAlchemy 2 o `Enum` não cria a restrição por omissão
+    (`create_constraint=False`) e durante muito tempo o esquema não teve nenhuma
+    (medido em 2026-09-17); a 0007 acrescentou uma restrição CHECK por cada
+    coluna de enumeração, por SQL cru para escaparem à `naming_convention`. A
+    validação do ORM (`validate_strings=True`) continua a ser a primeira linha,
+    mas um valor inválido escrito por SQL directo passa agora a ser recusado pela
+    própria base. **Custo, assumido de propósito:** acrescentar um estado a uma
+    enumeração passa a exigir uma migração que refaça a restrição da coluna
+    afectada.
     """
     return SAEnum(
         py_enum,

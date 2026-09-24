@@ -144,6 +144,30 @@ async def test_o_catalogo_regista_cada_conector_uma_so_vez_e_desligado(sessao):
     assert qradar.config["verificavel_neste_ambiente"] is False
 
 
+async def test_ensure_catalog_actualiza_textos_sem_tocar_no_estado(sessao):
+    """Um texto corrigido no código chega às linhas já existentes, mas o que o
+    operador configurou (estado, activação) mantém-se."""
+    await ensure_catalog(sessao)
+    qradar = (
+        await sessao.execute(
+            select(Integration).where(Integration.kind == SourceKind.QRADAR)
+        )
+    ).scalar_one()
+
+    # Simula uma linha antiga: texto obsoleto e integração já configurada.
+    qradar.description = "texto antigo e enganador"
+    qradar.status = IntegrationStatus.ACTIVA
+    qradar.is_enabled = True
+    await sessao.flush()
+
+    assert await ensure_catalog(sessao) == 0  # nada criado, só sincronizado
+    await sessao.refresh(qradar)
+
+    assert qradar.description == CONNECTOR_CATALOG[SourceKind.QRADAR]["descricao"]
+    assert qradar.status is IntegrationStatus.ACTIVA  # estado do operador intacto
+    assert qradar.is_enabled is True
+
+
 async def test_a_listagem_diz_o_que_falta_sem_nunca_mostrar_segredos(
     cliente, sessao, token_admin, monkeypatch
 ):

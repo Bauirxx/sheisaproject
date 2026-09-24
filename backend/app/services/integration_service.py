@@ -56,8 +56,10 @@ CONNECTOR_CATALOG: dict[SourceKind, dict] = {
     SourceKind.QRADAR: {
         "nome": "IBM QRadar",
         "descricao": (
-            "Importa offenses do QRadar através da API REST. Cliente "
-            "implementado; não verificado contra uma instância real."
+            "Cliente de importação de offenses via API REST implementado "
+            "(fetch_offenses), mas ainda sem rota ou tarefa que o accione: pela "
+            "interface só o teste de ligação está disponível. Não verificado "
+            "contra uma instância real."
         ),
         "direccao": IntegrationDirection.ENTRADA,
         "variaveis": ["SHEISA_QRADAR_API_URL", "SHEISA_QRADAR_API_TOKEN"],
@@ -68,8 +70,10 @@ CONNECTOR_CATALOG: dict[SourceKind, dict] = {
     SourceKind.NETSCOUT: {
         "nome": "NetScout",
         "descricao": (
-            "Importa alertas de tráfego do NetScout. Cliente implementado; "
-            "não verificado contra uma instância real."
+            "Cliente de importação de alertas de tráfego via API REST "
+            "implementado (fetch_alerts), mas ainda sem rota ou tarefa que o "
+            "accione: pela interface só o teste de ligação está disponível. Não "
+            "verificado contra uma instância real."
         ),
         "direccao": IntegrationDirection.ENTRADA,
         "variaveis": ["SHEISA_NETSCOUT_API_URL", "SHEISA_NETSCOUT_API_TOKEN"],
@@ -90,33 +94,54 @@ CONNECTOR_CATALOG: dict[SourceKind, dict] = {
 
 
 async def ensure_catalog(session: AsyncSession) -> int:
-    """Regista os conectores do catálogo que ainda não existam."""
-    existing = {
-        i.kind for i in (await session.execute(select(Integration))).scalars()
+    """Regista os conectores do catálogo em falta e sincroniza os textos dos
+    que já existem.
+
+    A descrição, direcção, variáveis, acções e os sinalizadores
+    `implementado`/`verificavel` vivem no código e são a fonte de verdade: um
+    conector já registado é actualizado para reflectir o catálogo, **sem tocar**
+    no que o operador configurou (`status`, `is_enabled`, segredos). Sem isto,
+    corrigir um texto do catálogo não chegaria à base de dados que a interface
+    lê. Devolve quantos conectores foram criados de novo.
+    """
+    existentes = {
+        i.kind: i for i in (await session.execute(select(Integration))).scalars()
     }
-    created = 0
+    criados = 0
     for kind, spec in CONNECTOR_CATALOG.items():
-        if kind in existing:
-            continue
-        session.add(
-            Integration(
-                name=spec["nome"],
-                kind=kind,
-                direction=spec["direccao"],
-                description=spec["descricao"],
-                status=IntegrationStatus.NAO_CONFIGURADA,
-                is_enabled=False,
-                secret_env_vars=spec["variaveis"],
-                supported_actions=spec["accoes"],
-                config={
-                    "implementado": spec["implementado"],
-                    "verificavel_neste_ambiente": spec["verificavel"],
-                },
+        integracao = existentes.get(kind)
+        if integracao is None:
+            session.add(
+                Integration(
+                    name=spec["nome"],
+                    kind=kind,
+                    direction=spec["direccao"],
+                    description=spec["descricao"],
+                    status=IntegrationStatus.NAO_CONFIGURADA,
+                    is_enabled=False,
+                    secret_env_vars=spec["variaveis"],
+                    supported_actions=spec["accoes"],
+                    config={
+                        "implementado": spec["implementado"],
+                        "verificavel_neste_ambiente": spec["verificavel"],
+                    },
+                )
             )
-        )
-        created += 1
+            criados += 1
+            continue
+        # Só os campos descritivos; o estado configurado pelo operador fica.
+        integracao.name = spec["nome"]
+        integracao.direction = spec["direccao"]
+        integracao.description = spec["descricao"]
+        integracao.secret_env_vars = spec["variaveis"]
+        integracao.supported_actions = spec["accoes"]
+        integracao.config = {
+            **(integracao.config or {}),
+            "implementado": spec["implementado"],
+            "verificavel_neste_ambiente": spec["verificavel"],
+        }
     await session.flush()
-    return created
+    return criados
 
 
 async def get_integration(session: AsyncSession, integration_id: uuid.UUID) -> Integration:

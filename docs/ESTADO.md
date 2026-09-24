@@ -909,6 +909,37 @@ que a caixa devolve o que lhe foi enviado.
     teste que afirma que um cabeçalho mal formado não pode perder a mensagem. Ver
     a armadilha 5.21.
 
+62. **O catálogo dizia que importava do QRadar/NetScout, sem nada o fazer**
+    (2026-09-24). `fetch_offenses`/`fetch_alerts` existem, mas nenhuma rota ou
+    tarefa os chama — só o teste de ligação é alcançável. A descrição foi
+    corrigida para o dizer, e o `ensure_catalog` passou a **sincronizar** os
+    textos das linhas já existentes (antes só criava as em falta, pelo que a
+    correcção nunca chegava à base que a interface lê), sem tocar no `status`,
+    `is_enabled` nem segredos do operador. Teste novo, verificado por reversão.
+
+63. **Um playbook encerrava um incidente sem `incidents:close`** (2026-09-24). A
+    verificação vivia só na rota de transição, e o motor chamava o serviço por
+    baixo dela. `engine._change_incident_status` — o funil das duas transições do
+    motor — passou a exigir a permissão de quem corre o playbook quando o destino
+    é ENCERRADO. Como `AuthorizationError` é `SheisaError`, o refuso fica como
+    falha honesta, não encerra à revelia. Teste novo, verificado por reversão.
+
+64. **A base de dados não impunha os valores das enumerações** (2026-09-24). A
+    migração `0007_check_enumeracoes` acrescenta uma restrição CHECK a cada uma
+    das 55 colunas de enumeração, por SQL cru (a `naming_convention` duplicava o
+    prefixo e truncava nomes no limite de 63 caracteres do PostgreSQL). Um valor
+    inválido escrito por SQL directo é agora recusado pela base. Reversibilidade
+    confirmada (55 → 0 → 55) e um teste prova a recusa. Custo assumido: um estado
+    novo numa enumeração passa a exigir uma migração.
+
+65. **Um incidente ENCERRADO continuava editável** (2026-09-24).
+    `incident_service.garantir_editavel` recusa mutações de conteúdo (campos,
+    tarefas, observações, evidências, incluindo eliminá-las) num incidente
+    ENCERRADO, com 409 `INCIDENTE_ENCERRADO`. Os comentários continuam — são
+    notas de auditoria posteriores. ENCERRADO é terminal (sem transições de
+    saída): não se reabre, cria-se um incidente relacionado. Verificado por
+    reversão.
+
 Uma decisão de desenho que vale registar: **a plataforma não classifica por
 palavras-chave.** Uma categoria inferida do assunto de um email seria apresentada
 com a mesma confiança de uma afirmada por quem comunica, e o §4 proíbe-o. Uma
@@ -1112,13 +1143,15 @@ páginas — um PDF válido mas vazio passaria num teste de assinatura.
 
 ## 6. Contas e credenciais do ambiente local
 
-Criadas na base de dados de desenvolvimento (**não** são segredos de produção):
+Criadas na base de dados de desenvolvimento (**não** são segredos de produção).
+As palavras-passe **não** são versionadas — este repositório é público e cada
+instalação gera as suas:
 
-| Conta | Perfil | Palavra-passe |
+| Conta | Perfil | Como obter a palavra-passe |
 |---|---|---|
-| `admin@sheisa.local` | ADMINISTRADOR | `gfvAXtXTHnSBgSKpTYM8` |
-| `gestor@sheisa.local` | GESTOR | `GestorSeguro2026` |
-| `analista@sheisa.local` | ANALISTA_SOC | `AnalistaSeguro2026` |
+| `admin@sheisa.local` | ADMINISTRADOR | A que `python -m scripts.manage init` imprime **uma única vez** no arranque (ou a definida em `SHEISA_ADMIN_PASSWORD`). |
+| `gestor@sheisa.local` | GESTOR | Escolhida por quem a cria via `POST /api/users` com o token de administração. |
+| `analista@sheisa.local` | ANALISTA_SOC | Escolhida por quem a cria via `POST /api/users` com o token de administração. |
 
 As contas de gestor e analista **não** sobrevivem a um clone: são criadas pela
 API (`POST /api/users`) com o token de administração, não por `manage.py`.

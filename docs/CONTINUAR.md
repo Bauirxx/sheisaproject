@@ -260,57 +260,61 @@ para o `analytics_service`, que estava a 76%:
 ./.venv/Scripts/python.exe -m pytest --cov=app --cov-report=term
 ```
 
-> **Pendente de decisão do autor — seis achados que não foram corrigidos**, por
-> exigirem uma escolha e não uma correcção:
+> **Achados que exigiam uma escolha, não uma correcção.** Quatro foram fechados
+> em 2026-09-24; dois continuam em aberto, por dependerem de contexto que não
+> existe aqui.
 >
-> 1. **Os playbooks semeados pedem duas aprovações para a mesma decisão**: um
->    `SOLICITAR_APROVACAO` seguido de um `EXECUTAR_ACCAO` crítico, que volta a
->    suspender. Pode ser intencional (autorizar o procedimento, depois o alvo). E
->    o playbook de bloqueio de IP **nunca pode concluir**: nenhum conector
->    executa `BLOQUEAR_IP`, pelo que pára sempre no passo 6 — agora com uma falha
->    honesta, depois da correcção 17.
-> 2. **A importação do QRadar e do NetScout não está ligada a nada.**
->    `fetch_offenses`, `fetch_alerts` e `fetch_agents` (e `required_env`) não são
->    chamados por nenhuma rota, comando ou tarefa. Só o teste de ligação é
->    alcançável. Mas a descrição do catálogo, que a página de integrações mostra,
->    diz "Importa offenses do QRadar através da API REST". Ou se liga a
->    importação, ou se corrige o texto — que está gravado na base de dados, pelo
->    que o `ensure_catalog` sozinho não o actualiza.
-> 3. **Os comandos de resposta activa do Wazuh não foram verificados, e alguns
->    parecem errados.** `EXECUTAR_VARRIMENTO` envia `restart-wazuh0` (reinicia o
->    agente — não é um varrimento); `RECOLHER_ARTEFACTOS` envia
+> 1. **[EM ABERTO] Os playbooks semeados pedem duas aprovações para a mesma
+>    decisão**: um `SOLICITAR_APROVACAO` seguido de um `EXECUTAR_ACCAO` crítico,
+>    que volta a suspender. Pode ser intencional (autorizar o procedimento,
+>    depois o alvo). E o playbook de bloqueio de IP **nunca pode concluir**:
+>    nenhum conector executa `BLOQUEAR_IP`, pelo que pára sempre no passo 6 —
+>    agora com uma falha honesta, depois da correcção 17.
+> 2. **[FECHADO 2026-09-24] A importação do QRadar/NetScout não está ligada, e o
+>    texto do catálogo dizia que importava.** `fetch_offenses`/`fetch_alerts`
+>    existem mas nenhuma rota, comando ou tarefa os chama — só o teste de ligação
+>    é alcançável. A descrição foi corrigida para o dizer, e o `ensure_catalog`
+>    passou a **sincronizar** os textos das linhas já existentes (antes só criava
+>    as em falta, pelo que a correcção nunca chegava à base que a interface lê),
+>    sem tocar no que o operador configurou. Ligar mesmo a importação continua
+>    por fazer — mas deixou de ser apresentada como feita.
+> 3. **[EM ABERTO] Os comandos de resposta activa do Wazuh não foram verificados,
+>    e alguns parecem errados.** `EXECUTAR_VARRIMENTO` envia `restart-wazuh0`
+>    (reinicia o agente — não é um varrimento); `RECOLHER_ARTEFACTOS` envia
 >    `wazuh-logcollector` (um daemon, não um script de resposta activa);
 >    `ISOLAR_ACTIVO` envia `firewall-drop0` sem argumentos (bloqueia um IP, não
 >    isola o host). O sucesso é `affected_items` não vazio, que significa que o
 >    gestor **enviou** a mensagem, não que o agente a aplicou. No laboratório,
 >    em 2026-09-17: o gestor não tem secções `<command>` nem `<active-response>`
 >    (a API devolve o erro 1106), e o agente `001 srv-web-lab` está
->    **desligado** — pelo que nada disto pôde ser confrontado. Os testes não
->    afirmam os nomes dos comandos, para não os fixar.
->    Também `find_related_incidents`, no motor de correlação, não é chamada
->    por nada.
-> 4. **Um playbook pode encerrar um incidente sem `incidents:close`.** A
->    verificação dessa permissão vive na rota `POST /incidents/{id}/transition`
->    e não no serviço, e o motor de playbooks chama o serviço. Um playbook com
->    estado final ENCERRADO, definido por quem tem `playbooks:manage`, fecha o
->    incidente quando corrido por um analista. Pode ser intencional — quem
->    definiu o playbook tinha autoridade para encerrar —, ou a separação entre
->    quem conduz e quem dá por terminado deve valer também aqui. Nenhum
->    playbook da base de desenvolvimento usa estado final.
-> 5. **A base de dados não impõe os valores das enumerações.** O esquema não tem
->    nenhuma restrição CHECK (medido em 2026-09-17), embora `enum_column` o
->    afirmasse: no SQLAlchemy 2 o `Enum` não as cria por omissão. A validação é
->    só do ORM, e um valor inválido escrito por SQL directo passa. Criá-las exige
->    uma migração e, depois, uma migração por cada estado novo (como `CADUCADA`,
->    acrescentado agora sem migração nenhuma). A docstring foi corrigida; a
->    decisão de as criar fica por tomar.
-> 6. **Um incidente ENCERRADO continua editável.** O ciclo de vida diz que
->    ENCERRADO é terminal e que reabrir exige um incidente relacionado, "para
->    preservar a integridade do registo histórico". Mas só as transições e a
->    ligação de alertas o respeitam: campos, comentários, tarefas, observações e
->    evidências (incluindo eliminá-las) continuam a poder ser alterados. Decidir
->    o que deve ficar fechado — e se as notas posteriores ao encerramento são
->    permitidas — é uma escolha de processo, não uma correcção.
+>    **desligado** — pelo que nada disto pôde ser confrontado. Trocar os nomes
+>    sem um agente real seria substituir um palpite por outro. Fica em aberto até
+>    haver um Wazuh a sério para confrontar. Os testes não afirmam os nomes dos
+>    comandos, para não os fixar. Também `find_related_incidents`, no motor de
+>    correlação, não é chamada por nada.
+> 4. **[FECHADO 2026-09-24] Um playbook já não encerra um incidente sem
+>    `incidents:close`.** A verificação vivia só na rota
+>    `POST /incidents/{id}/transition`, e o motor chamava o serviço por baixo
+>    dela. `engine._change_incident_status` — o funil das duas transições do
+>    motor (estado final e passo `ALTERAR_ESTADO`) — passou a exigir a permissão
+>    de quem corre o playbook quando o destino é ENCERRADO. Como
+>    `AuthorizationError` é um `SheisaError`, o refuso fica como falha honesta do
+>    passo, ou como nota no resumo do estado final, em vez de encerrar à revelia.
+> 5. **[FECHADO 2026-09-24] A base de dados passou a impor os valores das
+>    enumerações.** A migração `0007_check_enumeracoes` acrescentou uma restrição
+>    CHECK a cada uma das 55 colunas de enumeração, por SQL cru (para escaparem à
+>    `naming_convention`, que de outro modo duplicava o prefixo e truncava alguns
+>    nomes no limite de 63 caracteres do PostgreSQL). Um valor inválido escrito
+>    por SQL directo é agora recusado pela própria base. **Custo assumido:**
+>    acrescentar um estado novo a uma enumeração passa a exigir uma migração que
+>    refaça a restrição da coluna afectada.
+> 6. **[FECHADO 2026-09-24] Um incidente ENCERRADO deixou de ser editável.**
+>    `incident_service.garantir_editavel` recusa mutações de conteúdo (campos,
+>    tarefas, observações, evidências — incluindo eliminá-las) num incidente
+>    ENCERRADO, com 409 `INCIDENTE_ENCERRADO`. Os comentários continuam
+>    permitidos: são notas de auditoria posteriores, não alteram o que aconteceu.
+>    ENCERRADO é terminal (sem transições de saída), pelo que não se reabre — a
+>    mensagem manda criar um incidente relacionado, como no ciclo de vida.
 
 ### 4.5 Requisitos da monografia — o que estava em falta, e está feito
 
