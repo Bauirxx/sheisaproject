@@ -1,0 +1,354 @@
+@startuml SHEISA-Classes
+' Diagrama de classes (modelo de dominio) do SHEISA.
+' Gerado a partir dos modelos SQLAlchemy em backend/app/models/.
+' Renderizar: https://www.plantuml.com/plantuml  (colar e exportar PNG/SVG)
+'   ou no draw.io: Arrange > Insert > Advanced > PlantUML...
+'   ou VS Code: extensao "PlantUML".
+
+title Modelo de dominio SHEISA — diagrama de classes
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #1d4ed8
+  ArrowColor #4f6070
+  AttributeFontColor #16202e
+}
+skinparam packageBackgroundColor #F4F6F9
+skinparam packageBorderColor #C2CEDE
+
+package "Identidade e acesso" {
+  class User {
+    +id : UUID
+    +email : str
+    +full_name : str
+    +is_active : bool
+    +failed_login_count : int
+    +last_login_at : datetime
+  }
+  class Role {
+    +id : UUID
+    +name : str
+    +is_system : bool
+  }
+  class Permission {
+    +id : UUID
+    +code : str
+    +description : str
+  }
+  class Team {
+    +id : UUID
+    +name : str
+    +is_active : bool
+  }
+  class UserSession {
+    +id : UUID
+    +expires_at : datetime
+    +revoked_at : datetime
+    +ip_address : str
+  }
+  class ApiKey {
+    +id : UUID
+    +name : str
+    +key_prefix : str
+    +is_active : bool
+    +use_count : int
+  }
+}
+
+package "Detecao" {
+  class Event {
+    +id : UUID
+    +source_kind : SourceKind
+    +source_event_id : str
+    +event_type : str
+    +severity : Severity
+    +occurred_at : datetime
+    +source_ip : str
+    +raw_payload : dict
+  }
+  class Alert {
+    +id : UUID
+    +reference : str
+    +severity : Severity
+    +status : AlertStatus
+    +dedup_key : str
+    +event_count : int
+    +triage_score : int
+    +correlation_outcome : CorrelationOutcome
+  }
+  class CorrelationRule {
+    +id : UUID
+    +name : str
+    +strategy : CorrelationStrategy
+    +window_minutes : int
+    +min_alerts : int
+  }
+}
+
+package "Incidente" {
+  class Incident {
+    +id : UUID
+    +reference : str
+    +title : str
+    +category : IncidentCategory
+    +severity : Severity
+    +priority : Priority
+    +status : IncidentStatus
+    +origin : IncidentOrigin
+    +risk_score : int
+  }
+  class IncidentRelation {
+    +id : UUID
+    +relation_type : RelationType
+    +confidence : Confidence
+  }
+  class IncidentTechnique {
+    +id : UUID
+    +is_asserted : bool
+    +confidence : Confidence
+  }
+}
+
+package "Catalogo e intelligence" {
+  class Asset {
+    +id : UUID
+    +identifier : str
+    +asset_type : AssetType
+    +criticality : AssetCriticality
+    +ip_address : str
+    +wazuh_agent_id : str
+  }
+  class Ioc {
+    +id : UUID
+    +ioc_type : IocType
+    +value : str
+    +reputation : IocReputation
+    +risk_score : int
+    +is_allowlisted : bool
+  }
+  class Campaign {
+    +id : UUID
+    +reference : str
+    +name : str
+    +severity : Severity
+    +is_active : bool
+  }
+  class MitreTactic {
+    +id : UUID
+    +tactic_id : str
+    +shortname : str
+    +ordering : int
+  }
+  class MitreTechnique {
+    +id : UUID
+    +technique_id : str
+    +name : str
+    +is_subtechnique : bool
+  }
+}
+
+package "Investigacao" {
+  class Observation {
+    +id : UUID
+    +role : ObservationRole
+    +observed_at : datetime
+    +confidence : Confidence
+    +is_automatic : bool
+  }
+  class Comment {
+    +id : UUID
+    +body : str
+    +is_internal : bool
+    +is_system : bool
+  }
+  class Task {
+    +id : UUID
+    +title : str
+    +status : TaskStatus
+    +priority : Priority
+    +due_at : datetime
+  }
+  class Evidence {
+    +id : UUID
+    +name : str
+    +evidence_type : EvidenceType
+    +sha256 : str
+    +size_bytes : int
+    +integrity_ok : bool
+  }
+}
+
+package "Resposta" {
+  class Playbook {
+    +id : UUID
+    +name : str
+    +version : int
+    +is_enabled : bool
+    +auto_execute : bool
+    +closing_status : str
+  }
+  class PlaybookStep {
+    +id : UUID
+    +ordering : int
+    +step_type : PlaybookStepType
+    +action_kind : ActionKind
+    +risk_level : ActionRiskLevel
+    +requires_approval : bool
+  }
+  class PlaybookExecution {
+    +id : UUID
+    +reference : str
+    +status : PlaybookExecutionStatus
+    +playbook_version : int
+    +result_summary : str
+  }
+  class PlaybookStepExecution {
+    +id : UUID
+    +ordering : int
+    +step_name : str
+    +status : TaskStatus
+  }
+  class Action {
+    +id : UUID
+    +reference : str
+    +action_kind : ActionKind
+    +risk_level : ActionRiskLevel
+    +status : ActionStatus
+    +is_reversible : bool
+  }
+  class ActionApproval {
+    +id : UUID
+    +decision : ApprovalDecision
+    +required_permission : str
+    +expires_at : datetime
+  }
+}
+
+package "Recomendacoes" {
+  class Recommendation {
+    +id : UUID
+    +kind : RecommendationKind
+    +status : RecommendationStatus
+    +target_type : str
+    +confidence : int
+    +applied : bool
+  }
+}
+
+package "Comunicacao externa" {
+  class IncidentReport {
+    +id : UUID
+    +reference : str
+    +reporter_email : str
+    +channel : ReportChannel
+    +subject : str
+    +status : ReportStatus
+  }
+}
+
+package "Sistema" {
+  class Integration {
+    +id : UUID
+    +name : str
+    +kind : SourceKind
+    +direction : IntegrationDirection
+    +status : IntegrationStatus
+    +is_enabled : bool
+  }
+  class Notification {
+    +id : UUID
+    +kind : NotificationKind
+    +severity : Severity
+    +read_at : datetime
+  }
+  class Report {
+    +id : UUID
+    +reference : str
+    +kind : ReportKind
+    +period_start : datetime
+    +period_end : datetime
+  }
+  class AuditLog {
+    +id : UUID
+    +action : str
+    +resource_type : str
+    +actor_email : str
+    +outcome : AuditOutcome
+    +created_at : datetime
+  }
+}
+
+' ===== Identidade =====
+Role "1" o-- "*" User : role
+Team "1" o-- "*" User : membros
+Role "*" -- "*" Permission : role_permissions
+User "1" *-- "*" UserSession : sessoes
+Integration "1" o-- "*" ApiKey : chaves
+
+' ===== Detecao =====
+Alert "1" *-- "*" Event : eventos
+Event "*" --> "0..1" Integration : origem
+Event "*" --> "0..1" Asset
+Alert "*" --> "0..1" CorrelationRule : regra
+Alert "*" --> "0..1" Asset
+CorrelationRule "*" --> "0..1" Playbook : sugere
+
+' ===== Incidente =====
+Incident "*" --> "0..1" User : responsavel
+Incident "*" --> "0..1" User : reportado_por
+Incident "*" --> "0..1" Team
+Campaign "1" o-- "*" Incident : incidentes
+Incident "*" -- "*" Asset : incident_assets
+Incident "1" o-- "*" Alert : alertas
+Incident "1" *-- "*" Comment
+Incident "1" *-- "*" Task
+Incident "1" *-- "*" Evidence
+Incident "1" *-- "*" Observation
+Incident "1" *-- "*" IncidentTechnique
+Incident "1" *-- "*" Action
+Incident "1" *-- "*" PlaybookExecution
+IncidentRelation "*" --> "1" Incident : origem
+IncidentRelation "*" --> "1" Incident : destino
+IncidentTechnique "*" --> "1" MitreTechnique
+
+' ===== Catalogo =====
+MitreTactic "1" o-- "*" MitreTechnique : tecnicas
+MitreTechnique "*" --> "0..1" MitreTactic : tactica
+
+' ===== Investigacao =====
+Observation "*" --> "1" Ioc
+Observation "*" --> "0..1" Asset
+Observation "*" --> "0..1" Alert
+Task "*" -- "*" Task : depende_de
+Task "*" --> "0..1" PlaybookExecution
+Evidence "*" --> "0..1" Task
+Comment "*" --> "0..1" User : autor
+Task "*" --> "0..1" User : responsavel
+
+' ===== Resposta =====
+Playbook "1" *-- "*" PlaybookStep : passos
+PlaybookExecution "*" --> "1" Playbook
+PlaybookExecution "1" *-- "*" PlaybookStepExecution
+PlaybookStepExecution "*" --> "0..1" PlaybookStep
+PlaybookStepExecution "*" --> "0..1" Action
+Action "1" *-- "*" ActionApproval : aprovacoes
+Action "*" --> "0..1" Integration
+Action "*" --> "0..1" Recommendation
+Action "*" --> "0..1" User : proposto_por
+ActionApproval "*" --> "0..1" User : decidido_por
+
+' ===== Recomendacao / comunicacao / sistema =====
+Recommendation "*" --> "0..1" User : decidido_por
+IncidentReport "*" --> "0..1" User : triado_por
+IncidentReport "*" -- "*" Incident : report_incidents
+IncidentReport "*" --> "0..1" IncidentReport : duplicado_de
+Notification "*" --> "1" User
+Report "*" --> "0..1" Incident
+Report "*" --> "0..1" User : gerado_por
+AuditLog "*" --> "0..1" User : actor
+
+@enduml

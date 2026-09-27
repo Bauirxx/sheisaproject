@@ -4,6 +4,11 @@ Diagrama das 33 entidades do domínio do SHEISA e das suas relações, extraído
 directamente dos modelos SQLAlchemy em [`backend/app/models/`](../backend/app/models/).
 Nada aqui é inventado: classes, atributos e relações correspondem ao código.
 
+> **Para a monografia:** as imagens prontas e a fonte UML estão em
+> [`docs/diagramas/`](diagramas/) — `classes.png` (inserir), `classes.svg`
+> (escalável, melhor para impressão) e `classes.puml` (fonte PlantUML, editável e
+> importável no draw.io). Ver as instruções no fim deste documento.
+
 Para poupar espaço, cada classe mostra os atributos identificadores e alguns de
 domínio, não todos. As chaves estrangeiras aparecem como relações (associações),
 não como atributos. Quase todas as entidades registam ainda um `created_by_id`
@@ -432,4 +437,26 @@ TheHive.
 33 entidades · 4 tabelas de associação · 9 módulos. Desde a migração
 `0007_check_enumeracoes`, os valores das enumerações são impostos por restrição
 CHECK na própria base de dados, não apenas pela aplicação.
+
+## Como usar os ficheiros (para a monografia)
+
+Em [`docs/diagramas/`](diagramas/) estão os dois diagramas (classes e casos de
+uso) em três formatos:
+
+| Ficheiro | Para quê |
+|---|---|
+| `classes.png` / `casos-de-uso.png` | Inserir directamente num documento Word. |
+| `classes.svg` / `casos-de-uso.svg` | **Escalável** — não fica pixelizado ao ampliar nem ao imprimir. Preferir em LaTeX/PDF. |
+| `classes.puml` / `casos-de-uso.puml` | Fonte **PlantUML** (UML a sério). Para editar e voltar a exportar. |
+
+**Editar e re-exportar** (se precisar de mudar algo):
+
+1. **Online, sem instalar nada:** abrir <https://www.plantuml.com/plantuml>,
+   colar o conteúdo do `.puml`, e descarregar em PNG ou SVG.
+2. **No draw.io / diagrams.net:** *Arrange → Insert → Advanced → PlantUML…*,
+   colar o `.puml`. Fica editável como formas do draw.io.
+3. **No VS Code:** instalar a extensão *PlantUML* e pré-visualizar com `Alt+D`.
+
+As imagens são geradas a partir do `.puml`; se o modelo mudar, reexportar.
+
 

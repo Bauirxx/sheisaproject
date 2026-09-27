@@ -5,6 +5,11 @@ perfis** do controlo de acessos (RBAC) do SHEISA, mais os actores externos que
 interagem com o sistema sem serem operadores humanos. Os casos de uso
 correspondem a funcionalidades reais — cada um existe no código e nas permissões.
 
+> **Para a monografia:** imagens prontas e fonte UML em
+> [`docs/diagramas/`](diagramas/) — `casos-de-uso.png`, `casos-de-uso.svg` e
+> `casos-de-uso.puml` (PlantUML). Como usar/editar: ver
+> [DIAGRAMA-CLASSES.md](DIAGRAMA-CLASSES.md#como-usar-os-ficheiros-para-a-monografia).
+
 ## Notação
 
 | Elemento | Significado |

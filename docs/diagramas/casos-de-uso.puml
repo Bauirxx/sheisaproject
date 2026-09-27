@@ -1,0 +1,119 @@
+@startuml SHEISA-CasosDeUso
+' Diagrama de casos de uso do SHEISA.
+' Actores = os seis perfis do RBAC (backend/app/core/permissions.py) + externos.
+' Renderizar: https://www.plantuml.com/plantuml  (colar e exportar PNG/SVG)
+'   ou no draw.io: Arrange > Insert > Advanced > PlantUML...
+'   ou VS Code: extensao "PlantUML".
+
+left to right direction
+title Casos de uso do SHEISA
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #1d4ed8
+  ArrowColor #4f6070
+}
+skinparam actor {
+  BackgroundColor #E6EDFD
+  BorderColor #1d4ed8
+}
+skinparam rectangle {
+  BackgroundColor #F4F6F9
+  BorderColor #C2CEDE
+}
+
+actor "Operador" as OP
+actor "Analista SOC" as AN
+actor "Investigador" as INV
+actor "Gestor" as GES
+actor "Auditor" as AUD
+actor "Administrador" as ADM
+actor "Comunicante externo\n(sem conta)" as COM
+actor "Sistemas de deteccao\n(Wazuh, Suricata)" as DET
+actor "Motor do SHEISA\n(triagem, correlacao)" as MOT
+
+rectangle "Plataforma SHEISA" {
+  usecase "Ingerir eventos" as ING
+  usecase "Triar alertas" as TRI
+  usecase "Promover alerta\na incidente" as PROM
+  usecase "Correlacionar alertas" as COR
+  usecase "Gerar recomendacao" as RECG
+  usecase "Registar incidente" as REG
+  usecase "Conduzir incidente\n(atribuir, transicionar)" as COND
+  usecase "Investigar\n(evidencias, IOCs,\ntarefas, MITRE)" as INVEST
+  usecase "Encerrar incidente" as ENC
+  usecase "Decidir recomendacao" as RECD
+  usecase "Propor acao\nde resposta" as PROP
+  usecase "Aprovar acao" as APR
+  usecase "Executar playbook" as PLAY
+  usecase "Submeter comunicacao" as SUB
+  usecase "Acompanhar comunicacao" as ACO
+  usecase "Triar comunicacao\n(aceitar / recusar)" as TRIC
+  usecase "Gerar relatorio" as REL
+  usecase "Consultar auditoria" as AUDIT
+  usecase "Configurar integracoes" as INTEG
+  usecase "Gerir utilizadores\ne perfis" as USERS
+  usecase "Receber notificacoes" as NOT
+}
+
+' ===== Generalizacao de actores (herda os casos de uso) =====
+INV --|> AN
+ADM --|> GES
+ADM --|> INV
+
+' ===== Associacoes: actores nao humanos e externos =====
+DET --> ING
+MOT --> TRI
+MOT --> COR
+MOT --> RECG
+COM --> SUB
+COM --> ACO
+
+' ===== Operador =====
+OP --> REG
+OP --> NOT
+
+' ===== Analista SOC =====
+AN --> TRI
+AN --> PROM
+AN --> REG
+AN --> COND
+AN --> INVEST
+AN --> RECD
+AN --> PROP
+AN --> PLAY
+AN --> TRIC
+AN --> REL
+AN --> NOT
+
+' ===== Investigador (alem do que herda) =====
+INV --> ENC
+
+' ===== Gestor =====
+GES --> APR
+GES --> COND
+GES --> ENC
+GES --> PLAY
+GES --> REL
+GES --> AUDIT
+
+' ===== Auditor =====
+AUD --> AUDIT
+AUD --> REL
+
+' ===== Administrador (alem do que herda) =====
+ADM --> USERS
+ADM --> INTEG
+
+' ===== include / extend =====
+PROM ..> REG : <<include>>
+TRIC ..> REG : <<include>>
+PLAY ..> APR : <<include>>
+ENC ..> COND : <<extend>>
+COR ..> TRI : <<extend>>
+RECG ..> TRI : <<extend>>
+
+@enduml
