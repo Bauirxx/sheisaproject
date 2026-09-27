@@ -369,3 +369,67 @@ classDiagram
   Report "*" --> "0..1" User : gerado_por
   AuditLog "*" --> "0..1" User : actor
 ```
+
+## Guião de explicação (para defender o diagrama)
+
+O modelo foi desenhado à volta de cinco decisões. Quem apresentar deve conseguir
+explicar cada uma — são elas que distinguem o SHEISA de uma cópia do RTIR ou do
+TheHive.
+
+### 1. Event ≠ Alert ≠ Incident — três classes, não uma
+
+- **Event** é um facto bruto de uma fonte (uma linha do Wazuh ou do Suricata).
+- **Alert** agrupa eventos pela `dedup_key` e já traz a pontuação da triagem; um
+  alerta reúne muitos eventos (`Alert "1" *-- "*" Event`).
+- **Incident** é o caso que **uma pessoa decide tratar**. Nasce de um alerta
+  promovido, de correlação, de um playbook, de escalamento ou de uma comunicação
+  externa — é o que o campo `origin` regista.
+
+> Em uma frase: a granularidade cresce de Event para Alert para Incident, e cada
+> nível é uma classe com o seu próprio ciclo de vida. Juntá-los numa só tabela
+> perderia a distinção entre "o que a máquina viu" e "o que decidimos investigar".
+
+### 2. IOC global vs Observação contextual
+
+- **Ioc** é o indicador em si — um IP, um hash — único e global, com reputação e
+  risco próprios.
+- **Observation** liga um `Ioc` a um `Incident` **num papel** (origem, alvo,
+  artefacto…). O mesmo IP pode ser o atacante num incidente e o alvo noutro.
+
+> Em uma frase: separámos *o que o indicador é* (global, na base de conhecimento)
+> de *o que ele significou aqui* (contextual, no caso). É a `Observation` que
+> carrega o papel, não o `Ioc`.
+
+### 3. Modelo de resposta separado da sua execução
+
+- **Playbook** e **PlaybookStep** são o procedimento — o que *se deve* fazer.
+- **PlaybookExecution** e **PlaybookStepExecution** são uma corrida concreta — o
+  que *se fez*, passo a passo, com o resultado de cada um.
+- **Action** é uma medida (bloquear IP, isolar host); se for disruptiva, exige
+  uma **ActionApproval** antes de executar.
+
+> Em uma frase: o registo do que aconteceu (`PlaybookExecution`) não muda quando
+> alguém edita o procedimento (`Playbook`) — por isso são classes separadas, e a
+> execução guarda a `playbook_version` que correu.
+
+### 4. Auditoria imutável (append-only)
+
+- **AuditLog** regista quem (`actor`/`api_key`), o quê (`action`), sobre o quê
+  (`resource`), e o antes/depois (`old_value`/`new_value`). Repare que só tem
+  **associações** para fora, nunca composições: nada o apaga em cascata, porque
+  um registo de auditoria não se apaga.
+
+### 5. O que as pontas das setas afirmam
+
+| Relação | Exemplo no diagrama | O que significa |
+|---|---|---|
+| Composição `*--` | `Incident *-- Comment` | Apagar o incidente apaga os comentários. |
+| Agregação `o--` | `Role o-- User` | Apagar um perfil **não** apaga os utilizadores (é restrito). |
+| Muitos-para-muitos `--` | `Incident -- Asset` | Um incidente afecta vários activos; um activo aparece em vários incidentes. |
+
+### Números para citar
+
+33 entidades · 4 tabelas de associação · 9 módulos. Desde a migração
+`0007_check_enumeracoes`, os valores das enumerações são impostos por restrição
+CHECK na própria base de dados, não apenas pela aplicação.
+

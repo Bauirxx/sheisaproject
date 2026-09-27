@@ -21,3 +21,6 @@ lab/data/
 
 # Ferramenta de diagramas (CodeViz) — artefactos locais
 .codeviz/
+
+# Diagramas gerados (HTML autonomo com Mermaid embutido, ~3MB) — fonte em docs/*.md
+docs/diagramas/
