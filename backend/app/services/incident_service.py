@@ -638,6 +638,24 @@ async def transition(
         new_value={"estado": new_status.value},
         changed_fields=["status"],
     )
+
+    # Escalar avisa o responsável — é o sinal de que o caso precisa de mais mãos.
+    if new_status == IncidentStatus.ESCALADO:
+        from app.core.enums import NotificationKind, Severity
+        from app.services import notification_service
+
+        notification_service.notificar(
+            session,
+            user_id=incident.assignee_id,
+            kind=NotificationKind.INCIDENTE_ESCALADO,
+            severity=Severity.ALTA,
+            title=f"Incidente escalado: {incident.reference}",
+            body=f"O incidente {incident.reference} — {incident.title} foi escalado.",
+            resource_type="incidente",
+            resource_id=incident.id,
+            resource_reference=incident.reference,
+            excepto=ctx.actor_id,
+        )
     return incident
 
 
@@ -692,6 +710,24 @@ async def assign(
         new_value={"responsavel": str(assignee_id) if assignee_id else None},
         changed_fields=["assignee_id"],
     )
+
+    # Avisa quem passou a ser responsável — mas não quem se atribuiu a si mesmo.
+    if assignee_id is not None and assignee_id != previous:
+        from app.core.enums import NotificationKind
+        from app.services import notification_service
+
+        notification_service.notificar(
+            session,
+            user_id=assignee_id,
+            kind=NotificationKind.INCIDENTE_ATRIBUIDO,
+            severity=incident.severity,
+            title=f"Incidente atribuído: {incident.reference}",
+            body=f"Foi-lhe atribuído o incidente {incident.reference} — {incident.title}.",
+            resource_type="incidente",
+            resource_id=incident.id,
+            resource_reference=incident.reference,
+            excepto=ctx.actor_id,
+        )
 
     # `assignee` e `team` são carregados com a consulta (`lazy="selectin"`), pelo
     # que alterar a chave estrangeira não actualiza o objecto já em memória. Sem

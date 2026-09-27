@@ -485,6 +485,24 @@ async def execute_action(
         outcome=AuditOutcome.SUCESSO if success else AuditOutcome.FALHA,
         failure_reason=None if success else detail[:500],
     )
+
+    # Uma acção que falha avisa quem a propôs — não quem carregou no executar.
+    if not success:
+        from app.core.enums import NotificationKind, Severity
+        from app.services import notification_service
+
+        notification_service.notificar(
+            session,
+            user_id=action.proposed_by_id,
+            kind=NotificationKind.ACCAO_FALHADA,
+            severity=Severity.ALTA,
+            title=f"Acção falhada: {action.reference}",
+            body=f"A acção {action.reference} ({action.action_kind.value}) falhou: {detail}",
+            resource_type="accao",
+            resource_id=action.id,
+            resource_reference=action.reference,
+            excepto=ctx.actor_id,
+        )
     return action
 
 

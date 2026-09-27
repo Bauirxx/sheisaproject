@@ -293,6 +293,28 @@ async def create_task(
         resource_id=task.id, resource_reference=incident.reference,
         description=f"Tarefa '{task.title}' criada em {incident.reference}.",
     )
+
+    # Se a tarefa já nasce com responsável, avisa-o (excepto se for ele a criá-la).
+    if task.assignee_id is not None:
+        from app.core.enums import NotificationKind
+        from app.services import notification_service
+
+        notification_service.notificar(
+            session,
+            user_id=task.assignee_id,
+            kind=NotificationKind.TAREFA_ATRIBUIDA,
+            title=f"Tarefa atribuída: {task.title}",
+            body=f"Foi-lhe atribuída a tarefa '{task.title}' em {incident.reference}.",
+            resource_type="tarefa",
+            resource_id=task.id,
+            resource_reference=incident.reference,
+            excepto=ctx.actor_id,
+        )
+
+    # `assignee` não foi carregado ao construir a tarefa; sem este refresh, serializar
+    # `TaskRead` de uma tarefa com responsável acede a uma relação por carregar e
+    # rebenta com `MissingGreenlet` (IO fora do contexto assíncrono).
+    await session.refresh(task, ["assignee"])
     return TaskRead.model_validate(task)
 
 
@@ -321,9 +343,9 @@ async def update_task(
     task = result.scalar_one_or_none()
     if task is None:
         raise NotFoundError("Tarefa", task_id)
-    incident_service.garantir_editavel(
-        await incident_service.get_incident(session, task.incident_id)
-    )
+    incidente = await incident_service.get_incident(session, task.incident_id)
+    incident_service.garantir_editavel(incidente)
+    responsavel_anterior = task.assignee_id
 
     changes = payload.model_dump(exclude_unset=True)
     reject_nulls_for_required(task, changes)
@@ -357,6 +379,23 @@ async def update_task(
     )
     if entry is None:
         raise ValidationError("Nenhuma alteração foi submetida.", code="SEM_ALTERACOES")
+
+    # Avisa quem passou a ser responsável pela tarefa — não quem a reatribuiu.
+    if task.assignee_id is not None and task.assignee_id != responsavel_anterior:
+        from app.core.enums import NotificationKind
+        from app.services import notification_service
+
+        notification_service.notificar(
+            session,
+            user_id=task.assignee_id,
+            kind=NotificationKind.TAREFA_ATRIBUIDA,
+            title=f"Tarefa atribuída: {task.title}",
+            body=f"Foi-lhe atribuída a tarefa '{task.title}' em {incidente.reference}.",
+            resource_type="tarefa",
+            resource_id=task.id,
+            resource_reference=incidente.reference,
+            excepto=ctx.actor_id,
+        )
 
     return TaskRead.model_validate(task)
 

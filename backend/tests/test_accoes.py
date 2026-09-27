@@ -25,10 +25,17 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from app.core.enums import ActionKind, ActionStatus, IntegrationStatus, SourceKind
+from app.core.enums import (
+    ActionKind,
+    ActionStatus,
+    IntegrationStatus,
+    NotificationKind,
+    SourceKind,
+)
 from app.integrations.base import ActionResult
+from app.models.identity import User
 from app.models.response import Action, ActionApproval
-from app.models.system import Integration
+from app.models.system import Integration, Notification
 from app.services import action_service
 from tests.conftest import cabecalho
 
@@ -269,6 +276,45 @@ async def test_falha_do_conector_fica_registada_como_falhada(
         await sessao.execute(select(Integration).where(Integration.name == "Wazuh de teste"))
     ).scalar_one()
     assert (integracao.actions_executed, integracao.actions_failed) == (1, 1)
+
+
+async def test_falha_de_accao_notifica_quem_a_propos(
+    cliente, sessao, conector, token_analista, token_gestor, token_admin, monkeypatch
+):
+    """Quem propôs a acção é avisado de que falhou — não quem carregou no
+    executar. É o proponente que precisa de saber que o seu pedido não pegou."""
+    async def rebentar(*_args, **_kwargs):
+        raise RuntimeError("o gestor nao respondeu")
+
+    monkeypatch.setattr(conector, "execute_action", rebentar)
+    analista = (
+        await sessao.execute(select(User).where(User.email == "analista@teste.local"))
+    ).scalar_one()
+
+    incidente = await _incidente(cliente, token_analista)
+    accao = await _propor(cliente, token_analista, incidente, tipo="ISOLAR_ACTIVO",
+                          alvo={"agent_id": "001"})
+    await _decidir(cliente, token_gestor, accao["id"])
+
+    # Executada pelo admin: o proponente (analista) é que deve ser notificado.
+    resposta = await cliente.post(
+        f"/api/actions/{accao['id']}/execute", headers=cabecalho(token_admin)
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["status"] == "FALHADA"
+
+    notifs = list(
+        (
+            await sessao.execute(
+                select(Notification).where(
+                    Notification.user_id == analista.id,
+                    Notification.kind == NotificationKind.ACCAO_FALHADA,
+                )
+            )
+        ).scalars()
+    )
+    assert len(notifs) == 1
+    assert notifs[0].resource_reference == accao["reference"]
 
 
 async def test_filtros_da_lista_de_accoes(cliente, token_analista):

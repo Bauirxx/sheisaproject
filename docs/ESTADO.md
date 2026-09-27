@@ -940,6 +940,25 @@ que a caixa devolve o que lhe foi enviado.
     saída): não se reabre, cria-se um incidente relacionado. Verificado por
     reversão.
 
+66. **Seis dos oito tipos de notificação nunca eram emitidos** (2026-09-27). O
+    modelo `Notification`, o endpoint e a página existiam, mas só
+    `APROVACAO_PENDENTE` e `ACCAO_EXECUTADA` chegavam a ser criados. Novo
+    `notification_service.notificar` (nunca notifica alguém da própria acção)
+    passou a emitir mais quatro nos seus eventos reais: `INCIDENTE_ATRIBUIDO` ao
+    atribuir, `TAREFA_ATRIBUIDA` ao dar responsável a uma tarefa,
+    `INCIDENTE_ESCALADO` ao escalar, e `ACCAO_FALHADA` — dirigida a quem propôs a
+    acção, não a quem a executou. Ficam por emitir `CORRELACAO_DETECTADA` e
+    `RECOMENDACAO_NOVA`: são eventos anteriores à atribuição, sem destinatário
+    individual óbvio, e não são apresentados na interface como se ocorressem.
+    Cada emissão tem teste, verificado por reversão.
+
+67. **Criar uma tarefa com responsável devolvia 500** (2026-09-27). `create_task`
+    serializava `TaskRead` sem carregar a relação `assignee` (ao contrário de
+    `update_task`, que usa `selectinload`), e acedê-la durante a serialização
+    disparava `MissingGreenlet`. Latente porque nada criava tarefas com
+    responsável até as notificações o exercerem. Corrigido com um
+    `session.refresh(task, ["assignee"])` antes de responder.
+
 Uma decisão de desenho que vale registar: **a plataforma não classifica por
 palavras-chave.** Uma categoria inferida do assunto de um email seria apresentada
 com a mesma confiança de uma afirmada por quem comunica, e o §4 proíbe-o. Uma
