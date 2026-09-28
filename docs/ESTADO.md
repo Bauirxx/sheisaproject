@@ -21,7 +21,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 544 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` confere 58 vistas do frontend contra a API viva |
+| **Testes** | 569 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` sem divergências (51 confirmações em 2026-09-28, mais 6 anunciadas como não verificáveis por falta de dados na base) |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -105,6 +105,19 @@ docker compose up -d   sheisa-db :15433 · sheisa-db-test :15434
 > a cópia local do bundle STIX do ATT&CK) nem as contas do §6 — tudo isso é
 > ignorado pelo git. `frontend/node_modules` também não: correr
 > `cd frontend && npm install` depois do clone.
+
+> **Sincronize as permissões depois de um `pull`.** `python -m scripts.manage
+> init` é idempotente (não recria a conta de administração nem toca em
+> palavras-passe) e é o que traz para a base as permissões acrescentadas ao
+> código. Em 2026-09-28 mediu-se nesta máquina 51 permissões no código e 49 na
+> base: as duas da caixa de comunicações nunca tinham sido criadas, e o efeito
+> era `/reports-inbox` a responder 403 a **todos** os seis perfis — incluindo o
+> administrador, a quem o mapa dá `frozenset(Permission)`. Falha fechada, logo
+> correcta, mas silenciosa: nada distingue "não tem permissão" de "a permissão
+> não existe". O `init` criou as 2 e atribuiu 8 permissões aos 6 perfis já
+> existentes, o que confronta ao vivo a correcção do defeito 31 (`sync_roles`
+> passar a conceder a perfis existentes). Quem apanhou o 403 foi o
+> `verificar_contrato.py`.
 
 Arranque de raiz:
 
@@ -972,6 +985,39 @@ que a caixa devolve o que lhe foi enviado.
     por reversão. **Não** verificado contra instâncias reais — ver
     [`INTEGRACOES.md`](INTEGRACOES.md). As instruções de configuração e teste de
     todas as integrações passam a viver nesse documento.
+
+69. **Um incidente ENCERRADO continuava editável por cinco outras portas**
+    (2026-09-28). A guarda `incident_service.garantir_editavel` (defeito 65)
+    estava em cinco sítios — campos, tarefas, observações, evidências — e faltava
+    em tudo o que entrou depois. Cada porta foi vista aberta antes de ser
+    fechada, com um incidente ENCERRADO: associar uma técnica MITRE devolvia 201
+    e removê-la 200; propor uma acção de resposta, 201; correr um playbook, 201 —
+    e escrevia uma nota dentro do incidente fechado; aceitar ou ligar uma
+    comunicação externa, 200, juntando matéria nova a um caso concluído; e
+    aplicar uma recomendação mudava a severidade para CRITICA e associava T1110.
+    As guardas ficaram nos funis, não nas rotas: nas recomendações em
+    `_carregar_incidente`, por onde passam os quatro aplicadores com alvo
+    incidente; nas acções em `propose_action`, o que cobre também a reversão, que
+    propõe a acção inversa. `tests/test_incidente_encerrado.py` — 8 testes, cada
+    guarda verificada por reversão — fixa também o limite da regra: comentar e
+    relacionar continuam permitidos (relacionar é o caminho que a própria
+    mensagem de erro indica) e o que já existia continua consultável. É a
+    armadilha 5.15 outra vez.
+
+70. **O teste do ciclo de correio dependia do estado de uma caixa partilhada**
+    (2026-09-28). Defeito do teste, não do produto, e vale registar porque o
+    sintoma engana: `test_o_ciclo_de_envio_e_recolha_funciona` passava com o
+    ficheiro isolado e falhava na suite completa. O teste esvaziava a caixa antes
+    de enviar com uma chamada a `recolher(apagar=True)`, que traz no máximo
+    `pop3_max_por_recolha` (50) mensagens; a caixa é a mesma para toda a suite e
+    é a suite que a enche, porque cada submissão no portal manda um aviso de
+    recepção verdadeiro. Passadas as 50, o esvaziamento deixava lá as mais
+    antigas e `len(recolhidas) == 1` contava mensagens que não eram suas.
+    Reproduzido de propósito com 55 mensagens injectadas por SMTP — a falha
+    aparece com os assuntos do ruído na mensagem de erro — e confirmado ao
+    contrário: com `_esvaziar_caixa()` em ciclo, os 32 testes passam **com 60
+    mensagens paradas na caixa**, que fica a zero no fim. O limite de lote
+    mantém-se: é o que serve uma caixa com milhares de mensagens.
 
 Uma decisão de desenho que vale registar: **a plataforma não classifica por
 palavras-chave.** Uma categoria inferida do assunto de um email seria apresentada

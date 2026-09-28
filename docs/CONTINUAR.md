@@ -82,6 +82,15 @@ dar sinal disso. O Vite, pelo contrário, recarrega-se sozinho — incluindo qua
 muda a porta no `vite.config.ts`. E se o `pull` trouxer alterações a
 `requirements*.txt`, instale-as antes de reiniciar.
 
+**Corra também `python -m scripts.manage init`** (é idempotente: não recria a
+conta de administração nem toca em palavras-passe). Se o `pull` trouxer
+permissões novas, elas não existem na sua base de dados e as rotas que as exigem
+respondem 403 a **todos** os perfis, sem que nada no código esteja errado — ver
+§5.18. Foi exactamente o que aconteceu em 2026-09-28: as duas permissões da caixa
+de comunicações (`reports_inbox:read` e `reports_inbox:triage`) nunca tinham sido
+criadas nesta máquina, e a caixa inteira estava inalcançável na API a correr.
+`manage init` criou-as e atribuiu 8 permissões aos 6 perfis já existentes.
+
 As contas de laboratório estão em [`ESTADO.md` §6](ESTADO.md#6-contas-e-credenciais-do-ambiente-local),
 com uma ressalva: **a palavra-passe de administração é diferente em cada
 máquina**, porque é gerada pelo `manage init` de cada base de dados.
@@ -121,9 +130,9 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 544 a passar |
+| Testes | 569 a passar |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
-| Contrato | `verificar_contrato.py` confere 58 vistas contra a API a correr — menos três quando a fila de aprovação está vazia, porque só se verificam com pedidos pendentes |
+| Contrato | `verificar_contrato.py` sem divergências: 51 confirmações na corrida de 2026-09-28, mais 6 anunciadas como não verificáveis por falta de dados (fila de aprovação vazia, incidente sem técnicas, sem recomendações pendentes). O número varia com o que a base tem — o que não varia é não haver divergências |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
 
 **Cobertura de interface fechada.** Das 109 operações, 7 não têm ecrã e **não
@@ -175,6 +184,13 @@ As regras do React Compiler que a versão 7 traz no conjunto recomendado
 (`react-hooks/purity`) apontou para um defeito verdadeiro.
 
 ### 4.3 Subir a cobertura onde ela é baixa — **a lista original está feita**
+
+**Onde parámos (2026-09-28):** a caça por padrão continua a render mais do que
+escolher módulos por percentagem. Aplicar a armadilha 5.15 ao código que entrou
+entretanto deu cinco portas abertas num incidente ENCERRADO — `+8` testes em
+`tests/test_incidente_encerrado.py`, defeito 69 — e a suite está em **569 a
+passar**. O modo de trabalho que as encontra: pegar numa regra recém-criada,
+`grep` por quem chama o serviço que ela protege, e contar as portas.
 
 **Onde parámos (2026-09-17):** os quatro módulos que esta secção listava estão
 cobertos, e com eles os conectores, a ingestão genérica, o catálogo, os
@@ -316,6 +332,10 @@ para o `analytics_service`, que estava a 76%:
 >    permitidos: são notas de auditoria posteriores, não alteram o que aconteceu.
 >    ENCERRADO é terminal (sem transições de saída), pelo que não se reabre — a
 >    mensagem manda criar um incidente relacionado, como no ciclo de vida.
+>    **Complemento (2026-09-28):** a guarda estava em cinco sítios e faltava em
+>    cinco caminhos — técnicas MITRE, propor acção, correr playbook, aceitar ou
+>    ligar comunicação, aplicar recomendação. Fechados e fixados em
+>    `tests/test_incidente_encerrado.py` (defeito 69). É a armadilha 5.15.
 
 ### 4.5 Requisitos da monografia — o que estava em falta, e está feito
 
@@ -673,6 +693,19 @@ estado, procure todas as outras que já o mudam** (`grep -rn "\.status = "`) e
 confirme que passam pela mesma verificação. A regra deve viver no serviço, não
 na rota, para valer também para a correlação automática e para a demonstração.
 
+Esta armadilha voltou a render em 2026-09-28. A guarda do incidente ENCERRADO
+(`incident_service.garantir_editavel`, defeito 65) estava em cinco sítios e
+faltava em cinco caminhos que entraram depois: associar e remover técnicas MITRE,
+propor uma acção, correr um playbook, aceitar ou ligar uma comunicação externa, e
+aplicar uma recomendação. Todos foram vistos abertos antes de serem fechados — um
+playbook escrevia uma nota dentro de um incidente fechado, e uma recomendação
+mudava-lhe a severidade. **A pergunta a fazer não é "protegi esta rota?" mas
+"quantos caminhos escrevem isto?"** — e o sítio da guarda é o funil comum: nas
+recomendações ficou em `_carregar_incidente`, por onde passam os quatro
+aplicadores com alvo incidente. `tests/test_incidente_encerrado.py` fixa as cinco
+portas e dois controlos: comentar e relacionar continuam permitidos, e o que já
+existia continua consultável.
+
 ### 5.14 Num PATCH, omitir um campo não é o mesmo que enviá-lo a `null`
 
 Os esquemas de edição declaram todos os campos opcionais — é o que permite
@@ -730,6 +763,17 @@ com:
 ```bash
 docker compose exec -T db-test psql -U sheisa -d sheisa_test -c   "select r.name, count(*) from roles r join role_permissions rp on rp.role_id=r.id group by 1 order by 1"
 ```
+
+**E a mesma armadilha existe na base de desenvolvimento, com outra cara.** Aí não
+é o `conftest` que falha: é ninguém ter corrido `manage init` depois do `pull`. Em
+2026-09-28 mediu-se 51 permissões no código e 49 na base; as duas em falta eram as
+da caixa de comunicações, e o efeito era a API a responder 403 em
+`/reports-inbox` a **todos** os perfis — administrador incluído, apesar de o mapa
+lhe dar `frozenset(Permission)`. Falha fechada, o que é o comportamento certo, mas
+silenciosa: nada distingue "não tem permissão" de "a permissão não existe". Quem
+só olhasse para `ROLE_PERMISSIONS` concluiria que estava tudo bem. O
+`verificar_contrato.py` foi o que apanhou o 403 — mais uma razão para o correr
+depois de um `pull`, e não só depois de mexer em esquemas.
 
 ### 5.19 `NotFoundError` construía a mensagem no masculino
 
@@ -800,6 +844,23 @@ recolha marca como lidas as mensagens que processa. No Gmail: criar uma etiqueta
 e um filtro que lhe aplique a etiqueta e salte a caixa de entrada.
 
 ---
+
+### 5.23 A caixa de correio é estado partilhado, e `recolher` traz um lote
+
+Os testes do ciclo de correio falam com o Mailpit a sério — e a caixa é a mesma
+para todos. Pior: a própria suite a enche, porque cada submissão no portal manda
+um **aviso de recepção verdadeiro** (`report_inbox_service` chama
+`email_service.enviar`). Um teste que esvazie a caixa com uma chamada a
+`recolher(apagar=True)` **não a esvazia**: `pop3_max_por_recolha` limita cada
+recolha a 50 mensagens, e o limite existe para uma caixa com milhares não
+bloquear a recolha inteira.
+
+O sintoma é um teste que passa isolado e falha na suite completa — e só quando a
+caixa já passou das 50, o que faz a falha parecer aleatória. Reproduz-se de
+propósito injectando 55 mensagens por SMTP em `localhost:1025`. **Num teste que
+dependa do conteúdo da caixa, esvazie-a em ciclo** (`_esvaziar_caixa` em
+`tests/test_email.py`) e conte só o que o próprio teste enviou. A caixa vê-se em
+`http://localhost:8025` e por `curl -s localhost:8025/api/v1/messages?limit=1`.
 
 ## 6. Como trabalhar aqui
 
