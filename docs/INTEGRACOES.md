@@ -11,13 +11,21 @@ com o serviço, e o que não foi verificado contra um sistema real é dito.
 | **Wazuh** | Envio + resposta | Laboratório real (gestor 4.12.0) | O agente/gestor envia; a plataforma recebe |
 | **Suricata** | Envio | Laboratório real | O IDS envia os eventos EVE JSON |
 | **API genérica** | Envio | Sim | Qualquer ferramenta faz POST no formato comum |
-| **IBM QRadar** | Importação (pull) | Servidor simulado (não contra QRadar real) | A plataforma vai buscar as offenses |
-| **NetScout** | Importação (pull) | Servidor simulado (não contra NetScout real) | A plataforma vai buscar os alertas |
+| **IBM QRadar** | Importação (pull) | Simulador de laboratório da API (`lab/siem-sim`); não contra QRadar real | A plataforma vai buscar as offenses |
+| **NetScout** | Importação (pull) | Simulador de laboratório da API (`lab/siem-sim`); não contra NetScout real | A plataforma vai buscar os alertas |
 
 **Envio (push) vs Importação (pull):** Wazuh, Suricata e a API genérica *enviam*
 para a plataforma (autenticam-se com uma **chave de ingestão**). O QRadar e o
 NetScout são o contrário: a plataforma *vai buscar* (importa) com
 `POST /api/integrations/{id}/import` (precisa de token de administração).
+
+> **Simuladores de laboratório (QRadar/NetScout).** Nem o QRadar nem o NetScout se
+> distribuem como contentor, e o ambiente não tem instâncias reais. `lab/siem-sim`
+> é um servidor que fala a API REST de cada um, levantado pelo `docker-compose`
+> como `qradar-sim` (:8110) e `netscout-sim` (:8111). Exercita o código real dos
+> conectores (pedido, autenticação, normalização, ingestão); só a origem dos dados
+> é de laboratório. **Não** é o produto do fornecedor, e nada aqui o apresenta como
+> tal — ver `lab/siem-sim/README.md`.
 
 ## Variáveis de ambiente (segredos)
 
@@ -91,18 +99,22 @@ duplica.
 
 **Configurar e testar a ligação:**
 
-1. Definir `SHEISA_QRADAR_API_URL` e `SHEISA_QRADAR_API_TOKEN` no `.env`.
+1. As variáveis `SHEISA_QRADAR_API_URL` e `SHEISA_QRADAR_API_TOKEN` já vêm no
+   `.env` a apontar para o **simulador de laboratório** (`lab/siem-sim`), que fala
+   a API REST real do QRadar. Levante-o: `docker compose up -d qradar-sim`.
 2. `POST /api/integrations/{id}/test` — confirma que fala com o QRadar.
 
 **Importar:** `POST /api/integrations/{id}/import?limite=50` (token de
 administração). Devolve `{sucesso, importados, duplicados, total}` e os sinais
 ficam em `/api/events` / `/api/alerts` com a fonte QRADAR.
 
-> **Estado:** o cliente e a importação estão implementados e **testados contra um
-> servidor simulado** (ver `backend/tests/test_integracoes.py`). **Não** foi
-> possível verificar contra uma instância QRadar real — não há nenhuma no
-> ambiente. Para verificar de verdade: apontar as variáveis a um QRadar acessível
-> e correr o teste de ligação e depois a importação.
+> **Estado (verificado a correr, 2026-09-28):** contra o simulador
+> (`lab/siem-sim`), o teste de ligação devolveu *"Ligação estabelecida com o
+> QRadar 7.5.0…"* e a importação criou 3 alertas; reimportar deu 0 importados / 3
+> duplicados (idempotência por `(fonte, id)`). **Não** verificado contra uma
+> instância QRadar real — não existe no ambiente, e o QRadar não se distribui como
+> contentor. Para verificar de verdade, basta apontar as duas variáveis a um
+> QRadar acessível: **o código do conector não muda**.
 
 ## 5. NetScout (importação / pull)
 
@@ -110,10 +122,13 @@ ficam em `/api/events` / `/api/alerts` com a fonte QRADAR.
 Sightline (`fetch_alerts`) e ingere-os como o QRadar.
 
 **Configurar e testar:** igual ao QRadar, com `SHEISA_NETSCOUT_API_URL` e
-`SHEISA_NETSCOUT_API_TOKEN`, `test` e depois `import`.
+`SHEISA_NETSCOUT_API_TOKEN` (já no `.env`, a apontar para o simulador). Levante-o:
+`docker compose up -d netscout-sim`. Depois `test` e `import`.
 
-> **Estado:** implementado e testado contra servidor simulado; não verificado
-> contra uma instância NetScout real.
+> **Estado (verificado a correr, 2026-09-28):** contra o simulador, o teste
+> devolveu *"Ligação estabelecida com o NetScout; 2 alerta(s) acessível(is)"* e a
+> importação criou 2 alertas. **Não** verificado contra uma instância NetScout
+> real (não existe no ambiente); trocar por uma é só mudar as duas variáveis.
 
 ---
 

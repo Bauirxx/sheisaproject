@@ -874,6 +874,22 @@ dependa do conteúdo da caixa, esvazie-a em ciclo** (`_esvaziar_caixa` em
 `tests/test_email.py`) e conte só o que o próprio teste enviou. A caixa vê-se em
 `http://localhost:8025` e por `curl -s localhost:8025/api/v1/messages?limit=1`.
 
+### 5.24 O pydantic só lê do `.env` os campos que declara
+
+`Settings` (config.py) lê o `.env`, mas só popula os campos que declara — e não
+exporta nada para `os.environ`. Os segredos das integrações (`SHEISA_QRADAR_*`,
+`SHEISA_NETSCOUT_*`, `SHEISA_WAZUH_*`) **não** são campos de `Settings`: os
+conectores lêem-nos direto de `os.environ` (`base.py`, `missing_secrets`). Logo,
+pôr um segredo no `.env` não basta — ele tem de estar no **ambiente do processo**.
+
+Foi o que aconteceu ao ligar os simuladores QRadar/NetScout: variáveis no `.env`,
+mas `test_connection` a responder "variáveis em falta". A correcção foi
+`scripts/api.sh` passar a carregar o `.env` da raiz para o ambiente antes de
+arrancar o uvicorn (lê linha a linha, tomando tudo após o primeiro `=` como valor,
+para valores com espaços não serem reinterpretados pela shell). O correio não
+sofria disto porque os seus campos *são* declarados em `Settings`. Regra: um
+segredo lido por `os.environ.get` tem de estar exportado, não só escrito no `.env`.
+
 ## 6. Como trabalhar aqui
 
 O ciclo que apanhou quase todos os defeitos acima:
