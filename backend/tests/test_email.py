@@ -271,6 +271,27 @@ def _servidor_de_correio_responde() -> bool:
     return True
 
 
+def _esvaziar_caixa() -> int:
+    """Esvazia a caixa a sério — `recolher` só traz um lote de cada vez.
+
+    `pop3_max_por_recolha` limita cada recolha a 50 mensagens, e a caixa é
+    partilhada: cada submissão no portal manda um aviso de recepção verdadeiro,
+    pelo que a própria suite a enche. Uma chamada única deixava lá as mais
+    antigas e a asserção seguinte contava mensagens que não eram suas — falha
+    reproduzida com 55 mensagens paradas na caixa, e que só aparecia na suite
+    completa porque é ela que as acumula.
+    """
+    apagadas = 0
+    for _ in range(200):  # limite para uma recolha que não apague não pendurar o teste
+        lote = ems.recolher(apagar=True)
+        if not lote:
+            return apagadas
+        apagadas += len(lote)
+    raise AssertionError(
+        f"a caixa não esvazia: {apagadas} mensagens recolhidas e continua a vir mais"
+    )
+
+
 exige_servidor = pytest.mark.skipif(
     not _servidor_de_correio_responde(),
     reason=(
@@ -290,7 +311,7 @@ def test_o_ciclo_de_envio_e_recolha_funciona():
     """
     # Esvazia a caixa primeiro: outra mensagem pendente tornaria a asserção
     # dependente do que ficou de antes.
-    ems.recolher(apagar=True)
+    _esvaziar_caixa()
 
     identificador = ems.enviar(
         para=settings.pop3_user,
@@ -311,7 +332,7 @@ def test_o_ciclo_de_envio_e_recolha_funciona():
 @exige_servidor
 def test_a_recolha_apaga_e_nao_repete():
     """O POP3 não guarda estado de lida: sem apagar, cada recolha duplicava."""
-    ems.recolher(apagar=True)
+    _esvaziar_caixa()
     ems.enviar(para=settings.pop3_user, assunto="Uma só vez", corpo="Corpo.")
 
     primeira = ems.recolher(apagar=True)
