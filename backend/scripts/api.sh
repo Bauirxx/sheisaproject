@@ -8,6 +8,11 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PORT="${SHEISA_PORT:-8099}"
+# Interface de escuta. Por omissao 127.0.0.1 (so a propria maquina). Ponha
+# SHEISA_HOST=0.0.0.0 para aceitar ligacoes da rede local -- necessario quando
+# um sensor Suricata (ou outra fonte) noutro computador entrega na ingestao.
+# So numa rede de confianca: e um servidor de desenvolvimento, sem TLS.
+HOST="${SHEISA_HOST:-127.0.0.1}"
 PIDFILE="$HERE/var/tmp/api.pid"
 LOGFILE="$HERE/var/tmp/api.log"
 mkdir -p "$HERE/var/tmp"
@@ -47,11 +52,14 @@ load_env() {
 start_server() {
   cd "$HERE"
   load_env
+  # Recalcular depois do load_env: assim SHEISA_HOST pode vir do .env, e nao so
+  # da linha de comando (o valor do topo foi lido antes de o .env ser carregado).
+  HOST="${SHEISA_HOST:-$HOST}"
   if [ "$(port_busy)" = "BUSY" ]; then
     echo "ERRO: a porta $PORT ja esta ocupada. Use 'stop' primeiro."; return 1
   fi
   nohup ./.venv/Scripts/python.exe -m uvicorn app.main:app \
-      --host 127.0.0.1 --port "$PORT" --log-level warning \
+      --host "$HOST" --port "$PORT" --log-level warning \
       > "$LOGFILE" 2>&1 &
   echo $! > "$PIDFILE"
   for _ in $(seq 1 30); do

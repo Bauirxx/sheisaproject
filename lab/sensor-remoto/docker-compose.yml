@@ -1,0 +1,61 @@
+# Sensor Suricata REMOTO — corre noutra máquina e reporta a esta SHEISA.
+#
+# Diferença para o lab/docker-compose.lab.yml: aquele partilha o stack de rede de
+# um alvo nginx (para capturar tráfego dentro do Docker Desktop); este usa a rede
+# do próprio anfitrião (`network_mode: host`) para ver a interface física real —
+# é o que permite observar um ataque de força bruta ou DoS verdadeiro contra esta
+# máquina. **Isto só funciona num anfitrião Linux.** No Windows/macOS o Docker
+# corre dentro de uma VM e um contentor não vê a placa de rede física, mesmo com
+# rede de anfitrião; nesse caso instale o Suricata de forma nativa (ver README).
+#
+# Antes de subir: copie sensor.env.exemplo para sensor.env e preencha a chave;
+# confirme SURICATA_IFACE (o nome da interface a vigiar: `ip -o link`).
+
+services:
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: sheisa-sensor-suricata
+    restart: unless-stopped
+    # Rede do anfitrião: ver a interface física real. Exige Linux.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    env_file:
+      - ./sensor.env
+    environment:
+      # Interface a vigiar no anfitrião (ex.: eth0, ens33, enp0s3). Descubra com
+      # `ip -o link show`. Sem esta, o entrada.sh assume eth0.
+      SURICATA_IFACE: ${SURICATA_IFACE:-eth0}
+    volumes:
+      - ./suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - ./local.rules:/etc/suricata/rules/local.rules:ro
+      - ./entrada.sh:/entrada.sh:ro
+      - sensor-logs:/var/log/suricata
+      - sensor-rules:/var/lib/suricata/rules
+    entrypoint: ["/bin/sh", "/entrada.sh"]
+
+  integrador:
+    image: python:3.12-alpine
+    container_name: sheisa-sensor-integrador
+    restart: unless-stopped
+    depends_on:
+      - suricata
+    # Também na rede do anfitrião: assim alcança a SHEISA pelo IP da rede local
+    # indicado em SHEISA_HOOK_URL (sensor.env).
+    network_mode: host
+    env_file:
+      - ./sensor.env
+    environment:
+      EVE_PATH: /var/log/suricata/eve.json
+    volumes:
+      - ./suricata-sheisa.py:/suricata-sheisa.py:ro
+      - sensor-logs:/var/log/suricata:ro
+      - sensor-posicao:/var/lib/suricata-integrador
+    command: ["python3", "/suricata-sheisa.py"]
+
+volumes:
+  sensor-logs:
+  sensor-rules:
+  sensor-posicao:

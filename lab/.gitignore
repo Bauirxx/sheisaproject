@@ -11,3 +11,7 @@ data/
 # ossec.conf: uma chave em claro num repositorio publico e uma chave
 # comprometida.
 suricata/ingestao.env
+
+# Segredo do sensor remoto (chave de ingestao + URL da plataforma). Mesma razao:
+# o ficheiro versionado e sensor-remoto/sensor.env.exemplo, com marcadores.
+sensor-remoto/sensor.env

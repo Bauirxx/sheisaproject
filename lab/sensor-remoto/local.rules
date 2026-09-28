@@ -1,0 +1,91 @@
+# Regras locais do laboratório SHEISA (§26).
+#
+# O grosso da detecção vem do conjunto Emerging Threats Open, obtido no arranque
+# por `suricata-update`. Estas regras locais existem por duas razões:
+#
+#   1. Garantir que os padrões clássicos de uma máquina Kali disparam de forma
+#      fiável, mesmo que o download do ET Open falhe por falta de rede.
+#   2. Detectar coisas que um analista do INCM escreveria à mão para o seu
+#      contexto — escrever regras locais é prática normal de um SOC, não um
+#      atalho.
+#
+# Cada regra deteta um padrão **real** no tráfego, não um valor combinado com o
+# gerador: são as assinaturas que ferramentas de reconhecimento e exploração
+# deixam. O intervalo de sid 9000000+ é o reservado para regras locais.
+#
+# Nota sobre `target`: `target:dest_ip` diz ao Suricata que, nesta regra, quem
+# está em `dest_ip` é a vítima e quem está em `src_ip` é o atacante. É o que faz
+# a plataforma atribuir o papel certo — o mesmo cuidado do lado do Wazuh, onde
+# trocar origem e destino marcava a conta atacada como atacante.
+
+# --------------------------------------------------------- reconhecimento web
+alert http any any -> $HOME_NET $HTTP_PORTS ( \
+    msg:"SHEISA LOCAL Scanner web Nikto detectado pelo User-Agent"; \
+    flow:established,to_server; \
+    http.user_agent; content:"Nikto"; nocase; \
+    classtype:web-application-attack; target:dest_ip; \
+    sid:9000001; rev:1; )
+
+alert http any any -> $HOME_NET $HTTP_PORTS ( \
+    msg:"SHEISA LOCAL sqlmap detectado pelo User-Agent"; \
+    flow:established,to_server; \
+    http.user_agent; content:"sqlmap"; nocase; \
+    classtype:web-application-attack; target:dest_ip; \
+    sid:9000002; rev:1; )
+
+alert http any any -> $HOME_NET $HTTP_PORTS ( \
+    msg:"SHEISA LOCAL Enumeracao de directorios (gobuster/dirb/dirbuster)"; \
+    flow:established,to_server; \
+    http.user_agent; pcre:"/(gobuster|dirbuster|dirb|feroxbuster|wfuzz)/i"; \
+    classtype:web-application-attack; target:dest_ip; \
+    sid:9000003; rev:1; )
+
+alert http any any -> $HOME_NET $HTTP_PORTS ( \
+    msg:"SHEISA LOCAL Ferramenta de scan generica pelo User-Agent"; \
+    flow:established,to_server; \
+    http.user_agent; pcre:"/(nmap|masscan|nuclei|zgrab|WPScan)/i"; \
+    classtype:attempted-recon; target:dest_ip; \
+    sid:9000004; rev:1; )
+
+# ------------------------------------------------------------- exploração web
+alert http any any -> $HOME_NET $HTTP_PORTS ( \
+    msg:"SHEISA LOCAL Tentativa de path traversal (/etc/passwd)"; \
+    flow:established,to_server; \
+    http.uri; pcre:"/(\.\.[\/\\]){2}|etc\/passwd|boot\.ini/i"; \
+    classtype:web-application-attack; target:dest_ip; \
+    sid:9000005; rev:1; )
+
+alert http any any -> $HOME_NET $HTTP_PORTS ( \
+    msg:"SHEISA LOCAL Tentativa de injeccao SQL na query"; \
+    flow:established,to_server; \
+    http.uri; pcre:"/(union\s+select|or\s+1=1|'\s+or\s+'1'='1|sleep\(|benchmark\()/i"; \
+    classtype:web-application-attack; target:dest_ip; \
+    sid:9000006; rev:1; )
+
+alert http any any -> $HOME_NET $HTTP_PORTS ( \
+    msg:"SHEISA LOCAL Acesso a ficheiro sensivel exposto"; \
+    flow:established,to_server; \
+    http.uri; pcre:"/\/(\.env|\.git\/|wp-login\.php|\.aws\/|config\.php|phpinfo)/i"; \
+    classtype:web-application-attack; target:dest_ip; \
+    sid:9000007; rev:1; )
+
+# ------------------------------------------------------- força bruta de auth
+# Muitas tentativas de autenticação HTTP básica num curto intervalo: o padrão
+# de hydra ou medusa contra um formulário ou um realm protegido.
+alert http any any -> $HOME_NET $HTTP_PORTS ( \
+    msg:"SHEISA LOCAL Forca bruta de autenticacao HTTP (muitas tentativas)"; \
+    flow:established,to_server; \
+    http.header; content:"Authorization|3a| Basic"; nocase; \
+    detection_filter:track by_src, count 20, seconds 60; \
+    classtype:attempted-user; target:dest_ip; \
+    sid:9000008; rev:1; )
+
+# --------------------------------------------------------------- scan de portas
+# Um SYN para uma porta fechada, repetido: a assinatura de um scan TCP do nmap.
+# `flags:S,12` casa o SYN ignorando ECN; o filtro conta os destinos distintos.
+alert tcp any any -> $HOME_NET any ( \
+    msg:"SHEISA LOCAL Possivel scan de portas TCP (nmap)"; \
+    flags:S,12; \
+    detection_filter:track by_src, count 15, seconds 10; \
+    classtype:attempted-recon; target:dest_ip; \
+    sid:9000009; rev:1; )
