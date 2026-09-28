@@ -91,5 +91,33 @@ services:
       timeout: 5s
       retries: 20
 
+  # ------------------------------------------------------------------------
+  # Simuladores de laboratório das APIs REST do QRadar e do NetScout.
+  # NAO sao os produtos do fornecedor: sao servidores que falam a mesma API,
+  # para se testar os conectores reais sem uma instancia comercial (que nao
+  # existe neste ambiente nem se distribui como contentor). Ver lab/siem-sim/.
+  # Trocar por instancias reais e so mudar as variaveis SHEISA_*_API_URL/TOKEN.
+  qradar-sim:
+    build: ./lab/siem-sim
+    container_name: sheisa-qradar-sim
+    restart: unless-stopped
+    environment:
+      SIM_VENDOR: qradar
+      SIM_TOKEN: ${SHEISA_QRADAR_API_TOKEN:?SHEISA_QRADAR_API_TOKEN tem de estar definido no .env}
+      SIM_PORT: "8110"
+    ports:
+      - "127.0.0.1:8110:8110"
+
+  netscout-sim:
+    build: ./lab/siem-sim
+    container_name: sheisa-netscout-sim
+    restart: unless-stopped
+    environment:
+      SIM_VENDOR: netscout
+      SIM_TOKEN: ${SHEISA_NETSCOUT_API_TOKEN:?SHEISA_NETSCOUT_API_TOKEN tem de estar definido no .env}
+      SIM_PORT: "8111"
+    ports:
+      - "127.0.0.1:8111:8111"
+
 volumes:
   sheisa-db-data:

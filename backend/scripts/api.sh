@@ -28,8 +28,25 @@ port_busy() {
   " 2>/dev/null | tr -d '\r\n'
 }
 
+load_env() {
+  # Carrega o .env da raiz para o AMBIENTE do processo. O pydantic ja le o .env,
+  # mas so para os campos que declara (config.py). Os segredos das integracoes
+  # (SHEISA_QRADAR_*, SHEISA_NETSCOUT_*, SHEISA_WAZUH_*) sao lidos direto de
+  # os.environ pelos conectores, pelo que TEM de estar no ambiente. Le-se linha
+  # a linha, tomando tudo depois do primeiro '=' como valor: assim valores com
+  # espacos (ex.: SHEISA_MAIL_FROM_NAME) nao sao reinterpretados pela shell.
+  local envfile="$HERE/../.env"
+  [ -f "$envfile" ] || return 0
+  while IFS= read -r linha || [ -n "$linha" ]; do
+    linha="${linha%$'\r'}"
+    case "$linha" in ''|\#*) continue ;; esac
+    export "${linha%%=*}=${linha#*=}"
+  done < "$envfile"
+}
+
 start_server() {
   cd "$HERE"
+  load_env
   if [ "$(port_busy)" = "BUSY" ]; then
     echo "ERRO: a porta $PORT ja esta ocupada. Use 'stop' primeiro."; return 1
   fi

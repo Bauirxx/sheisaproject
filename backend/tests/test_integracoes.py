@@ -143,7 +143,10 @@ async def test_o_catalogo_regista_cada_conector_uma_so_vez_e_desligado(sessao):
         assert integracao.is_enabled is False, integracao.kind
 
     qradar = next(i for i in integracoes if i.kind is SourceKind.QRADAR)
-    assert qradar.config["verificavel_neste_ambiente"] is False
+    # Verificável neste ambiente contra o simulador da API (lab/siem-sim), mas a
+    # descrição mantém a ressalva de que não foi confrontado com o produto real.
+    assert qradar.config["verificavel_neste_ambiente"] is True
+    assert "não verificada contra uma instância" in qradar.description
 
 
 async def test_ensure_catalog_actualiza_textos_sem_tocar_no_estado(sessao):

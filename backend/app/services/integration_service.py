@@ -34,8 +34,10 @@ from app.models.system import Integration
 #:
 #: `implementado` diz se existe código capaz de falar com o produto. Wazuh e
 #: Suricata são testáveis num laboratório real; QRadar e NetScout têm cliente
-#: implementado mas não foi possível verificá-lo contra instâncias reais, e a
-#: interface apresenta-os como tal. Não os marcamos como activos por omissão.
+#: implementado e são verificáveis contra o simulador da API do fornecedor
+#: (lab/siem-sim), mas **não** contra instâncias reais — o ambiente não dispõe de
+#: nenhuma. A descrição de cada um diz isto. Não os marcamos como activos por
+#: omissão: ficam ACTIVA só depois de uma importação bem sucedida.
 CONNECTOR_CATALOG: dict[SourceKind, dict] = {
     SourceKind.WAZUH: {
         "nome": "Wazuh",
@@ -63,28 +65,28 @@ CONNECTOR_CATALOG: dict[SourceKind, dict] = {
         "descricao": (
             "Importa offenses abertas via API REST (fetch_offenses) e ingere-as "
             "pelo pipeline normal, accionada por POST /integrations/{id}/import. "
-            "Testada contra um servidor simulado; não verificada contra uma "
-            "instância QRadar real."
+            "Verificável no laboratório contra o simulador da API do QRadar "
+            "(lab/siem-sim); não verificada contra uma instância QRadar real."
         ),
         "direccao": IntegrationDirection.ENTRADA,
         "variaveis": ["SHEISA_QRADAR_API_URL", "SHEISA_QRADAR_API_TOKEN"],
         "accoes": [],
         "implementado": True,
-        "verificavel": False,
+        "verificavel": True,
     },
     SourceKind.NETSCOUT: {
         "nome": "NetScout",
         "descricao": (
             "Importa alertas de tráfego via API REST (fetch_alerts) e ingere-os "
             "pelo pipeline normal, accionada por POST /integrations/{id}/import. "
-            "Testada contra um servidor simulado; não verificada contra uma "
-            "instância NetScout real."
+            "Verificável no laboratório contra o simulador da API do NetScout "
+            "(lab/siem-sim); não verificada contra uma instância NetScout real."
         ),
         "direccao": IntegrationDirection.ENTRADA,
         "variaveis": ["SHEISA_NETSCOUT_API_URL", "SHEISA_NETSCOUT_API_TOKEN"],
         "accoes": [],
         "implementado": True,
-        "verificavel": False,
+        "verificavel": True,
     },
     SourceKind.API_GENERICA: {
         "nome": "API genérica",

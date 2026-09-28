@@ -1,17 +1,22 @@
 """Conectores QRadar e NetScout.
 
-Ambos foram implementados contra a documentação pública das respectivas APIs,
-mas **não foi possível verificá-los contra instâncias reais** — o ambiente do
-trabalho não dispõe de nenhuma. Em consequência:
+Ambos foram implementados contra a documentação pública das respectivas APIs.
+**Não foi possível verificá-los contra instâncias reais** — o ambiente não dispõe
+de nenhuma, e nem o QRadar nem o NetScout se distribuem como contentor. São, isso
+sim, verificáveis contra o simulador da API de cada fornecedor (`lab/siem-sim`),
+que responde nos mesmos caminhos e formatos: assim o código abaixo — pedido,
+autenticação, normalização — é exercitado a sério, faltando só confrontá-lo com o
+produto comercial. Em consequência:
 
-* o catálogo marca-os com `verificavel_neste_ambiente: false`;
-* a interface apresenta-os como "não verificado";
+* o catálogo diz, em cada um, "verificável contra o simulador; não verificada
+  contra uma instância real";
 * `test_connection` contacta o serviço a sério e falha se não o alcançar. Não
   existe caminho que devolva sucesso sem resposta do servidor.
 
 Isto é o §4 aplicado a uma situação incómoda: a alternativa fácil seria fingir
-que funcionam. A alternativa honesta é implementá-los correctamente e dizer o
-que não foi possível confirmar.
+que funcionam, ou apresentar o simulador como o produto real. A alternativa
+honesta é implementá-los correctamente, testá-los onde é possível, e dizer com
+precisão o que não foi confirmado.
 """
 
 from __future__ import annotations
