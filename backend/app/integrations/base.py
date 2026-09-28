@@ -78,6 +78,24 @@ class BaseConnector:
     kind: SourceKind
     supported_actions: tuple[ActionKind, ...] = ()
 
+    #: Se o conector suporta importar sinais (pull). Os de envio (o integrador
+    #: do Wazuh, o Suricata, a API genérica) não: os dados chegam por POST, não
+    #: se vão buscar. Só QRadar e NetScout o activam.
+    supports_pull: bool = False
+
+    async def fetch_events(
+        self, integration: Integration, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Importa sinais do serviço, já no formato interno comum.
+
+        Só os conectores de pull o implementam; os restantes recusam de forma
+        honesta em vez de devolver uma lista vazia que pareceria "nada a importar".
+        """
+        raise IntegrationNotAvailableError(
+            integration.name,
+            "este conector não suporta importação: os dados chegam por envio",
+        )
+
     def required_env(self, integration: Integration) -> dict[str, str]:
         """Lê os segredos das variáveis de ambiente declaradas.
 

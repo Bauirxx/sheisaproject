@@ -429,6 +429,28 @@ async def test_integration(
     return await integration_service.test_connection(session, integration, ctx)
 
 
+@integration_router.post(
+    "/{integration_id}/import",
+    summary="Importar sinais de um sistema externo (pull)",
+    description=(
+        "Vai buscar sinais ao serviço (QRadar, NetScout) e ingere-os pelo mesmo "
+        "pipeline de qualquer outra fonte, com idempotência por (fonte, id). As "
+        "fontes de envio (Wazuh, Suricata, API genérica) não suportam importação."
+    ),
+)
+async def import_integration(
+    integration_id: uuid.UUID,
+    session: SessionDep,
+    ctx: AuditDep,
+    _: Annotated[object, Depends(require(Permission.INTEGRATIONS_MANAGE))],
+    limite: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> dict:
+    integration = await integration_service.get_integration(session, integration_id)
+    return await integration_service.importar_de_fonte(
+        session, integration, ctx, limit=limite
+    )
+
+
 class ApiKeyCreate(ApiInput):
     """Corpo de entrada, e por isso herda `ApiInput` e não `ApiModel`.
 

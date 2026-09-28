@@ -959,6 +959,20 @@ que a caixa devolve o que lhe foi enviado.
     responsável até as notificações o exercerem. Corrigido com um
     `session.refresh(task, ["assignee"])` antes de responder.
 
+68. **Importação do QRadar e do NetScout ligada a uma rota real** (2026-09-28). O
+    cliente (`fetch_offenses`/`fetch_alerts`) existia mas nada o accionava — só o
+    teste de ligação era alcançável (era o achado 2 das decisões pendentes).
+    Agora `POST /api/integrations/{id}/import` chama o conector e ingere os sinais
+    pelo **mesmo pipeline** de qualquer fonte, com idempotência por `(fonte, id)`.
+    `BaseConnector.supports_pull` distingue pull (QRadar, NetScout) de push
+    (Wazuh, Suricata, API genérica), que recusam importar de forma honesta.
+    Normalizadores finos QRadar/NetScout fixam a proveniência sem o aviso de
+    "formato inesperado". Testado contra servidor simulado (importação,
+    idempotência, recusa das fontes de envio, credenciais em falta), verificado
+    por reversão. **Não** verificado contra instâncias reais — ver
+    [`INTEGRACOES.md`](INTEGRACOES.md). As instruções de configuração e teste de
+    todas as integrações passam a viver nesse documento.
+
 Uma decisão de desenho que vale registar: **a plataforma não classifica por
 palavras-chave.** Uma categoria inferida do assunto de um email seria apresentada
 com a mesma confiança de uma afirmada por quem comunica, e o §4 proíbe-o. Uma

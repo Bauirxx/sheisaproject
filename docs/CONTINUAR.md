@@ -270,14 +270,15 @@ para o `analytics_service`, que estava a 76%:
 >    depois o alvo). E o playbook de bloqueio de IP **nunca pode concluir**:
 >    nenhum conector executa `BLOQUEAR_IP`, pelo que pára sempre no passo 6 —
 >    agora com uma falha honesta, depois da correcção 17.
-> 2. **[FECHADO 2026-09-24] A importação do QRadar/NetScout não está ligada, e o
->    texto do catálogo dizia que importava.** `fetch_offenses`/`fetch_alerts`
->    existem mas nenhuma rota, comando ou tarefa os chama — só o teste de ligação
->    é alcançável. A descrição foi corrigida para o dizer, e o `ensure_catalog`
->    passou a **sincronizar** os textos das linhas já existentes (antes só criava
->    as em falta, pelo que a correcção nunca chegava à base que a interface lê),
->    sem tocar no que o operador configurou. Ligar mesmo a importação continua
->    por fazer — mas deixou de ser apresentada como feita.
+> 2. **[FECHADO 2026-09-28] A importação do QRadar/NetScout ligada a uma rota
+>    real.** `fetch_offenses`/`fetch_alerts` existiam mas nada os accionava — só o
+>    teste de ligação. Agora `POST /api/integrations/{id}/import` chama o conector
+>    e ingere os sinais pelo mesmo pipeline de qualquer fonte, idempotente por
+>    `(fonte, id)`; `supports_pull` distingue pull de push. Testado contra
+>    servidor simulado (correcção 68), verificado por reversão. Não verificado
+>    contra instâncias reais — instruções em [`INTEGRACOES.md`](INTEGRACOES.md).
+>    (O `ensure_catalog` já sincronizava os textos do catálogo, sem tocar no
+>    estado configurado pelo operador.)
 > 3. **[EM ABERTO] Os comandos de resposta activa do Wazuh não foram verificados,
 >    e alguns parecem errados.** `EXECUTAR_VARRIMENTO` envia `restart-wazuh0`
 >    (reinicia o agente — não é um varrimento); `RECOLHER_ARTEFACTOS` envia

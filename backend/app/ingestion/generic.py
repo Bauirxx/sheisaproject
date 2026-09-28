@@ -317,3 +317,25 @@ class GenericNormalizer:
                     )
                 )
         return indicators
+
+
+class QRadarNormalizer(GenericNormalizer):
+    """QRadar. O conector já entrega o formato interno comum; aqui só marcamos a
+    proveniência (`source_kind`) e evitamos o aviso de "formato inesperado" que o
+    plano de recurso genérico acrescentaria. Reconhece-se pelo prefixo do `id`
+    que o conector garante (`qradar-...`), para não capturar payloads genéricos.
+    """
+
+    source_kind = SourceKind.QRADAR
+
+    def can_handle(self, payload: dict[str, Any]) -> bool:
+        return isinstance(payload, dict) and str(payload.get("id", "")).startswith("qradar-")
+
+
+class NetScoutNormalizer(GenericNormalizer):
+    """NetScout. Ver `QRadarNormalizer`; reconhece-se pelo prefixo `netscout-`."""
+
+    source_kind = SourceKind.NETSCOUT
+
+    def can_handle(self, payload: dict[str, Any]) -> bool:
+        return isinstance(payload, dict) and str(payload.get("id", "")).startswith("netscout-")

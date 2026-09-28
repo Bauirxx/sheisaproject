@@ -12,13 +12,22 @@ from typing import Any
 
 from app.core.enums import SourceKind
 from app.ingestion.base import NormalizedEvent, Normalizer
-from app.ingestion.generic import GenericNormalizer
+from app.ingestion.generic import (
+    GenericNormalizer,
+    NetScoutNormalizer,
+    QRadarNormalizer,
+)
 from app.ingestion.suricata import SuricataNormalizer
 from app.ingestion.wazuh import WazuhNormalizer
 
 _SPECIFIC: tuple[Normalizer, ...] = (
     WazuhNormalizer(),
     SuricataNormalizer(),
+    # QRadar e NetScout: o conector já converte para o formato comum; estes só
+    # fixam a proveniência. `can_handle` exige o prefixo do `id`, pelo que não
+    # capturam a auto-detecção de payloads genéricos.
+    QRadarNormalizer(),
+    NetScoutNormalizer(),
 )
 _GENERIC = GenericNormalizer()
 

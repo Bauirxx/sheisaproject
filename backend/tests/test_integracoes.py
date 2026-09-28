@@ -11,10 +11,11 @@ ligada falha (`CERTIFICATE_VERIFY_FAILED`, o certificado é auto-assinado); com
 `permitir_certificado_auto_assinado` responde "Ligação estabelecida com o gestor
 Wazuh v4.12.0; 2 agente(s) registado(s)."
 
-**O que fica deliberadamente de fora:** `fetch_offenses`, `fetch_alerts` e
-`fetch_agents`. Nada na aplicação os chama — nem rota, nem linha de comandos,
-nem tarefa — e testá-los daria cobertura a código que nenhum utilizador
-consegue exercer. Ver `docs/CONTINUAR.md` §4.3.
+**Importação (pull):** `fetch_offenses` (QRadar) e `fetch_alerts` (NetScout) são
+agora accionadas por `POST /integrations/{id}/import` e testadas contra um
+servidor HTTP simulado (ver o fim deste ficheiro). `fetch_agents` continua sem
+consumidor. As instruções de configuração e teste de cada integração estão em
+`docs/INTEGRACOES.md`.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from app.integrations.base import BaseConnector
 from app.integrations.siem_connectors import NetScoutConnector, QRadarConnector
 from app.integrations.wazuh_connector import WazuhConnector
 from app.models.system import AuditLog, Integration
+from app.models.telemetry import Event
 from app.services.integration_service import CONNECTOR_CATALOG, ensure_catalog
 from tests.conftest import cabecalho
 
@@ -438,3 +440,125 @@ async def test_a_accao_falhada_regista_porque_falhou(
     assert execucao.json()["status"] == "FALHADA"
     assert "identificador do agente" in (execucao.json()["error"] or ""), execucao.json()["error"]
     assert servidor.pedidos == []
+
+
+# =============================================================== importacao (pull)
+
+OFFENSES_QRADAR = [
+    {"id": 101, "magnitude": 8, "start_time": 1727500000000,
+     "offense_type_name": "Anomalia", "description": "Varrimento de portas detectado",
+     "offense_source": "10.0.0.5", "domain_name": "srv-web", "categories": ["Recon"],
+     "event_count": 42, "source_address_ids": [1, 2]},
+    {"id": 102, "magnitude": 5, "start_time": 1727500500000,
+     "offense_type_name": "Politica", "description": "Acesso fora de horario",
+     "offense_source": "10.0.0.9", "domain_name": "srv-db", "categories": ["Access"],
+     "event_count": 3, "source_address_ids": [3]},
+]
+
+
+def _servidor_qradar(monkeypatch) -> ServidorFalso:
+    return ServidorFalso(monkeypatch, {("GET", "/api/siem/offenses"): (200, OFFENSES_QRADAR)})
+
+
+async def _eventos(sessao, kind: SourceKind) -> list[Event]:
+    return list(
+        (await sessao.execute(select(Event).where(Event.source_kind == kind))).scalars()
+    )
+
+
+async def test_importar_do_qradar_ingere_offenses(cliente, sessao, token_admin, monkeypatch):
+    integracao = await _integracao(sessao, SourceKind.QRADAR)
+    _com_variaveis(monkeypatch, {
+        "SHEISA_QRADAR_API_URL": "https://qradar.local",
+        "SHEISA_QRADAR_API_TOKEN": "tok",
+    })
+    _servidor_qradar(monkeypatch)
+
+    resposta = await cliente.post(
+        f"/api/integrations/{integracao.id}/import", headers=cabecalho(token_admin)
+    )
+
+    assert resposta.status_code == 200, resposta.text
+    corpo = resposta.json()
+    assert corpo["sucesso"] is True, corpo
+    assert corpo["total"] == 2
+
+    eventos = await _eventos(sessao, SourceKind.QRADAR)
+    assert {e.source_event_id for e in eventos} == {"qradar-101", "qradar-102"}
+    for e in eventos:
+        assert e.source_kind is SourceKind.QRADAR
+        # atribuicao limpa: nao ha aviso de "formato inesperado"
+        assert "formato esperado" not in str(e.normalized_extra)
+
+
+async def test_reimportar_do_qradar_nao_duplica(cliente, sessao, token_admin, monkeypatch):
+    """Idempotencia por (fonte, id): reimportar as mesmas offenses nao cria eventos novos."""
+    integracao = await _integracao(sessao, SourceKind.QRADAR)
+    _com_variaveis(monkeypatch, {
+        "SHEISA_QRADAR_API_URL": "https://qradar.local",
+        "SHEISA_QRADAR_API_TOKEN": "tok",
+    })
+    _servidor_qradar(monkeypatch)
+
+    await cliente.post(f"/api/integrations/{integracao.id}/import", headers=cabecalho(token_admin))
+    segunda = await cliente.post(
+        f"/api/integrations/{integracao.id}/import", headers=cabecalho(token_admin)
+    )
+
+    corpo = segunda.json()
+    assert corpo["importados"] == 0, corpo
+    assert corpo["duplicados"] == 2, corpo
+    assert len(await _eventos(sessao, SourceKind.QRADAR)) == 2  # nao 4
+
+
+async def test_importar_sem_credenciais_diz_o_que_falta(cliente, sessao, token_admin, monkeypatch):
+    integracao = await _integracao(sessao, SourceKind.QRADAR)
+    _com_variaveis(monkeypatch, {})  # sem credenciais
+
+    resposta = await cliente.post(
+        f"/api/integrations/{integracao.id}/import", headers=cabecalho(token_admin)
+    )
+
+    assert resposta.status_code == 200, resposta.text
+    corpo = resposta.json()
+    assert corpo["sucesso"] is False
+    assert corpo["variaveis_em_falta"]
+    assert await _eventos(sessao, SourceKind.QRADAR) == []
+
+
+async def test_fonte_de_envio_nao_suporta_importacao(cliente, sessao, token_admin):
+    """Suricata (como Wazuh e a API generica) e push: nao se importa dela."""
+    integracao = await _integracao(sessao, SourceKind.SURICATA)
+
+    resposta = await cliente.post(
+        f"/api/integrations/{integracao.id}/import", headers=cabecalho(token_admin)
+    )
+
+    assert resposta.status_code == 200, resposta.text
+    corpo = resposta.json()
+    assert corpo["sucesso"] is False
+    assert "não suporta importação" in corpo["detalhe"]
+
+
+async def test_importar_do_netscout_ingere_alertas(cliente, sessao, token_admin, monkeypatch):
+    integracao = await _integracao(sessao, SourceKind.NETSCOUT)
+    _com_variaveis(monkeypatch, {
+        "SHEISA_NETSCOUT_API_URL": "https://netscout.local",
+        "SHEISA_NETSCOUT_API_TOKEN": "tok",
+    })
+    ServidorFalso(monkeypatch, {("GET", "/api/sp/v7/alerts"): (200, {"data": [
+        {"id": "7", "attributes": {
+            "importance": 2, "start_time": "2026-09-28T10:00:00Z",
+            "alert_type": "dos", "alert_class": "DoS",
+            "subobject": {"host_address": "10.0.0.1", "impact_bps": 1000}}},
+    ]})})
+
+    resposta = await cliente.post(
+        f"/api/integrations/{integracao.id}/import", headers=cabecalho(token_admin)
+    )
+
+    assert resposta.status_code == 200, resposta.text
+    corpo = resposta.json()
+    assert corpo["sucesso"] is True and corpo["total"] == 1
+    eventos = await _eventos(sessao, SourceKind.NETSCOUT)
+    assert [e.source_event_id for e in eventos] == ["netscout-7"]

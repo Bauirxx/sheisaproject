@@ -34,6 +34,7 @@ class QRadarConnector(BaseConnector):
 
     kind = SourceKind.QRADAR
     supported_actions: tuple[ActionKind, ...] = ()
+    supports_pull = True
 
     #: Versão da API declarada no cabeçalho `Version`. O QRadar exige-a e
     #: rejeita pedidos sem ela em instalações recentes.
@@ -68,6 +69,11 @@ class QRadarConnector(BaseConnector):
             f"{about.get('release_name', 'versão desconhecida')} "
             f"(build {about.get('build_version', '?')})."
         )
+
+    async def fetch_events(
+        self, integration: Integration, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        return await self.fetch_offenses(integration, limit=limit)
 
     async def fetch_offenses(
         self, integration: Integration, *, since: datetime | None = None, limit: int = 50
@@ -139,6 +145,7 @@ class NetScoutConnector(BaseConnector):
 
     kind = SourceKind.NETSCOUT
     supported_actions: tuple[ActionKind, ...] = ()
+    supports_pull = True
 
     def _headers(self, integration: Integration) -> dict[str, str]:
         token = os.environ.get("SHEISA_NETSCOUT_API_TOKEN")
@@ -163,6 +170,11 @@ class NetScoutConnector(BaseConnector):
 
         total = (payload.get("meta") or {}).get("available", "?")
         return f"Ligação estabelecida com o NetScout; {total} alerta(s) acessível(is)."
+
+    async def fetch_events(
+        self, integration: Integration, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        return await self.fetch_alerts(integration, limit=limit)
 
     async def fetch_alerts(
         self, integration: Integration, *, limit: int = 50
