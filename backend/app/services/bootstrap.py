@@ -16,6 +16,7 @@ rotas verificam as permissões guardadas na base de dados.
 
 from __future__ import annotations
 
+import logging
 import secrets
 from collections.abc import Collection
 from datetime import UTC, datetime
@@ -37,6 +38,37 @@ from app.core.permissions import (
 )
 from app.core.security import hash_password
 from app.models.identity import Permission, Role, Team, User
+
+logger = logging.getLogger("sheisa.arranque")
+
+
+async def permissoes_ausentes_na_base(session: AsyncSession) -> list[str]:
+    """Códigos de permissão que as rotas exigem e a base de dados não tem.
+
+    As rotas verificam as permissões **guardadas na base**, não este catálogo.
+    Uma permissão acrescentada ao código e nunca criada na base faz as rotas que
+    a exigem responder 403 a todos os perfis, incluindo o ADMINISTRADOR, a quem
+    `ROLE_PERMISSIONS` dá todas. É a falha fechada certa, mas indistinguível de
+    "este perfil não tem essa permissão" — e é por isso que precisa de ser dita.
+    """
+    existentes = set(
+        (await session.execute(select(Permission.code))).scalars().all()
+    )
+    return sorted({codigo.value for codigo in PermissionCode} - existentes)
+
+
+async def avisar_de_permissoes_em_falta(session: AsyncSession) -> list[str]:
+    """Regista o que falta e o comando que o resolve. Devolve o que encontrou."""
+    em_falta = await permissoes_ausentes_na_base(session)
+    if em_falta:
+        logger.warning(
+            "%d permissao(oes) exigida(s) pelas rotas nao existem na base de "
+            "dados: %s. Enquanto assim for, essas rotas respondem 403 a TODOS os "
+            "perfis. Corra `python -m scripts.manage init` (e idempotente).",
+            len(em_falta),
+            ", ".join(em_falta),
+        )
+    return em_falta
 
 
 async def sync_permissions(session: AsyncSession) -> tuple[list[str], int]:

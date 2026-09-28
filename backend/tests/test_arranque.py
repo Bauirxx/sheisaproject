@@ -165,3 +165,120 @@ async def test_a_equipa_por_omissao_existe_uma_so_vez(sessao):
     assert segunda.id == primeira.id
     equipas = (await sessao.execute(select(Team).where(Team.name == "SOC"))).scalars().all()
     assert len(equipas) == 1
+
+
+# ------------------------------- permissões que a base de dados não tem
+class _LoggerDeTeste:
+    """Recolhe os avisos em vez de os escrever."""
+
+    def __init__(self) -> None:
+        self.avisos: list[str] = []
+
+    def warning(self, modelo, *argumentos) -> None:
+        self.avisos.append(modelo % argumentos if argumentos else modelo)
+
+
+async def _apagar_permissao(sessao, codigo: P) -> None:
+    """Simula uma base que nunca correu o arranque depois de a permissão nascer."""
+    linha = (
+        await sessao.execute(select(Permission).where(Permission.code == codigo.value))
+    ).scalar_one()
+    for perfil in (await sessao.execute(select(Role))).scalars().all():
+        if linha in perfil.permissions:
+            perfil.permissions.remove(linha)
+    await sessao.flush()
+    await sessao.delete(linha)
+    await sessao.flush()
+
+
+async def test_permissoes_que_a_base_nao_tem_sao_nomeadas(sessao):
+    """Uma rota cuja permissão não existe responde 403 a todos os perfis.
+
+    Aconteceu a correr, em 2026-09-28: `reports_inbox:read` e
+    `reports_inbox:triage` nunca tinham sido criadas na base de desenvolvimento,
+    e a caixa de comunicações ficou inalcançável — administrador incluído. O 403
+    é a falha fechada certa, mas é indistinguível de "este perfil não tem essa
+    permissão", pelo que ninguém suspeita da base de dados.
+    """
+    assert await bootstrap.permissoes_ausentes_na_base(sessao) == [], (
+        "a base de teste devia espelhar o catálogo do código"
+    )
+
+    await _apagar_permissao(sessao, P.REPORTS_INBOX_READ)
+
+    assert await bootstrap.permissoes_ausentes_na_base(sessao) == [
+        P.REPORTS_INBOX_READ.value
+    ]
+
+
+async def test_o_arranque_avisa_e_diz_o_que_correr(sessao, monkeypatch):
+    """O aviso tem de nomear a permissão e o comando que a cria.
+
+    "Faltam permissões" obrigaria a descobrir quais; e sem o comando, quem lê o
+    registo fica a saber que há um problema e não como o resolver.
+    """
+    registo = _LoggerDeTeste()
+    monkeypatch.setattr(bootstrap, "logger", registo)
+    await _apagar_permissao(sessao, P.REPORTS_INBOX_TRIAGE)
+
+    em_falta = await bootstrap.avisar_de_permissoes_em_falta(sessao)
+
+    assert em_falta == [P.REPORTS_INBOX_TRIAGE.value]
+    assert len(registo.avisos) == 1, registo.avisos
+    aviso = registo.avisos[0]
+    assert P.REPORTS_INBOX_TRIAGE.value in aviso
+    assert "scripts.manage init" in aviso
+
+
+async def test_com_a_base_sincronizada_o_arranque_nao_avisa(sessao, monkeypatch):
+    """Um registo que avisa de tudo não avisa de nada."""
+    registo = _LoggerDeTeste()
+    monkeypatch.setattr(bootstrap, "logger", registo)
+
+    assert await bootstrap.avisar_de_permissoes_em_falta(sessao) == []
+    assert registo.avisos == []
+
+
+class _FabricaDeUmaSessao:
+    """Devolve sempre a sessão do teste, para o arranque não abrir outra base.
+
+    Sem isto, o `lifespan` ligava-se à base de **desenvolvimento** — o teste
+    passaria ou falharia segundo o que estivesse a correr na máquina.
+    """
+
+    def __init__(self, sessao) -> None:
+        self._sessao = sessao
+
+    def __call__(self):
+        return self
+
+    async def __aenter__(self):
+        return self._sessao
+
+    async def __aexit__(self, *_):
+        return False
+
+
+async def test_o_lifespan_da_api_faz_a_verificacao(sessao, monkeypatch):
+    """A verificação tem de ser chamada, senão é decorativa.
+
+    Confirma também que recebe uma sessão utilizável — uma chamada sem base de
+    dados não verificaria nada.
+    """
+    from app.core import database
+    from app.main import app as fastapi_app
+    from app.main import lifespan
+
+    recebidas: list[object] = []
+
+    async def espia(sessao_recebida):
+        recebidas.append(sessao_recebida)
+        return []
+
+    monkeypatch.setattr(database, "get_sessionmaker", _FabricaDeUmaSessao(sessao))
+    monkeypatch.setattr(bootstrap, "avisar_de_permissoes_em_falta", espia)
+
+    async with lifespan(fastapi_app):
+        pass
+
+    assert recebidas == [sessao]

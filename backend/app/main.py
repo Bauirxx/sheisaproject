@@ -28,6 +28,35 @@ logging.basicConfig(
 logger = logging.getLogger("sheisa")
 
 
+async def _verificar_as_permissoes_da_base() -> None:
+    """Avisa, ao arrancar, se a base não tem permissões que as rotas exigem.
+
+    As rotas verificam as permissões guardadas na base de dados; uma que só
+    exista no código faz a rota responder 403 a todos os perfis, sem que nada no
+    código esteja errado. Aconteceu a correr, em 2026-09-28, à caixa de
+    comunicações — e a única pista era o 403, que é indistinguível de "este
+    perfil não tem essa permissão".
+
+    A verificação não pode impedir a API de arrancar: se a base não responder, o
+    arranque diz que não conseguiu verificar em vez de afirmar que está bem.
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.core.database import get_sessionmaker
+    from app.services import bootstrap
+
+    try:
+        async with get_sessionmaker()() as sessao:
+            await bootstrap.avisar_de_permissoes_em_falta(sessao)
+    except (SQLAlchemyError, OSError):
+        # A base não responder é o caso previsto: dizer que não se verificou, e
+        # deixar a API arrancar. Qualquer outra excepção passa, porque aí o
+        # problema não é este e calá-lo esconderia-o.
+        logger.warning(
+            "Nao foi possivel verificar as permissoes na base de dados.", exc_info=True
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(
@@ -36,6 +65,7 @@ async def lifespan(app: FastAPI):
         settings.effective_database_url.rsplit("@", 1)[-1],
     )
     settings.evidence_storage_path.mkdir(parents=True, exist_ok=True)
+    await _verificar_as_permissoes_da_base()
     yield
     await dispose_engine()
     logger.info("SHEISA encerrada.")
