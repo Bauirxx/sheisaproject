@@ -547,6 +547,7 @@ async def assign_technique(
     from app.services.mitre_service import find_technique
 
     incident = await incident_service.get_incident(session, incident_id)
+    incident_service.garantir_editavel(incident)
     technique = await find_technique(session, payload.technique_id)
     if technique is None:
         raise NotFoundError("Técnica MITRE", payload.technique_id)
@@ -604,6 +605,7 @@ async def remove_technique(
     from app.services.mitre_service import find_technique
 
     incident = await incident_service.get_incident(session, incident_id)
+    incident_service.garantir_editavel(incident)
     technique = await find_technique(session, technique_id)
     if technique is None:
         raise NotFoundError("Técnica MITRE", technique_id)

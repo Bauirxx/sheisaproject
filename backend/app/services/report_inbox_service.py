@@ -580,6 +580,9 @@ async def aceitar(
 
     if incident_id is not None:
         incidente = await incident_service.get_incident(session, incident_id)
+        # Uma comunicação é matéria nova: juntá-la a um incidente encerrado
+        # reescreveria um registo concluído.
+        incident_service.garantir_editavel(incidente)
     else:
         incidente = await incident_service.create_incident(
             session,
@@ -747,6 +750,7 @@ async def ligar_incidente(
     incidente que atinge vários sistemas pode pertencer a mais do que um.
     """
     incidente = await incident_service.get_incident(session, incident_id)
+    incident_service.garantir_editavel(incidente)
 
     if incidente in relato.incidents:
         raise ValidationError(

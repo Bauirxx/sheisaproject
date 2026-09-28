@@ -392,9 +392,18 @@ async def _carregar_alerta(session: AsyncSession, rec: Recommendation) -> Alert:
 
 
 async def _carregar_incidente(session: AsyncSession, rec: Recommendation) -> Incident:
+    """Carrega o incidente alvo, recusando-o se estiver encerrado.
+
+    É o funil por onde passam todos os aplicadores com alvo incidente — campos,
+    técnicas, transição e playbook. A guarda aqui vale para os quatro; posta em
+    cada um, faltaria no quinto que aparecesse.
+    """
+    from app.services import incident_service
+
     incidente = await session.get(Incident, rec.target_id)
     if incidente is None:
         raise NotFoundError("Incidente", rec.target_id)
+    incident_service.garantir_editavel(incidente)
     return incidente
 
 

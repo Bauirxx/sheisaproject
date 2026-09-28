@@ -148,6 +148,12 @@ async def propose_action(
     playbook_execution_id: uuid.UUID | None = None,
 ) -> Action:
     """Propõe uma acção e, se necessário, abre o pedido de aprovação."""
+    from app.services import incident_service
+
+    # Uma acção é conteúdo do incidente: num incidente encerrado, o registo é
+    # definitivo. Cobre também a reversão, que propõe a acção inversa.
+    incident_service.garantir_editavel(incident)
+
     if not rationale.strip():
         raise ValidationError(
             "Uma acção de resposta exige justificação.", code="JUSTIFICACAO_OBRIGATORIA"

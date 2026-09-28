@@ -122,6 +122,12 @@ async def start_execution(
     triggered_automatically: bool = False,
 ) -> PlaybookExecution:
     """Inicia uma execução e corre os passos até ao fim ou até uma aprovação."""
+    from app.services import incident_service
+
+    # O playbook escreve no incidente — tarefas, notas, acções. Num incidente
+    # encerrado isso reescreveria um registo concluído.
+    incident_service.garantir_editavel(incident)
+
     if not playbook.is_enabled:
         raise ConflictError(f"O playbook '{playbook.name}' está desactivado.")
 
