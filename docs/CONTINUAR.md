@@ -91,6 +91,11 @@ de comunicações (`reports_inbox:read` e `reports_inbox:triage`) nunca tinham s
 criadas nesta máquina, e a caixa inteira estava inalcançável na API a correr.
 `manage init` criou-as e atribuiu 8 permissões aos 6 perfis já existentes.
 
+Desde então **a própria API avisa**: o arranque escreve um `WARNING` que nomeia as
+permissões em falta e o comando que as cria (defeito 71). Veja
+`backend/var/tmp/api.log` depois de um `restart` — se não houver linha
+`sheisa.arranque`, a base está sincronizada.
+
 As contas de laboratório estão em [`ESTADO.md` §6](ESTADO.md#6-contas-e-credenciais-do-ambiente-local),
 com uma ressalva: **a palavra-passe de administração é diferente em cada
 máquina**, porque é gerada pelo `manage init` de cada base de dados.
@@ -130,7 +135,7 @@ irreversível do RTIR é uma má decisão.
 |---|---|
 | Backend | 109 rotas, 24 domínios, ~20k linhas em `app/` |
 | Frontend | 19 rotas (18 autenticadas mais a entrada), tudo em português |
-| Testes | 569 a passar |
+| Testes | 573 a passar |
 | Qualidade | `ruff check .` limpo em todo o repositório; `eslint` sem erros no frontend (13 avisos de recarregamento a quente, ver §4.2) |
 | Contrato | `verificar_contrato.py` sem divergências: 51 confirmações na corrida de 2026-09-28, mais 6 anunciadas como não verificáveis por falta de dados (fila de aprovação vazia, incidente sem técnicas, sem recomendações pendentes). O número varia com o que a base tem — o que não varia é não haver divergências |
 | Git | `main`, sincronizado com `github.com/Bauirxx/sheisaproject` |
@@ -774,6 +779,13 @@ silenciosa: nada distingue "não tem permissão" de "a permissão não existe". 
 só olhasse para `ROLE_PERMISSIONS` concluiria que estava tudo bem. O
 `verificar_contrato.py` foi o que apanhou o 403 — mais uma razão para o correr
 depois de um `pull`, e não só depois de mexer em esquemas.
+
+**A plataforma passou a dizê-lo** (defeito 71): o `lifespan` chama
+`bootstrap.avisar_de_permissoes_em_falta`, que regista as permissões em falta pelo
+nome e o comando que as cria. Verificado com a API a correr, apagando uma
+permissão da base e repondo-a. Se acrescentar uma permissão nova, o arranque
+avisa-o até correr `manage init` — mas o aviso vive no registo, não na interface,
+pelo que continua a valer olhar para o `api.log` depois de um `pull`.
 
 ### 5.19 `NotFoundError` construía a mensagem no masculino
 

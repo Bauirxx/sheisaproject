@@ -21,7 +21,7 @@
 | **Feito** | Fundação · ingestão · triagem · correlação · incidentes · evidências · acções · playbooks · painel · grafo · relatórios · administração · **motor de recomendações (5.1)** · **cenário de demonstração (5.2)** · **suite de testes (5.3)** |
 | **A seguir** | abrir a interface num navegador |
 | **Backend** | 109 rotas, 24 domínios, ~20k linhas em `app/` |
-| **Testes** | 569 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` sem divergências (51 confirmações em 2026-09-28, mais 6 anunciadas como não verificáveis por falta de dados na base) |
+| **Testes** | 573 a passar · ruff limpo em todo o repositório · frontend passa `tsc + eslint + relógio` · `verificar_contrato.py` sem divergências (51 confirmações em 2026-09-28, mais 6 anunciadas como não verificáveis por falta de dados na base) |
 | **Cobertura de UI** | das 109 operações, as 7 sem interface são-no por razão própria: 2 sondas de saúde, 2 de documentação e 3 de ingestão (máquina-a-máquina, por `X-API-Key`) |
 | **Verificado em 2026-09-15** | suite a passar · frontend compila (103 módulos) e serve com o proxy a funcionar · 33/35 endpoints GET a responder 200 (os 2 restantes exigem `incident_id`, comportamento correcto) · cenário de demonstração a percorrer os 10 passos |
 | **Ambiente** | Python 3.11.9 (venv) · Node 22.10.0 · PostgreSQL 16 em Docker · API em :8099 · interface em :5500 |
@@ -1018,6 +1018,26 @@ que a caixa devolve o que lhe foi enviado.
     contrário: com `_esvaziar_caixa()` em ciclo, os 32 testes passam **com 60
     mensagens paradas na caixa**, que fica a zero no fim. O limite de lote
     mantém-se: é o que serve uma caixa com milhares de mensagens.
+
+71. **Uma permissão que só existia no código não dizia nada** (2026-09-28).
+    Consequência directa do que se mediu neste dia: as rotas verificam as
+    permissões guardadas na base, não o catálogo do código, e uma permissão que
+    nunca foi criada faz a rota responder 403 a **todos** os perfis. É a falha
+    fechada certa, mas indistinguível de "este perfil não tem essa permissão", e
+    a pista veio de fora — do `verificar_contrato.py` — em vez de vir da
+    plataforma. `bootstrap.permissoes_ausentes_na_base` mede a diferença e
+    `avisar_de_permissoes_em_falta` regista-a **nomeando** as permissões e o
+    comando que as cria; o `lifespan` da API chama-a ao arrancar. A base não
+    responder é o caso previsto (`SQLAlchemyError`/`OSError`): diz que não
+    conseguiu verificar, em vez de impedir o arranque ou de afirmar que está bem;
+    qualquer outra excepção passa. Confrontado com a API a correr, não só em
+    teste: apagada `reports_inbox:read` da base de desenvolvimento, o arranque
+    escreveu *"1 permissao(oes) exigida(s) pelas rotas nao existem na base de
+    dados: reports_inbox:read … respondem 403 a TODOS os perfis. Corra `python -m
+    scripts.manage init`"*; reposta (1 criada, 5 atribuições), volta ao silêncio e
+    o contrato confirma. 4 testes, as três peças verificadas por reversão — sem a
+    chamada no `lifespan` falha 1, a encontrar sem avisar falha 1, com a medição
+    sempre vazia falham 2.
 
 Uma decisão de desenho que vale registar: **a plataforma não classifica por
 palavras-chave.** Uma categoria inferida do assunto de um email seria apresentada
