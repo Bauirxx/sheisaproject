@@ -65,6 +65,8 @@ não correspondência com o servidor.
 | [`docs/ESTADO.md`](docs/ESTADO.md) | registo completo de decisões e defeitos corrigidos |
 | [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) | o que se aproveitou de RTIR/TheHive/Wazuh e o que se fez de outra maneira |
 | [`docs/MONOGRAFIA-CAP4.md`](docs/MONOGRAFIA-CAP4.md) | o que vai ser defendido; **§4.14 é o cenário de demonstração** |
+| [`docs/INTEGRACOES.md`](docs/INTEGRACOES.md) | as cinco integrações + correio: o que cada uma faz e como testar |
+| [`docs/CORRER-E-TESTAR-INTEGRACOES.md`](docs/CORRER-E-TESTAR-INTEGRACOES.md) | playbook passo a passo para pôr tudo a correr e testar noutra máquina |
 | [`docs/BRIEFING.md`](docs/BRIEFING.md) | especificação técnica |
 | [`README.md`](README.md) | instalação de raiz |
 

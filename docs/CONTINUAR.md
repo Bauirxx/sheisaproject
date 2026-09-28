@@ -96,6 +96,14 @@ permissões em falta e o comando que as cria (defeito 71). Veja
 `backend/var/tmp/api.log` depois de um `restart` — se não houver linha
 `sheisa.arranque`, a base está sincronizada.
 
+> **Integrações a funcionar (2026-09-28).** As cinco integrações e o correio estão
+> operacionais e verificados a correr: correio por **Gmail real** (envio e recolha
+> IMAP), QRadar e NetScout contra os **simuladores** (`lab/siem-sim`), Suricata e
+> Wazuh no laboratório, API genérica por POST. Para reproduzir e testar tudo numa
+> máquina nova — comandos exactos e armadilhas — seguir
+> [`CORRER-E-TESTAR-INTEGRACOES.md`](CORRER-E-TESTAR-INTEGRACOES.md). Sensores
+> Suricata noutras máquinas: `lab/sensor-remoto/`.
+
 As contas de laboratório estão em [`ESTADO.md` §6](ESTADO.md#6-contas-e-credenciais-do-ambiente-local),
 com uma ressalva: **a palavra-passe de administração é diferente em cada
 máquina**, porque é gerada pelo `manage init` de cada base de dados.

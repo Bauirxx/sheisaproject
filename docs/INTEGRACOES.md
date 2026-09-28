@@ -4,6 +4,10 @@ As cinco integrações do SHEISA, o que cada uma faz, e **como a pôr a funciona
 a testar**. O princípio §4 aplica-se: nenhuma aparece como activa sem ter falado
 com o serviço, e o que não foi verificado contra um sistema real é dito.
 
+> Para o **passo a passo de reproduzir tudo numa máquina nova** (comandos exactos,
+> ordem de arranque, armadilhas do laboratório), ver
+> [`CORRER-E-TESTAR-INTEGRACOES.md`](CORRER-E-TESTAR-INTEGRACOES.md).
+
 ## Panorama
 
 | Integração | Sentido | Verificada | Como entram os dados |
