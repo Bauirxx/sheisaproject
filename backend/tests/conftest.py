@@ -53,10 +53,51 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
-from app.core.config import settings
+from app.core.config import PROJECT_ROOT, settings
 from app.core.database import get_session
 from app.core.security import hash_password
 from app.main import app as fastapi_app
+
+
+def _fixar_correio_no_laboratorio() -> None:
+    """A suite **nunca** fala com um servidor de correio real.
+
+    As definições vêm do mesmo `.env` que a aplicação usa, e esse `.env` pode
+    apontar para uma conta real (Gmail). Sem isto, cada submissão pelo portal
+    num teste enviaria um aviso de recepção verdadeiro, da conta de quem corre a
+    suite, para os endereços de exemplo dos testes — alguns em domínios que
+    existem. Aconteceu quase: o `.env` foi mudado para o Gmail e nada aqui o
+    impedia.
+
+    Feito ao importar o `conftest`, e não numa fixture: os testes do ciclo de
+    correio decidem se se saltam **na recolha** (`skipif` ao nível do módulo),
+    antes de qualquer fixture correr, e têm de ver já o laboratório.
+
+    As credenciais do laboratório (Mailpit) são as mesmas que o
+    `docker-compose.yml` lhe dá, lidas do `.env` com nome próprio
+    (`SHEISA_LAB_MAIL_*`) — separadas das do canal da aplicação.
+    """
+    from dotenv import dotenv_values
+
+    lab = {**dotenv_values(PROJECT_ROOT / ".env"), **os.environ}
+    anfitriao = lab.get("SHEISA_LAB_MAIL_HOST") or "127.0.0.1"
+    settings.smtp_host = anfitriao
+    settings.smtp_port = int(lab.get("SHEISA_LAB_SMTP_PORT") or 1025)
+    settings.smtp_user = ""
+    settings.smtp_password = ""
+    settings.smtp_starttls = False
+    settings.mail_from = "cert@sheisa.local"
+    settings.mail_collect_protocol = "POP3"
+    settings.pop3_host = anfitriao
+    settings.pop3_port = int(lab.get("SHEISA_LAB_POP3_PORT") or 1110)
+    settings.pop3_tls = False
+    settings.pop3_user = lab.get("SHEISA_LAB_MAIL_USER") or "cert@sheisa.local"
+    settings.pop3_password = lab.get("SHEISA_LAB_MAIL_PASSWORD") or ""
+    settings.pop3_max_por_recolha = 50
+    settings.imap_host = ""
+
+
+_fixar_correio_no_laboratorio()
 
 #: Palavras-passe das contas de teste. Cumprem `validate_password_strength`
 #: (>= 12 caracteres, minúscula, maiúscula e algarismo) para que as contas

@@ -291,6 +291,9 @@ async def transition_incident(
             raise AuthorizationError(required=Permission.INCIDENTS_CLOSE.value)
 
     incident = await incident_service.get_incident(session, incident_id, with_details=True)
+    # O destino do escalamento só conta se vier no pedido: ausente não mexe na
+    # atribuição, `null` retira-a (ver `incident_service.NAO_ALTERAR`).
+    enviados = payload.model_fields_set
     await incident_service.transition(
         session, ctx,
         incident=incident,
@@ -298,6 +301,13 @@ async def transition_incident(
         note=payload.note,
         resolution_summary=payload.resolution_summary,
         false_positive_reason=payload.false_positive_reason,
+        escalar_para_equipa=(
+            payload.team_id if "team_id" in enviados else incident_service.NAO_ALTERAR
+        ),
+        escalar_para_responsavel=(
+            payload.assignee_id if "assignee_id" in enviados
+            else incident_service.NAO_ALTERAR
+        ),
     )
     return await _to_read(session, incident)
 
@@ -313,11 +323,16 @@ async def assign_incident(
     _: Annotated[object, Depends(require(Permission.INCIDENTS_ASSIGN))],
 ) -> IncidentRead:
     incident = await incident_service.get_incident(session, incident_id, with_details=True)
+    # Só se altera o que vier no pedido. Antes, `{"team_id": ...}` sozinho
+    # apagava o responsável: o campo ausente chegava como `None`.
+    enviados = payload.model_fields_set
     await incident_service.assign(
         session, ctx,
         incident=incident,
-        assignee_id=payload.assignee_id,
-        team_id=payload.team_id,
+        assignee_id=(
+            payload.assignee_id if "assignee_id" in enviados else incident_service.NAO_ALTERAR
+        ),
+        team_id=payload.team_id if "team_id" in enviados else incident_service.NAO_ALTERAR,
     )
     return await _to_read(session, incident)
 

@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     mail_from: str = ""
     mail_from_name: str = "Equipa de Resposta a Incidentes"
 
+    #: Endereço da interface, para os avisos por email levarem uma ligação
+    #: directa ao incidente. Sem ela, quem recebe teria de procurar a
+    #: referência à mão.
+    url_da_interface: str = "http://127.0.0.1:5500"
+
     #: Protocolo de recolha da caixa: "POP3" ou "IMAP".
     #:
     #: POP3 serve o servidor de laboratório (Mailpit). Um servidor real — Gmail,

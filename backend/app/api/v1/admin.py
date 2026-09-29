@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import Field
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.core import audit
@@ -24,7 +24,13 @@ from app.models.system import AuditLog, Integration, Notification
 from app.schemas.auth import (
     PasswordResetRequest,
     RoleRead,
+    TeamCreate,
+    TeamDetail,
+    TeamMember,
+    TeamMemberAdd,
     TeamRead,
+    TeamSummary,
+    TeamUpdate,
     UserCreate,
     UserDetail,
     UserRead,
@@ -38,6 +44,7 @@ role_router = APIRouter(prefix="/roles", tags=["Perfis e permissões"])
 audit_router = APIRouter(prefix="/audit", tags=["Auditoria"])
 integration_router = APIRouter(prefix="/integrations", tags=["Integrações"])
 notification_router = APIRouter(prefix="/notifications", tags=["Notificações"])
+team_router = APIRouter(prefix="/teams", tags=["Equipas"])
 
 
 def _to_detail(user: User) -> UserDetail:
@@ -249,6 +256,186 @@ async def list_teams(
 ) -> list[TeamRead]:
     result = await session.execute(select(Team).order_by(Team.name))
     return [TeamRead.model_validate(t) for t in result.scalars()]
+
+
+# ------------------------------------------------- equipas (grupos de triagem)
+#
+# Um incidente é entregue a um responsável *e* a uma equipa; ao atribuir ou
+# escalar para uma equipa, os membros activos são avisados na plataforma e por
+# email (`aviso_service`). Cada pessoa pertence a uma equipa de cada vez —
+# juntá-la a outra tira-a da anterior, e a auditoria regista de onde saiu.
+# Equipas não se apagam, desactivam-se: incidentes antigos continuam a apontar
+# para elas.
+async def _equipa_ou_404(session, team_id: uuid.UUID) -> Team:
+    equipa = await session.get(Team, team_id)
+    if equipa is None:
+        raise NotFoundError("Equipa", team_id)
+    return equipa
+
+
+async def _detalhe_equipa(session, equipa: Team) -> TeamDetail:
+    membros = (
+        await session.execute(
+            select(User).where(User.team_id == equipa.id)
+            .options(selectinload(User.role)).order_by(User.full_name)
+        )
+    ).scalars().all()
+    return TeamDetail(
+        id=equipa.id, name=equipa.name, description=equipa.description,
+        is_active=equipa.is_active,
+        membros=[TeamMember.model_validate(m) for m in membros],
+    )
+
+
+async def _nome_livre(session, nome: str, excepto: uuid.UUID | None = None) -> None:
+    stmt = select(Team).where(Team.name.ilike(nome.strip()))
+    if excepto is not None:
+        stmt = stmt.where(Team.id != excepto)
+    if (await session.execute(stmt)).scalar_one_or_none() is not None:
+        raise ConflictError(f"Já existe uma equipa com o nome '{nome.strip()}'.")
+
+
+@team_router.get(
+    "", response_model=list[TeamSummary],
+    summary="Listar equipas com o número de membros activos",
+)
+async def listar_equipas(
+    session: SessionDep,
+    _: Annotated[object, Depends(require(Permission.USERS_READ))],
+) -> list[TeamSummary]:
+    activos = (
+        select(User.team_id, func.count(User.id).label("n"))
+        .where(User.is_active.is_(True), User.team_id.is_not(None))
+        .group_by(User.team_id).subquery()
+    )
+    linhas = await session.execute(
+        select(Team, func.coalesce(activos.c.n, 0))
+        .outerjoin(activos, activos.c.team_id == Team.id)
+        .order_by(Team.name)
+    )
+    return [
+        TeamSummary(
+            id=t.id, name=t.name, description=t.description, is_active=t.is_active,
+            total_membros=n,
+        )
+        for t, n in linhas.all()
+    ]
+
+
+@team_router.post(
+    "", response_model=TeamDetail, status_code=status.HTTP_201_CREATED,
+    summary="Criar equipa (grupo de triagem)",
+)
+async def criar_equipa(
+    payload: TeamCreate,
+    session: SessionDep,
+    ctx: AuditDep,
+    _: Annotated[object, Depends(require(Permission.USERS_MANAGE))],
+) -> TeamDetail:
+    await _nome_livre(session, payload.name)
+    equipa = Team(name=payload.name.strip(), description=payload.description, is_active=True)
+    session.add(equipa)
+    await session.flush()
+    await audit.record(
+        session, ctx,
+        action="CRIAR_EQUIPA", resource_type="equipa", resource_id=equipa.id,
+        description=f"Equipa '{equipa.name}' criada.",
+        new_value={"nome": equipa.name, "descricao": equipa.description},
+    )
+    return await _detalhe_equipa(session, equipa)
+
+
+@team_router.get("/{team_id}", response_model=TeamDetail, summary="Detalhe da equipa")
+async def detalhe_equipa(
+    team_id: uuid.UUID,
+    session: SessionDep,
+    _: Annotated[object, Depends(require(Permission.USERS_READ))],
+) -> TeamDetail:
+    return await _detalhe_equipa(session, await _equipa_ou_404(session, team_id))
+
+
+@team_router.patch("/{team_id}", response_model=TeamDetail, summary="Editar ou desactivar equipa")
+async def editar_equipa(
+    team_id: uuid.UUID,
+    payload: TeamUpdate,
+    session: SessionDep,
+    ctx: AuditDep,
+    _: Annotated[object, Depends(require(Permission.USERS_MANAGE))],
+) -> TeamDetail:
+    equipa = await _equipa_ou_404(session, team_id)
+    changes = payload.model_dump(exclude_unset=True)
+    reject_nulls_for_required(equipa, changes)
+    if "name" in changes:
+        await _nome_livre(session, changes["name"], excepto=equipa.id)
+        changes["name"] = changes["name"].strip()
+    for campo, valor in changes.items():
+        setattr(equipa, campo, valor)
+    await audit.record_change(
+        session, ctx, equipa,
+        action="EDITAR_EQUIPA", resource_type="equipa",
+        description=f"Equipa '{equipa.name}' actualizada.",
+    )
+    return await _detalhe_equipa(session, equipa)
+
+
+@team_router.post(
+    "/{team_id}/members", response_model=TeamDetail, summary="Juntar um utilizador à equipa"
+)
+async def juntar_membro(
+    team_id: uuid.UUID,
+    payload: TeamMemberAdd,
+    session: SessionDep,
+    ctx: AuditDep,
+    _: Annotated[object, Depends(require(Permission.USERS_MANAGE))],
+) -> TeamDetail:
+    equipa = await _equipa_ou_404(session, team_id)
+    if not equipa.is_active:
+        raise ValidationError(
+            f"A equipa '{equipa.name}' está desactivada.", code="EQUIPA_INACTIVA"
+        )
+    user = await auth_service.get_user_or_404(session, payload.user_id)
+    if user.team_id == equipa.id:
+        raise ConflictError(f"'{user.email}' já é membro da equipa '{equipa.name}'.")
+    anterior = await session.get(Team, user.team_id) if user.team_id else None
+    user.team_id = equipa.id
+    await audit.record(
+        session, ctx,
+        action="JUNTAR_MEMBRO_EQUIPA", resource_type="equipa", resource_id=equipa.id,
+        description=(
+            f"'{user.email}' juntou-se à equipa '{equipa.name}'"
+            + (f" (saiu de '{anterior.name}')." if anterior else ".")
+        ),
+        old_value={"equipa": anterior.name if anterior else None},
+        new_value={"utilizador": user.email, "equipa": equipa.name},
+    )
+    await session.flush()
+    return await _detalhe_equipa(session, equipa)
+
+
+@team_router.delete(
+    "/{team_id}/members/{user_id}", response_model=TeamDetail,
+    summary="Retirar um utilizador da equipa",
+)
+async def retirar_membro(
+    team_id: uuid.UUID,
+    user_id: uuid.UUID,
+    session: SessionDep,
+    ctx: AuditDep,
+    _: Annotated[object, Depends(require(Permission.USERS_MANAGE))],
+) -> TeamDetail:
+    equipa = await _equipa_ou_404(session, team_id)
+    user = await auth_service.get_user_or_404(session, user_id)
+    if user.team_id != equipa.id:
+        raise ConflictError(f"'{user.email}' não é membro da equipa '{equipa.name}'.")
+    user.team_id = None
+    await audit.record(
+        session, ctx,
+        action="RETIRAR_MEMBRO_EQUIPA", resource_type="equipa", resource_id=equipa.id,
+        description=f"'{user.email}' saiu da equipa '{equipa.name}'.",
+        old_value={"utilizador": user.email, "equipa": equipa.name},
+    )
+    await session.flush()
+    return await _detalhe_equipa(session, equipa)
 
 
 # ------------------------------------------------------------------ auditoria

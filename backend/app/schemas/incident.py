@@ -75,9 +75,20 @@ class IncidentTransition(ApiInput):
         default=None, max_length=2000,
         description="Obrigatório ao marcar como FALSO_POSITIVO.",
     )
+    team_id: uuid.UUID | None = Field(
+        default=None,
+        description="Só com ESCALADO: a equipa para que se escala. Os membros "
+        "activos são avisados na plataforma e por email.",
+    )
+    assignee_id: uuid.UUID | None = Field(
+        default=None,
+        description="Só com ESCALADO: a pessoa que passa a ser responsável.",
+    )
 
 
 class IncidentAssign(ApiInput):
+    """Campos ausentes ficam como estão; enviados a `null` são retirados."""
+
     assignee_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
 
@@ -279,6 +290,12 @@ class IncidentMetrics(ApiModel):
     accoes_executadas: int = 0
 
 
+class EquipaResumo(ApiModel):
+    id: uuid.UUID
+    name: str
+    is_active: bool
+
+
 class IncidentRead(IncidentListItem):
     """Detalhe completo do incidente."""
 
@@ -287,6 +304,9 @@ class IncidentRead(IncidentListItem):
     confidence: str
     source_detail: str | None = None
     team_id: uuid.UUID | None = None
+    #: A equipa com nome: com só o identificador, a interface não tinha como
+    #: mostrar a que grupo o incidente está entregue.
+    team: EquipaResumo | None = None
     reporter: UserSummary | None = None
     campaign_id: uuid.UUID | None = None
 

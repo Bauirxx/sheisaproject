@@ -266,6 +266,7 @@ for _router in (
     report_routes.router,
     admin_routes.user_router,
     admin_routes.role_router,
+    admin_routes.team_router,
     admin_routes.audit_router,
     admin_routes.integration_router,
     admin_routes.notification_router,

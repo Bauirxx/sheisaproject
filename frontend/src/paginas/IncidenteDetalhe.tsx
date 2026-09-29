@@ -31,6 +31,7 @@ import type {
   Alerta,
   Comentario,
   EntradaDaLinhaTemporal,
+  EquipaResumo,
   EstadoIncidente,
   Evidencia,
   Incidente,
@@ -123,12 +124,23 @@ function Propriedade({ rotulo, children }: { rotulo: string; children: React.Rea
  */
 function Transicoes({ incidente }: { incidente: Incidente }) {
   const clienteDeDados = useQueryClient();
+  const { pode } = useSessao();
   const [destino, definirDestino] = useState<EstadoIncidente | null>(null);
   const [nota, definirNota] = useState("");
+  const [equipaDeEscalamento, definirEquipaDeEscalamento] = useState("");
 
   const exigeResumo = destino === "RESOLVIDO";
   const exigeMotivo = destino === "FALSO_POSITIVO";
   const exigeTexto = exigeResumo || exigeMotivo;
+  const escala = destino === "ESCALADO";
+  const podeEscolherEquipa = pode("incidents:assign") && pode("users:read");
+
+  const equipas = useQuery({
+    queryKey: ["equipas"],
+    queryFn: () => pedir<EquipaResumo[]>("/teams"),
+    enabled: escala && podeEscolherEquipa,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const transicao = useMutation({
     mutationFn: async () => {
@@ -140,12 +152,15 @@ function Transicoes({ incidente }: { incidente: Incidente }) {
           ...(exigeResumo ? { resolution_summary: nota } : {}),
           ...(exigeMotivo ? { false_positive_reason: nota } : {}),
           ...(!exigeTexto && nota ? { note: nota } : {}),
+          // Só se envia se for escolhida: ausente, a equipa actual mantém-se.
+          ...(escala && equipaDeEscalamento ? { team_id: equipaDeEscalamento } : {}),
         },
       });
     },
     onSuccess: async () => {
       definirDestino(null);
       definirNota("");
+      definirEquipaDeEscalamento("");
       await clienteDeDados.invalidateQueries({ queryKey: ["incidente", incidente.id] });
       await clienteDeDados.invalidateQueries({ queryKey: ["linha", incidente.id] });
     },
@@ -201,6 +216,36 @@ function Transicoes({ incidente }: { incidente: Incidente }) {
                   : ""
             }
           />
+          {escala && podeEscolherEquipa ? (
+            <div className="campo">
+              <label className="campo__etiqueta" htmlFor="equipa-escalamento">
+                Escalar para a equipa (opcional)
+              </label>
+              <select
+                id="equipa-escalamento"
+                className="selector"
+                value={equipaDeEscalamento}
+                disabled={equipas.isPending}
+                onChange={(e) => definirEquipaDeEscalamento(e.target.value)}
+              >
+                <option value="">
+                  {incidente.team ? `— manter ${incidente.team.name} —` : "— sem mudar de equipa —"}
+                </option>
+                {equipas.data
+                  ?.filter((equipa) => equipa.is_active)
+                  .map((equipa) => (
+                    <option key={equipa.id} value={equipa.id}>
+                      {equipa.name} ({equipa.total_membros} membro{equipa.total_membros === 1 ? "" : "s"})
+                    </option>
+                  ))}
+              </select>
+              <span className="campo__ajuda">
+                O responsável e os membros activos da equipa são avisados na
+                plataforma e por email.
+              </span>
+              {equipas.error ? <Erro erro={equipas.error} /> : null}
+            </div>
+          ) : null}
           {transicao.error ? <Erro erro={transicao.error} /> : null}
           <div className="linha">
             <button
@@ -247,12 +292,17 @@ function Atribuicao({ incidente }: { incidente: Incidente }) {
     staleTime: 5 * 60 * 1000,
   });
 
+  const equipas = useQuery({
+    queryKey: ["equipas"],
+    queryFn: () => pedir<EquipaResumo[]>("/teams"),
+    enabled: podeAtribuir,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Cada selector envia só o seu campo: a API deixa o outro como está.
   const atribuir = useMutation({
-    mutationFn: (assignee_id: string | null) =>
-      pedir(`/incidents/${incidente.id}/assign`, {
-        metodo: "POST",
-        corpo: { assignee_id },
-      }),
+    mutationFn: (corpo: { assignee_id: string | null } | { team_id: string | null }) =>
+      pedir(`/incidents/${incidente.id}/assign`, { metodo: "POST", corpo }),
     onSuccess: async () => {
       await clienteDeDados.invalidateQueries({ queryKey: ["incidente", incidente.id] });
       await clienteDeDados.invalidateQueries({ queryKey: ["linha", incidente.id] });
@@ -261,21 +311,30 @@ function Atribuicao({ incidente }: { incidente: Incidente }) {
 
   if (!podeAtribuir) {
     return (
-      <p className="secundario">
-        {incidente.assignee?.nome ?? (
-          <span className="terciario">Sem responsável atribuído.</span>
-        )}
-      </p>
+      <div className="pilha" style={{ gap: "var(--espaco-1)" }}>
+        <p className="secundario">
+          {incidente.assignee?.nome ?? (
+            <span className="terciario">Sem responsável atribuído.</span>
+          )}
+        </p>
+        <p className="secundario">
+          {incidente.team ? `Equipa: ${incidente.team.name}` : (
+            <span className="terciario">Sem equipa atribuída.</span>
+          )}
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="pilha" style={{ gap: "var(--espaco-2)" }}>
+      <label className="campo__etiqueta" htmlFor="atribuir-responsavel">Responsável</label>
       <select
+        id="atribuir-responsavel"
         className="selector"
         value={incidente.assignee?.id ?? ""}
         disabled={atribuir.isPending || utilizadores.isPending}
-        onChange={(e) => atribuir.mutate(e.target.value || null)}
+        onChange={(e) => atribuir.mutate({ assignee_id: e.target.value || null })}
       >
         <option value="">— sem responsável —</option>
         {utilizadores.data?.itens.map((u) => (
@@ -284,12 +343,31 @@ function Atribuicao({ incidente }: { incidente: Incidente }) {
           </option>
         ))}
       </select>
+      <label className="campo__etiqueta" htmlFor="atribuir-equipa">Equipa</label>
+      <select
+        id="atribuir-equipa"
+        className="selector"
+        value={incidente.team?.id ?? ""}
+        disabled={atribuir.isPending || equipas.isPending}
+        onChange={(e) => atribuir.mutate({ team_id: e.target.value || null })}
+      >
+        <option value="">— sem equipa —</option>
+        {equipas.data
+          ?.filter((equipa) => equipa.is_active || equipa.id === incidente.team?.id)
+          .map((equipa) => (
+            <option key={equipa.id} value={equipa.id} disabled={!equipa.is_active}>
+              {equipa.name} ({equipa.total_membros} membro{equipa.total_membros === 1 ? "" : "s"})
+            </option>
+          ))}
+      </select>
       {atribuir.isPending ? <span className="terciario">A atribuir…</span> : null}
       {atribuir.error ? <Erro erro={atribuir.error} /> : null}
       {utilizadores.error ? <Erro erro={utilizadores.error} /> : null}
+      {equipas.error ? <Erro erro={equipas.error} /> : null}
       <p className="terciario">
-        Atribuir marca o reconhecimento do incidente, que é o instante a partir
-        do qual o tempo de resposta passa a contar.
+        Quem passa a ser responsável, e os membros activos da equipa escolhida,
+        são avisados na plataforma e por email. Atribuir marca também o
+        reconhecimento do incidente, a partir do qual o tempo de resposta conta.
       </p>
     </div>
   );

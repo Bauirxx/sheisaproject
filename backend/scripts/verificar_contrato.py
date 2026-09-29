@@ -94,7 +94,7 @@ print("\n== incidente (detalhe) ==")
 _, det = pedir(f"/incidents/{alvo['id']}", token)
 conferir("Incidente", det,
          ["description", "subtype", "confidence", "origin", "source_kind",
-          "source_detail", "team_id", "acknowledged_at", "contained_at",
+          "source_detail", "team_id", "team", "acknowledged_at", "contained_at",
           "eradicated_at", "resolved_at", "closed_at", "resolution_summary",
           "lessons_learned", "false_positive_reason", "tags",
           "transicoes_permitidas", "metricas"])
@@ -360,6 +360,27 @@ elif equipas:
     conferir("Equipa", equipas[0], ["id", "name", "description", "is_active"])
 else:
     print("  --  Equipa: sem equipas para verificar")
+
+# Grupos de triagem: a lista com o número de membros, e o detalhe com eles.
+estado, resumo_equipas = pedir("/teams", token)
+if estado != 200:
+    falhas.append(f"EquipaResumo: HTTP {estado} em /teams")
+elif resumo_equipas:
+    conferir("EquipaResumo", resumo_equipas[0],
+             ["id", "name", "description", "is_active", "total_membros"])
+    estado, detalhe_equipa = pedir(f"/teams/{resumo_equipas[0]['id']}", token)
+    if estado != 200:
+        falhas.append(f"EquipaDetalhe: HTTP {estado} em /teams/{{id}}")
+    else:
+        conferir("EquipaDetalhe", detalhe_equipa,
+                 ["id", "name", "description", "is_active", "membros"])
+        if detalhe_equipa["membros"]:
+            conferir("MembroDeEquipa", detalhe_equipa["membros"][0],
+                     ["id", "email", "full_name", "is_active", "role"])
+        else:
+            print("  --  MembroDeEquipa: equipa sem membros")
+else:
+    print("  --  EquipaResumo: sem equipas para verificar")
 
 estado, motor = pedir("/recommendations/meta/tipos", token)
 if estado != 200:

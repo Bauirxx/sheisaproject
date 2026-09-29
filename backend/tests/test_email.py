@@ -404,3 +404,19 @@ def test_recolha_imap_sem_configuracao_levanta(monkeypatch):
 
     with pytest.raises(ems.EmailNaoConfigurado):
         ems._recolher_imap(marcar_lida=True)
+
+
+# ================================================= a suite nunca sai para fora
+def test_a_suite_so_fala_com_o_servidor_de_correio_do_laboratorio():
+    """Regressão: com o `.env` apontado a uma conta real, os testes enviavam a sério.
+
+    O `.env` da aplicação pode estar configurado para o Gmail; a suite lê o
+    mesmo ficheiro. Sem a fixação feita no `conftest`, cada submissão pelo
+    portal num teste mandava um aviso de recepção verdadeiro, da conta real,
+    para os endereços de exemplo dos testes.
+    """
+    assert settings.smtp_host in ("127.0.0.1", "localhost"), settings.smtp_host
+    assert settings.smtp_user == "" and settings.smtp_password == ""
+    assert settings.mail_from.endswith("@sheisa.local"), settings.mail_from
+    assert settings.mail_collect_protocol == "POP3"
+    assert settings.pop3_host in ("127.0.0.1", "localhost"), settings.pop3_host

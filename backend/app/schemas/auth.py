@@ -110,6 +110,41 @@ class TeamRead(ApiModel):
     is_active: bool
 
 
+class TeamCreate(ApiInput):
+    """Grupo de triagem/resposta. Os membros juntam-se depois, um a um."""
+
+    name: str = Field(min_length=2, max_length=80)
+    description: str = Field(default="", max_length=2000)
+
+
+class TeamUpdate(ApiInput):
+    name: str | None = Field(default=None, min_length=2, max_length=80)
+    description: str | None = Field(default=None, max_length=2000)
+    #: Desactivar em vez de apagar: incidentes antigos continuam a apontar para
+    #: a equipa, e a auditoria continua a fazer sentido.
+    is_active: bool | None = None
+
+
+class TeamMemberAdd(ApiInput):
+    user_id: uuid.UUID
+
+
+class TeamMember(ApiModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    is_active: bool
+    role: RoleSummary
+
+
+class TeamSummary(TeamRead):
+    total_membros: int
+
+
+class TeamDetail(TeamRead):
+    membros: list[TeamMember]
+
+
 class UserRead(ApiModel):
     id: uuid.UUID
     email: str

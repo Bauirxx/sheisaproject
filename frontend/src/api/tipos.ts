@@ -186,8 +186,9 @@ export interface Incidente extends IncidenteResumo {
   origin: string;
   source_kind: string;
   source_detail: string | null;
-  /** A API devolve o identificador da equipa, não o objecto. */
   team_id: string | null;
+  /** A equipa (grupo de triagem) a que o incidente está entregue. */
+  team: { id: string; name: string; is_active: boolean } | null;
   reporter: ResumoUtilizador | null;
   acknowledged_at: string | null;
   contained_at: string | null;
@@ -701,6 +702,24 @@ export interface Equipa {
   name: string;
   description: string;
   is_active: boolean;
+}
+
+/** `GET /teams`: com o número de membros activos (os que recebem avisos). */
+export interface EquipaResumo extends Equipa {
+  total_membros: number;
+}
+
+export interface MembroDeEquipa {
+  id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  role: { id: string; name: string; description: string };
+}
+
+/** `GET /teams/{id}` e respostas das operações sobre a equipa. */
+export interface EquipaDetalhe extends Equipa {
+  membros: MembroDeEquipa[];
 }
 
 /**

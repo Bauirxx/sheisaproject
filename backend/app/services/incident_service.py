@@ -51,6 +51,11 @@ from app.models.incident import Incident, IncidentRelation, IncidentTechnique
 from app.models.investigation import Comment, Observation
 from app.models.telemetry import Alert, Event
 
+#: "Este campo não veio no pedido" — distinto de vir a `null`, que significa
+#: retirar. Sem esta distinção, atribuir só a equipa (`{"team_id": ...}`)
+#: apagava o responsável, porque o campo ausente chegava como `None`.
+NAO_ALTERAR: object = object()
+
 #: Prazo de resposta por severidade, em horas. Base do campo `due_at` e dos
 #: indicadores de cumprimento do painel.
 SLA_HOURS: dict[Severity, int] = {
@@ -562,8 +567,23 @@ async def transition(
     note: str | None = None,
     resolution_summary: str | None = None,
     false_positive_reason: str | None = None,
+    escalar_para_equipa: uuid.UUID | None | object = NAO_ALTERAR,
+    escalar_para_responsavel: uuid.UUID | None | object = NAO_ALTERAR,
 ) -> Incident:
-    """Altera o estado do incidente, validando contra o ciclo de vida."""
+    """Altera o estado do incidente, validando contra o ciclo de vida.
+
+    Ao escalar, pode indicar-se a equipa e/ou a pessoa que passa a responder —
+    "escalar para a equipa de N2" numa só acção. Só é aceite com `ESCALADO`:
+    noutras transições a atribuição faz-se pela rota própria.
+    """
+    alvo_indicado = (
+        escalar_para_equipa is not NAO_ALTERAR or escalar_para_responsavel is not NAO_ALTERAR
+    )
+    if alvo_indicado and new_status != IncidentStatus.ESCALADO:
+        raise ValidationError(
+            "Só se indica equipa ou responsável na transição quando se escala.",
+            code="ALVO_SO_AO_ESCALAR",
+        )
     current = incident.status
     if new_status == current:
         raise ConflictError(f"O incidente já está em {current.value}.")
@@ -639,22 +659,35 @@ async def transition(
         changed_fields=["status"],
     )
 
-    # Escalar avisa o responsável — é o sinal de que o caso precisa de mais mãos.
+    # Escalar avisa quem passa a responder — o responsável e toda a equipa —, na
+    # plataforma e por email: é o sinal de que o caso precisa de mais mãos, e
+    # não pode depender de alguém estar com a plataforma aberta.
     if new_status == IncidentStatus.ESCALADO:
-        from app.core.enums import NotificationKind, Severity
-        from app.services import notification_service
+        from app.core.enums import NotificationKind
+        from app.models.identity import Team, User
+        from app.services import aviso_service
 
-        notification_service.notificar(
-            session,
-            user_id=incident.assignee_id,
+        if alvo_indicado:
+            # Sem aviso próprio: o aviso de escalamento, abaixo, cobre as mesmas
+            # pessoas, e duas mensagens pelo mesmo acontecimento seriam ruído.
+            await assign(
+                session, ctx, incident=incident,
+                assignee_id=escalar_para_responsavel, team_id=escalar_para_equipa,
+                avisar=False,
+            )
+        equipa = await session.get(Team, incident.team_id) if incident.team_id else None
+        responsavel = (
+            await session.get(User, incident.assignee_id) if incident.assignee_id else None
+        )
+        membros = await aviso_service.membros_activos(session, incident.team_id)
+        destino = f" para a equipa {equipa.name}" if equipa else ""
+        await aviso_service.avisar(
+            session, ctx,
+            incidente=incident, destinatarios=[responsavel, *membros],
             kind=NotificationKind.INCIDENTE_ESCALADO,
-            severity=Severity.ALTA,
-            title=f"Incidente escalado: {incident.reference}",
-            body=f"O incidente {incident.reference} — {incident.title} foi escalado.",
-            resource_type="incidente",
-            resource_id=incident.id,
-            resource_reference=incident.reference,
-            excepto=ctx.actor_id,
+            titulo=f"Incidente escalado{destino}",
+            motivo=f"Foi escalado{destino} o incidente",
+            equipa=equipa, responsavel=responsavel,
         )
     return incident
 
@@ -685,49 +718,105 @@ async def assign(
     ctx: AuditContext,
     *,
     incident: Incident,
-    assignee_id: uuid.UUID | None,
-    team_id: uuid.UUID | None = None,
+    assignee_id: uuid.UUID | None | object = NAO_ALTERAR,
+    team_id: uuid.UUID | None | object = NAO_ALTERAR,
+    avisar: bool = True,
 ) -> Incident:
+    """Atribui responsável e/ou equipa, e avisa quem passou a responder.
+
+    Só muda o que vier explicitamente: `NAO_ALTERAR` deixa o campo como está,
+    `None` retira-o. Avisa (na plataforma e por email) a pessoa que passou a ser
+    responsável e os membros activos da equipa que passou a ter o incidente.
+    `avisar=False` é para quem vai avisar a seguir por outro motivo — o
+    escalamento — e não quer mandar duas mensagens pelo mesmo acontecimento.
+    """
+    from app.core.enums import NotificationKind
     from app.core.lookups import require_existing
     from app.models.identity import Team, User
+    from app.services import aviso_service
 
-    await require_existing(session, User, assignee_id, "Utilizador")
-    await require_existing(session, Team, team_id, "Equipa")
+    garantir_editavel(incident)
+    muda_responsavel = assignee_id is not NAO_ALTERAR
+    muda_equipa = team_id is not NAO_ALTERAR
 
-    previous = incident.assignee_id
-    incident.assignee_id = assignee_id
-    if team_id is not None:
+    if muda_responsavel:
+        await require_existing(session, User, assignee_id, "Utilizador")
+    if muda_equipa and team_id is not None:
+        await require_existing(session, Team, team_id, "Equipa")
+        equipa_nova = await session.get(Team, team_id)
+        if equipa_nova is not None and not equipa_nova.is_active:
+            raise ValidationError(
+                f"A equipa '{equipa_nova.name}' está desactivada e não pode receber "
+                "incidentes.",
+                code="EQUIPA_INACTIVA",
+            )
+
+    responsavel_antes = incident.assignee_id
+    equipa_antes = incident.team_id
+    if muda_responsavel:
+        incident.assignee_id = assignee_id
+    if muda_equipa:
         incident.team_id = team_id
-    if incident.acknowledged_at is None and assignee_id is not None:
+    if incident.acknowledged_at is None and incident.assignee_id is not None:
         incident.acknowledged_at = datetime.now(UTC)
 
+    alterados = [
+        campo for campo, muda in (("assignee_id", muda_responsavel), ("team_id", muda_equipa))
+        if muda
+    ]
     await audit.record(
         session, ctx,
         action="ATRIBUIR_INCIDENTE", resource_type="incidente",
         resource_id=incident.id, resource_reference=incident.reference,
-        description=f"Responsável de {incident.reference} alterado.",
-        old_value={"responsavel": str(previous) if previous else None},
-        new_value={"responsavel": str(assignee_id) if assignee_id else None},
-        changed_fields=["assignee_id"],
+        description=f"Atribuição de {incident.reference} alterada.",
+        old_value={
+            "responsavel": str(responsavel_antes) if responsavel_antes else None,
+            "equipa": str(equipa_antes) if equipa_antes else None,
+        },
+        new_value={
+            "responsavel": str(incident.assignee_id) if incident.assignee_id else None,
+            "equipa": str(incident.team_id) if incident.team_id else None,
+        },
+        changed_fields=alterados,
     )
 
-    # Avisa quem passou a ser responsável — mas não quem se atribuiu a si mesmo.
-    if assignee_id is not None and assignee_id != previous:
-        from app.core.enums import NotificationKind
-        from app.services import notification_service
-
-        notification_service.notificar(
-            session,
-            user_id=assignee_id,
-            kind=NotificationKind.INCIDENTE_ATRIBUIDO,
-            severity=incident.severity,
-            title=f"Incidente atribuído: {incident.reference}",
-            body=f"Foi-lhe atribuído o incidente {incident.reference} — {incident.title}.",
-            resource_type="incidente",
-            resource_id=incident.id,
-            resource_reference=incident.reference,
-            excepto=ctx.actor_id,
+    if avisar:
+        novo_responsavel = (
+            await session.get(User, incident.assignee_id)
+            if muda_responsavel and incident.assignee_id
+            and incident.assignee_id != responsavel_antes
+            else None
         )
+        equipa = await session.get(Team, incident.team_id) if incident.team_id else None
+        nova_equipa = (
+            equipa if muda_equipa and incident.team_id and incident.team_id != equipa_antes
+            else None
+        )
+        responsavel_actual = (
+            await session.get(User, incident.assignee_id) if incident.assignee_id else None
+        )
+        if novo_responsavel is not None:
+            await aviso_service.avisar(
+                session, ctx,
+                incidente=incident, destinatarios=[novo_responsavel],
+                kind=NotificationKind.INCIDENTE_ATRIBUIDO,
+                titulo="Incidente atribuído a si",
+                motivo="Foi-lhe atribuído o incidente",
+                equipa=equipa, responsavel=responsavel_actual,
+            )
+        if nova_equipa is not None:
+            membros = await aviso_service.membros_activos(session, nova_equipa.id)
+            # Quem já foi avisado como responsável não recebe segunda mensagem.
+            if novo_responsavel is not None:
+                membros = [m for m in membros if m.id != novo_responsavel.id]
+            await aviso_service.avisar(
+                session, ctx,
+                incidente=incident, destinatarios=membros,
+                kind=NotificationKind.INCIDENTE_ATRIBUIDO,
+                titulo=f"Incidente atribuído à equipa {nova_equipa.name}",
+                motivo=f"A sua equipa ({nova_equipa.name}) recebeu o incidente",
+                equipa=nova_equipa, responsavel=responsavel_actual,
+            )
 
     # `assignee` e `team` são carregados com a consulta (`lazy="selectin"`), pelo
     # que alterar a chave estrangeira não actualiza o objecto já em memória. Sem

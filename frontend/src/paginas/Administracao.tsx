@@ -24,6 +24,7 @@ import {
   AlterarMinhaPalavraPasse,
   EditarUtilizador,
 } from "@/componentes/EditarUtilizador";
+import { Equipas } from "@/componentes/Equipas";
 import { MinhasSessoes } from "@/componentes/MinhasSessoes";
 import { Carregando, Erro, instante, legivel, Vazio } from "@/componentes/comuns";
 import { CampoDeSelecao, Paginacao, useFiltros } from "@/componentes/listagem";
@@ -43,7 +44,7 @@ interface Playbook {
   steps: { id: string; ordering: number; name: string; step_type: string }[];
 }
 
-type Aba = "utilizadores" | "perfis" | "playbooks";
+type Aba = "utilizadores" | "equipas" | "perfis" | "playbooks";
 
 function NovoUtilizador({ aoCriar }: { aoCriar: () => void }) {
   const [aberto, definirAberto] = useState(false);
@@ -483,11 +484,12 @@ export function Administracao() {
   const abasVisiveis = (
     [
       ["utilizadores", "Utilizadores"],
+      ["equipas", "Equipas"],
       ["perfis", "Perfis e permissões"],
       ["playbooks", "Playbooks"],
     ] as [Aba, string][]
   ).filter(([chave]) => {
-    if (chave === "utilizadores") return pode("users:read");
+    if (chave === "utilizadores" || chave === "equipas") return pode("users:read");
     if (chave === "perfis") return pode("roles:manage") || pode("users:read");
     return pode("playbooks:read");
   });
@@ -500,7 +502,7 @@ export function Administracao() {
         <div className="pagina__titulo">
           <h1>Administração</h1>
           <p className="pagina__descricao">
-            Contas, perfis de acesso e procedimentos de resposta.
+            Contas, equipas de triagem, perfis de acesso e procedimentos de resposta.
           </p>
         </div>
       </div>
@@ -521,6 +523,7 @@ export function Administracao() {
       </div>
 
       {aba === "utilizadores" ? <Utilizadores /> : null}
+      {aba === "equipas" ? <Equipas /> : null}
       {aba === "perfis" ? <Perfis /> : null}
       {aba === "playbooks" ? <ListaDePlaybooks /> : null}
     </>
