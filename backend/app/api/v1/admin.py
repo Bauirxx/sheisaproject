@@ -598,6 +598,71 @@ async def list_integrations(
     return output
 
 
+class IntegrationConfigUpdate(ApiInput):
+    """Configuração NÃO-secreta de uma integração.
+
+    Os segredos (URL, token, palavra-passe) continuam a vir só de variáveis de
+    ambiente — nunca da base de dados. O que se guarda aqui são opções de
+    ligação que não são segredo e que precisam de mudar por instância: o URL
+    base, quando se quer sobrepor a variável de ambiente, e a aceitação de um
+    certificado auto-assinado, que uma appliance real (o QRadar Community
+    Edition, por exemplo) usa por omissão.
+    """
+
+    base_url: str | None = Field(
+        default=None, max_length=500,
+        description="Sobrepõe a variável de ambiente do URL. Vazio ('') limpa a "
+        "sobreposição e volta a usar a variável.",
+    )
+    permitir_certificado_auto_assinado: bool | None = Field(
+        default=None,
+        description="Aceitar um certificado TLS auto-assinado. Necessário para o "
+        "QRadar CE e appliances de laboratório; NÃO usar com um certificado "
+        "público válido.",
+    )
+
+
+@integration_router.patch(
+    "/{integration_id}/config",
+    response_model=IntegrationRead,
+    summary="Configurar uma integração (opções não-secretas)",
+    description=(
+        "Define o URL base e a aceitação de certificado auto-assinado. Os "
+        "segredos (token, palavra-passe) vêm sempre de variáveis de ambiente, "
+        "nunca daqui. Só se altera o que vier no pedido."
+    ),
+)
+async def configure_integration(
+    integration_id: uuid.UUID,
+    payload: IntegrationConfigUpdate,
+    session: SessionDep,
+    ctx: AuditDep,
+    _: Annotated[object, Depends(require(Permission.INTEGRATIONS_MANAGE))],
+) -> IntegrationRead:
+    integration = await integration_service.get_integration(session, integration_id)
+    changes = payload.model_dump(exclude_unset=True)
+    # `config` é uma coluna JSON: reatribui-se um dicionário novo para que o
+    # SQLAlchemy detecte a alteração (mutar o mesmo objecto não marca "sujo").
+    config = dict(integration.config)
+    for campo, valor in changes.items():
+        if campo == "base_url" and not valor:
+            config.pop("base_url", None)
+        else:
+            config[campo] = valor
+    integration.config = config
+    await audit.record(
+        session, ctx,
+        action="CONFIGURAR_INTEGRACAO", resource_type="integracao",
+        resource_id=integration.id,
+        description=f"Configuração de {integration.name} alterada: {', '.join(changes)}.",
+        new_value={k: config.get(k) for k in ("base_url", "permitir_certificado_auto_assinado")},
+    )
+    await session.flush()
+    payload_out = IntegrationRead.model_validate(integration)
+    payload_out.variaveis_em_falta = integration_service.missing_secrets(integration)
+    return payload_out
+
+
 @integration_router.post(
     "/{integration_id}/test",
     summary="Testar a ligação a um sistema externo",

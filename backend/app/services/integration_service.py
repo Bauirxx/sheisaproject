@@ -66,7 +66,8 @@ CONNECTOR_CATALOG: dict[SourceKind, dict] = {
             "Importa offenses abertas via API REST (fetch_offenses) e ingere-as "
             "pelo pipeline normal, accionada por POST /integrations/{id}/import. "
             "Verificável no laboratório contra o simulador da API do QRadar "
-            "(lab/siem-sim); não verificada contra uma instância QRadar real."
+            "(lab/siem-sim); não verificada contra uma instância QRadar real. "
+            "Para ligar a uma real, ver docs/QRADAR-NETSCOUT-INSTANCIAS-REAIS.md."
         ),
         "direccao": IntegrationDirection.ENTRADA,
         "variaveis": ["SHEISA_QRADAR_API_URL", "SHEISA_QRADAR_API_TOKEN"],
@@ -80,7 +81,8 @@ CONNECTOR_CATALOG: dict[SourceKind, dict] = {
             "Importa alertas de tráfego via API REST (fetch_alerts) e ingere-os "
             "pelo pipeline normal, accionada por POST /integrations/{id}/import. "
             "Verificável no laboratório contra o simulador da API do NetScout "
-            "(lab/siem-sim); não verificada contra uma instância NetScout real."
+            "(lab/siem-sim); não verificada contra uma instância NetScout real. "
+            "Para ligar a uma real, ver docs/QRADAR-NETSCOUT-INSTANCIAS-REAIS.md."
         ),
         "direccao": IntegrationDirection.ENTRADA,
         "variaveis": ["SHEISA_NETSCOUT_API_URL", "SHEISA_NETSCOUT_API_TOKEN"],

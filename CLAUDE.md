@@ -67,6 +67,7 @@ não correspondência com o servidor.
 | [`docs/MONOGRAFIA-CAP4.md`](docs/MONOGRAFIA-CAP4.md) | o que vai ser defendido; **§4.14 é o cenário de demonstração** |
 | [`docs/INTEGRACOES.md`](docs/INTEGRACOES.md) | as cinco integrações + correio: o que cada uma faz e como testar |
 | [`docs/CORRER-E-TESTAR-INTEGRACOES.md`](docs/CORRER-E-TESTAR-INTEGRACOES.md) | playbook passo a passo para pôr tudo a correr e testar noutra máquina |
+| [`docs/QRADAR-NETSCOUT-INSTANCIAS-REAIS.md`](docs/QRADAR-NETSCOUT-INSTANCIAS-REAIS.md) | ligar o SHEISA a QRadar/NetScout reais na máquina de implantação (24 GB+) |
 | [`docs/BRIEFING.md`](docs/BRIEFING.md) | especificação técnica |
 | [`README.md`](README.md) | instalação de raiz |
 
