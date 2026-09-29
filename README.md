@@ -55,6 +55,35 @@ DETECÇÃO → INGESTÃO → NORMALIZAÇÃO → DEDUPLICAÇÃO → TRIAGEM
 
 ## Arranque rápido
 
+### Windows — um só comando (recomendado)
+
+Numa máquina Windows, o instalador trata de **tudo**: instala as dependências
+(Docker, Python, Node) se faltarem, gera a configuração com segredos próprios,
+levanta a base de dados, migra, semeia os dados iniciais, instala o Suricata
+nativo, e deixa a plataforma a correr. Pede elevação de administrador sozinho.
+
+```powershell
+git clone https://github.com/Bauirxx/sheisaproject.git
+cd sheisaproject
+powershell -ExecutionPolicy Bypass -File instalar.ps1
+```
+
+No fim, mostra o endereço da interface e a palavra-passe de administração (uma
+única vez). É idempotente: se algo faltar (por exemplo, reiniciar depois de
+instalar o Docker pela primeira vez), volte a correr o mesmo comando.
+
+**Gerir a plataforma no dia-a-dia** — um só comando para tudo (base de dados,
+API, interface, sensor):
+
+```powershell
+.\sheisa.ps1 iniciar     # arranca tudo
+.\sheisa.ps1 estado      # o que está a correr
+.\sheisa.ps1 parar       # pára a API, a interface e o sensor
+.\sheisa.ps1 reiniciar
+```
+
+### Manual (qualquer sistema)
+
 **Necessário:** Python 3.11+, Node 20+, Docker.
 
 ```bash
@@ -62,10 +91,11 @@ git clone https://github.com/Bauirxx/sheisaproject.git
 cd sheisaproject
 
 cp .env.example .env
-# Gere segredos reais:
+# Gere segredos reais para POSTGRES_PASSWORD, SHEISA_JWT_SECRET,
+# SHEISA_LAB_MAIL_PASSWORD e os tokens dos SIEM:
 #   python -c "import secrets; print(secrets.token_urlsafe(48))"
 
-docker compose up -d db db-test mail
+docker compose up -d db db-test mail qradar-sim netscout-sim
 
 cd backend
 python -m venv .venv

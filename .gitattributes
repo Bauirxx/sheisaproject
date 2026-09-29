@@ -1,6 +1,10 @@
 # Normaliza finais de linha: o repositorio guarda LF, o Windows recebe CRLF.
 * text=auto eol=lf
 *.sh text eol=lf
+# Scripts do PowerShell: CRLF e mantem-se o BOM (o PowerShell 5.1 le UTF-8 sem
+# BOM como Windows-1252 e parte a analise em ficheiros com acentos). O git nao
+# toca no BOM; a marca -text impede a normalizacao de finais de linha.
+*.ps1 text eol=crlf
 *.png binary
 *.jpg binary
 *.pdf binary
