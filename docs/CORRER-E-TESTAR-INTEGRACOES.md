@@ -155,6 +155,16 @@ Dispara regras ET Open (SSH/Tomcat brute force, recon) e regras locais SHEISA
 (path traversal, ficheiro sensível, força bruta HTTP). Verificado a correr: um
 ataque → **98 alertas** entregues.
 
+### 7.1 Alternativa: Suricata nativo no Windows (sem Docker), para ataques de outro dispositivo
+
+Para capturar tráfego que atravesse mesmo a rede física (ataque de outro
+telemóvel/PC contra esta máquina), o laboratório Docker acima não chega — o
+alvo é um contentor. `lab/windows-sensor/` corre o Suricata directamente sobre
+a placa física do Windows, via WinDivert (**não** Npcap — ver armadilhas 5.25 e
+5.26 no `CONTINUAR.md`, incluindo duas tentativas que não funcionam e porquê).
+Passos e o comando de ataque de outro dispositivo em
+`lab/windows-sensor/README.md`.
+
 ## 8. Wazuh — laboratório local
 
 ```bash

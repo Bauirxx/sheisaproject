@@ -1,0 +1,114 @@
+%YAML 1.1
+---
+# Configuração do Suricata nativo no Windows (§26) — sensor sobre a placa
+# física, sem Docker nem WSL pelo meio.
+#
+# A captura é WinDivert, não pcap/Npcap — decisão tomada depois de dois becos
+# sem saída, registados para não se repetirem (ver README.md desta pasta):
+#
+# 1. A rede espelhada da WSL2 não é uma cópia real do tráfego ao nível de
+#    ligação, só dá conectividade — confirmado com três testes (tcpdump
+#    directo, modo promíscuo, tráfego de saída da própria WSL: zero pacotes
+#    nos três).
+# 2. A captura via Npcap (`-i <interface>`, secção `pcap:`) faz o Suricata
+#    para Windows (testado em 8.0.7 e 7.0.17) **crashar** ao abrir qualquer
+#    interface — mesmo ponto exacto em msvcrt.dll nas duas versões, o que
+#    aponta para uma incompatibilidade desta instalação Windows, não um
+#    defeito do Suricata.
+#
+# `--windivert true` (linha de comandos, ver iniciar.ps1) intercepta pelo
+# WinDivert Windows Filtering Platform em vez de Npcap: funciona, exige
+# Administrador, e tem uma propriedade de segurança — se o Suricata cair, o
+# controlador deixa passar os pacotes sem os bloquear (falha aberta, não
+# fechada). Verificado a capturar tráfego real e a disparar alertas reais.
+
+vars:
+  address-groups:
+    HOME_NET: "any"
+    EXTERNAL_NET: "any"
+    HTTP_SERVERS: "$HOME_NET"
+    SMTP_SERVERS: "$HOME_NET"
+    SQL_SERVERS: "$HOME_NET"
+    DNS_SERVERS: "$HOME_NET"
+    TELNET_SERVERS: "$HOME_NET"
+    AIM_SERVERS: "$EXTERNAL_NET"
+    DC_SERVERS: "$HOME_NET"
+    DNP3_SERVER: "$HOME_NET"
+    DNP3_CLIENT: "$HOME_NET"
+    MODBUS_CLIENT: "$HOME_NET"
+    MODBUS_SERVER: "$HOME_NET"
+    ENIP_CLIENT: "$HOME_NET"
+    ENIP_SERVER: "$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
+    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: 21
+    GENEVE_PORTS: 6081
+    VXLAN_PORTS: 4789
+    TEREDO_PORTS: 3544
+
+default-log-dir: log
+
+# ------------------------------------------------------------------- saídas
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      types:
+        - alert:
+            payload: yes
+            payload-printable: yes
+            metadata: yes
+        - http:
+            extended: yes
+        - dns
+        - tls
+        - flow
+
+  - fast:
+      enabled: yes
+      filename: fast.log
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes
+
+# --------------------------------------------------------------- captura
+# Sem secção de captura aqui: o WinDivert não é configurado no YAML, é passado
+# na linha de comandos (`--windivert true` em iniciar.ps1 — "true" é o filtro
+# do WinDivert, e significa "todo o tráfego"). Uma secção `pcap:` deixada aqui
+# seria decorativa — nada a lê neste modo — por isso foi removida.
+
+# --------------------------------------------------------------- camadas
+app-layer:
+  protocols:
+    http:
+      enabled: yes
+    tls:
+      enabled: yes
+    dns:
+      enabled: yes
+    ssh:
+      enabled: yes
+    ftp:
+      enabled: yes
+
+# ---------------------------------------------------------------- regras
+# Só as regras locais do laboratório: sem suricata-update nesta primeira
+# versão, para não acrescentar mais uma dependência a instalar. O ET Open pode
+# ser acrescentado depois com `pip install suricata-update` e uma entrada em
+# `rule-files`.
+default-rule-path: .
+rule-files:
+  - local.rules
+
+classification-file: classification.config
+reference-config-file: reference.config

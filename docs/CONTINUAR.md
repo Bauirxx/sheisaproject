@@ -898,6 +898,48 @@ para valores com espaços não serem reinterpretados pela shell). O correio não
 sofria disto porque os seus campos *são* declarados em `Settings`. Regra: um
 segredo lido por `os.environ.get` tem de estar exportado, não só escrito no `.env`.
 
+### 5.25 "Dar o mesmo IP" não é "copiar o tráfego" — a rede espelhada da WSL2 não captura
+
+`networkingMode=mirrored` no `.wslconfig` dá à WSL o **mesmo endereço IP** da
+placa física do Windows — e só isso. Não é um SPAN/porta-espelho real: uma
+ferramenta de captura bruta (AF_PACKET/libpcap — Suricata, `tcpdump`, qualquer
+IDS) não vê nada por ali. Confirmado com três testes, nesta ordem, cada um mais
+decisivo que o anterior: `tcpdump` directo na interface espelhada (0 pacotes em
+8s, quando qualquer rede doméstica gera ARP/mDNS de fundo nesse tempo); a
+mesma interface em modo promíscuo (0 pacotes, na mesma); e o teste que fecha o
+caso — um `curl` de **dentro da própria WSL**, com `tcpdump` a correr ao mesmo
+tempo, não viu o seu **próprio** tráfego de saída, apesar do pedido ter tido
+sucesso. Se nem o tráfego da própria WSL aparece na interface que supostamente
+o transporta, a interface não é o caminho real dos dados — é conectividade
+(routing/NAT-like), não uma cópia ao nível de ligação. Detalhe em
+`lab/wsl-sensor/README.md`.
+
+O caminho que funciona para um IDS a sério no Windows, sem Docker nem VM: ver
+armadilha 5.26.
+
+### 5.26 O Suricata para Windows crasha com Npcap nesta máquina; WinDivert (elevado) funciona
+
+Duas versões do Suricata para Windows — **8.0.7** e **7.0.17**, a variante
+normal (captura por Npcap, `-i <interface>`) — crasham ao abrir **qualquer**
+interface (testadas a Wi-Fi física e uma interface virtual), com o **mesmo**
+código de erro exacto: `0xc0000005` em `msvcrt.dll`, mesmo deslocamento
+`0x7b7e1`, confirmado no Visualizador de Eventos do Windows. Duas versões
+diferentes do Suricata a crashar no mesmo ponto do sistema não é um defeito do
+Suricata — é uma incompatibilidade desta instalação Windows (build
+Insider/Canary 26200) com a captura por Npcap.
+
+O que funciona: a variante **windivert** do instalador (mesma URL base, sufixo
+`-windivert-`), invocada com `--windivert true` em vez de `-i <interface>` —
+intercepta pelo Windows Filtering Platform, não por Npcap. Exige Administrador
+(sem isso falha de forma limpa, "must be run with Administrator privileges",
+**não** um crash — distinção que ajuda a diagnosticar: um erro limpo é
+permissões, um crash silencioso é outra coisa). Verificado a capturar tráfego
+real, disparar alertas reais (`User-Agent: sqlmap/1.7.2` contra um site real) e
+a entregar à SHEISA — que por sua vez correlacionou sozinha e criou um
+incidente. Tem uma propriedade de segurança que vale conhecer: se o processo
+cair, o WinDivert deixa passar os pacotes sem os bloquear (falha aberta).
+Pacote completo em `lab/windows-sensor/`.
+
 ## 6. Como trabalhar aqui
 
 O ciclo que apanhou quase todos os defeitos acima:

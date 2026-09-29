@@ -15,3 +15,16 @@ suricata/ingestao.env
 # Segredo do sensor remoto (chave de ingestao + URL da plataforma). Mesma razao:
 # o ficheiro versionado e sensor-remoto/sensor.env.exemplo, com marcadores.
 sensor-remoto/sensor.env
+
+# Segredo do sensor WSL (rede espelhada). Mesma razao: o ficheiro versionado e
+# wsl-sensor/sensor.env.exemplo, com marcadores.
+wsl-sensor/sensor.env
+
+# Segredo do sensor Windows nativo. Mesma razao: o ficheiro versionado e
+# windows-sensor/sensor.env.exemplo.ps1, com marcadores.
+windows-sensor/sensor.env.ps1
+
+# Execucao do sensor Windows nativo: registos e ficheiros de PID, gerados a
+# cada arranque -- nao sao configuracao, nao vao para o repositorio.
+windows-sensor/log/
+windows-sensor/*.pid

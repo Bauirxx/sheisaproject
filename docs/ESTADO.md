@@ -1084,6 +1084,32 @@ etapas e uma palavra-passe de aplicação. A lógica de selecção de protocolo 
 despacho têm testes; o IMAP contra o Gmail confirma-se pondo a credencial e
 correndo o teste de ligação, que é do lado de quem tem a conta.
 
+### Sensor Suricata nativo no Windows, via WinDivert (2026-09-29)
+
+Um terceiro caminho para o Suricata ver tráfego real, além do laboratório
+Docker (§ acima) e do sensor remoto (`lab/sensor-remoto/`, para outra máquina
+Linux): correr o Suricata **nativamente no Windows**, sobre a placa de rede
+física, sem contentor nem máquina virtual.
+
+Dois caminhos óbvios foram tentados primeiro e **nenhum funciona**: rede
+espelhada da WSL2 (`networkingMode=mirrored`) — confirmado com três testes que
+dá o mesmo IP mas não copia tráfego ao nível de ligação, nem sequer o da
+própria WSL; e captura por Npcap (`-i <interface>`) — o Suricata para Windows
+crasha ao abrir qualquer interface, em duas versões (8.0.7 e 7.0.17), no mesmo
+ponto exacto do sistema (`0xc0000005` em `msvcrt.dll`), o que aponta para uma
+incompatibilidade desta instalação Windows, não um defeito do Suricata.
+Registados como armadilhas 5.25 e 5.26, para não se repetirem.
+
+O que funciona: a variante **windivert** do instalador (Suricata 7.0.17),
+capturando pelo Windows Filtering Platform em vez de Npcap, elevado
+(Administrador). Verificado a correr: um pedido HTTP real com
+`User-Agent: sqlmap/1.7.2` foi capturado, disparou o alerta local
+correspondente, chegou à SHEISA (`INGESTAO`, auditado), e o motor de
+correlação da própria plataforma criou um incidente sozinho a partir de três
+alertas relacionados — cadeia completa, sem nada simulado. `lab/windows-sensor/`
+tem os scripts (`iniciar.ps1`/`parar.ps1`, elevam-se a si próprios), a
+configuração e o porquê de cada escolha.
+
 ---
 
 ## 5. O que FALTA (por ordem sugerida)
