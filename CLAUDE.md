@@ -69,6 +69,7 @@ não correspondência com o servidor.
 | [`docs/CORRER-E-TESTAR-INTEGRACOES.md`](docs/CORRER-E-TESTAR-INTEGRACOES.md) | playbook passo a passo para pôr tudo a correr e testar noutra máquina |
 | [`docs/QRADAR-NETSCOUT-INSTANCIAS-REAIS.md`](docs/QRADAR-NETSCOUT-INSTANCIAS-REAIS.md) | ligar o SHEISA a QRadar/NetScout reais na máquina de implantação (24 GB+) |
 | [`docs/BRIEFING.md`](docs/BRIEFING.md) | especificação técnica |
+| [`COMANDOS.md`](COMANDOS.md) | lista de comandos para copiar e colar (instalar, gerir, avançados) |
 | [`INSTALAR.md`](INSTALAR.md) | instalar na máquina do cliente (Windows, um só comando) |
 | [`README.md`](README.md) | instalação de raiz |
 
