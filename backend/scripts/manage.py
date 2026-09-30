@@ -23,6 +23,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.database import dispose_engine, get_sessionmaker
 
 
+def _carregar_env() -> None:
+    """Carrega o `.env` da raiz para `os.environ`.
+
+    Necessário porque os conectores das integrações lêem os segredos direto de
+    `os.environ` (o pydantic só popula os campos que declara). Sem isto,
+    `conectar-integracoes` não veria SHEISA_QRADAR_* nem SHEISA_NETSCOUT_*.
+    `override=False`: uma variável já definida no ambiente ganha ao ficheiro.
+    """
+    raiz = Path(__file__).resolve().parents[2] / ".env"
+    if not raiz.exists():
+        return
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(raiz, override=False)
+    except ImportError:
+        # Sem python-dotenv (improvável — é dependência do pydantic-settings),
+        # faz-se um carregamento mínimo, linha a linha.
+        for linha in raiz.read_text(encoding="utf-8").splitlines():
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            chave, _, valor = linha.partition("=")
+            os.environ.setdefault(chave.strip(), valor)
+
+
 def _banner(text: str) -> None:
     print(f"\n\033[1m{text}\033[0m")
     print("-" * len(text))
@@ -161,6 +187,49 @@ async def cmd_create_api_key(args: argparse.Namespace) -> int:
     return 0
 
 
+async def cmd_conectar_integracoes(args: argparse.Namespace) -> int:
+    """Liga as integrações de importação (QRadar, NetScout): testa e importa.
+
+    QRadar e NetScout são fontes de *pull*: só ficam ACTIVA depois de a
+    plataforma ir buscar sinais. Este comando faz isso — contra os simuladores
+    de laboratório por omissão, ou contra instâncias reais se as variáveis de
+    ambiente apontarem para elas. As fontes de *envio* (Wazuh, Suricata, API
+    genérica) ligam-se sozinhas quando começam a mandar eventos.
+
+    Nunca falha: uma fonte que não responda fica registada como não ligada, com
+    o motivo, e as outras continuam.
+    """
+    from sqlalchemy import select
+
+    from app.core.audit import AuditContext
+    from app.core.enums import SourceKind
+    from app.models.system import Integration
+    from app.services import integration_service
+
+    factory = get_sessionmaker()
+    async with factory() as session:
+        _banner("Ligar integracoes de importacao (QRadar, NetScout)")
+        ctx = AuditContext(actor_email="sistema", is_system=True, origin="cli")
+        alvos = (
+            await session.execute(
+                select(Integration).where(
+                    Integration.kind.in_([SourceKind.QRADAR, SourceKind.NETSCOUT])
+                ).order_by(Integration.name)
+            )
+        ).scalars().all()
+        if not alvos:
+            print("  Nenhuma integracao de pull no catalogo (correu seed-integrations?).")
+        for integ in alvos:
+            resultado = await integration_service.importar_de_fonte(session, integ, ctx)
+            if resultado.get("sucesso"):
+                print(f"  OK  {integ.name}: {resultado.get('detalhe')}")
+            else:
+                print(f"  --  {integ.name}: {resultado.get('detalhe')}")
+        await session.commit()
+    print()
+    return 0
+
+
 async def cmd_demo(args: argparse.Namespace) -> int:
     from app.services.demo_service import run_demo_scenario
 
@@ -202,6 +271,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_integ = sub.add_parser("seed-integrations", help="Regista o catálogo de integrações.")
     p_integ.set_defaults(func=cmd_seed_integrations)
 
+    p_conn = sub.add_parser(
+        "conectar-integracoes",
+        help="Liga QRadar e NetScout (testa e importa dos simuladores ou instâncias reais).",
+    )
+    p_conn.set_defaults(func=cmd_conectar_integracoes)
+
     p_play = sub.add_parser("seed-playbooks", help="Instala playbooks de resposta base.")
     p_play.set_defaults(func=cmd_seed_playbooks)
 
@@ -221,6 +296,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    _carregar_env()
     args = build_parser().parse_args()
 
     async def _run() -> int:

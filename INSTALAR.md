@@ -41,8 +41,11 @@ O instalador faz tudo por etapas, com o progresso no ecrã:
 
 1. verifica e instala as dependências (Docker, Python, Node);
 2. gera a configuração (`.env`) com segredos próprios;
-3. levanta a base de dados e os serviços em Docker;
-4. prepara o backend (Python, migrações, dados iniciais, MITRE ATT&CK);
+3. levanta a base de dados e os serviços em Docker (inclui os simuladores
+   QRadar e NetScout);
+4. prepara o backend (Python, migrações, dados iniciais, MITRE ATT&CK) e **liga
+   as integrações** — QRadar e NetScout ficam ACTIVA, com alertas importados,
+   logo a seguir à instalação;
 5. prepara a interface (Node);
 6. instala o Suricata nativo (captura real de rede) e abre a porta na firewall;
 7. arranca a plataforma.
@@ -75,11 +78,17 @@ Um só comando controla o sistema inteiro (base de dados, API, interface e
 sensor):
 
 ```powershell
-.\sheisa.ps1 iniciar     # arranca tudo (depois de reiniciar o computador, p.ex.)
+.\sheisa.ps1 iniciar     # arranca tudo e liga as integracoes (QRadar/NetScout)
 .\sheisa.ps1 estado      # mostra o que está a correr
 .\sheisa.ps1 parar       # pára a API, a interface e o sensor
 .\sheisa.ps1 reiniciar
+.\sheisa.ps1 conectar    # (re)liga as integracoes QRadar/NetScout, se preciso
 ```
+
+O `iniciar` já liga as integrações de importação (QRadar e NetScout) contra os
+simuladores — ficam ACTIVA sozinhas. As de envio (Wazuh, Suricata, API genérica)
+ligam-se quando começam a mandar eventos: o sensor Suricata é iniciado pelo
+próprio `iniciar` (com administrador).
 
 > Para o sensor Suricata arrancar/parar, corra o `sheisa.ps1` **como
 > administrador** (o WinDivert exige-o). O resto funciona sem.

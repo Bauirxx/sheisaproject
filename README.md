@@ -76,10 +76,11 @@ instalar o Docker pela primeira vez), volte a correr o mesmo comando.
 API, interface, sensor):
 
 ```powershell
-.\sheisa.ps1 iniciar     # arranca tudo
+.\sheisa.ps1 iniciar     # arranca tudo e liga as integrações (QRadar/NetScout)
 .\sheisa.ps1 estado      # o que está a correr
 .\sheisa.ps1 parar       # pára a API, a interface e o sensor
 .\sheisa.ps1 reiniciar
+.\sheisa.ps1 conectar    # (re)liga as integrações de importação
 ```
 
 ### Manual (qualquer sistema)
@@ -107,6 +108,7 @@ python -m venv .venv
 ./.venv/Scripts/python.exe -m scripts.manage seed-playbooks
 ./.venv/Scripts/python.exe -m scripts.manage seed-assets
 ./.venv/Scripts/python.exe -m scripts.manage seed-integrations
+./.venv/Scripts/python.exe -m scripts.manage conectar-integracoes   # QRadar/NetScout: ACTIVA
 ./scripts/api.sh start
 ```
 

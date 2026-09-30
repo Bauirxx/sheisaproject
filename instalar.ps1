@@ -227,6 +227,14 @@ foreach ($semente in @("seed-correlation","seed-playbooks","seed-assets","seed-i
 }
 Ok "Regras, playbooks, inventario e catalogo de integracoes instalados."
 
+# Ligar as integracoes de pull (QRadar, NetScout) contra os simuladores ja a
+# correr: testa e importa, deixando-as ACTIVA logo a seguir a instalacao.
+Write-Host "  A ligar as integracoes (QRadar, NetScout)..." -ForegroundColor Gray
+& $venvPy -m scripts.manage conectar-integracoes 2>&1 | ForEach-Object {
+    if ($_ -match "OK|--") { Write-Host "    $_" -ForegroundColor DarkGray }
+}
+Ok "Integracoes de importacao ligadas."
+
 Write-Host "  A carregar o catalogo MITRE ATT&CK (~50 MB, pode demorar)..." -ForegroundColor Gray
 & $venvPy -m scripts.manage mitre-load 2>&1 | Out-Null
 if ($LASTEXITCODE -eq 0) { Ok "MITRE ATT&CK carregado." }

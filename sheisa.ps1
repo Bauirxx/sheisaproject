@@ -4,17 +4,18 @@
 #  Um so comando para gerir o sistema inteiro: base de dados, API,
 #  interface e sensor Suricata.
 #
-#    .\sheisa.ps1 iniciar    arranca tudo
+#    .\sheisa.ps1 iniciar    arranca tudo e liga as integracoes
 #    .\sheisa.ps1 parar      para a API, a interface e o sensor
 #    .\sheisa.ps1 estado     mostra o que esta a correr
 #    .\sheisa.ps1 reiniciar  para e volta a arrancar
+#    .\sheisa.ps1 conectar   liga QRadar/NetScout (testa e importa)
 #
 #  (A instalacao de raiz e feita uma vez por instalar.ps1.)
 # =====================================================================
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("iniciar", "parar", "estado", "reiniciar")]
+    [ValidateSet("iniciar", "parar", "estado", "reiniciar", "conectar")]
     [string]$accao = "estado"
 )
 
@@ -146,7 +147,24 @@ function Iniciar {
     } else {
         Info "Sensor Suricata nao configurado (opcional) — ver lab/windows-sensor/."
     }
+
+    # 5. Ligar as integracoes de pull (QRadar, NetScout) contra os simuladores.
+    if (ProcessoNaPorta $PORTA_API) { Conectar }
     Write-Host ""
+}
+
+# ---------------------------------------------------- ligar integracoes de pull
+function Conectar {
+    Info "A ligar as integracoes (QRadar, NetScout)..."
+    $venvPy = Join-Path $RAIZ "backend\.venv\Scripts\python.exe"
+    if (-not (Test-Path $venvPy)) { Info "Backend nao instalado — corra instalar.ps1."; return }
+    Push-Location (Join-Path $RAIZ "backend")
+    try {
+        & $venvPy -m scripts.manage conectar-integracoes 2>&1 | ForEach-Object {
+            if ($_ -match "OK|--") { Write-Host "    $_" -ForegroundColor DarkGray }
+        }
+        Ok "Integracoes de importacao ligadas (QRadar, NetScout ACTIVA)."
+    } finally { Pop-Location }
 }
 
 # --------------------------------------------------------------------- parar
@@ -194,4 +212,5 @@ switch ($accao) {
     "parar"     { Parar }
     "reiniciar" { Parar; Iniciar }
     "estado"    { Estado }
+    "conectar"  { Conectar }
 }
