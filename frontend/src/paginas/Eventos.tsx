@@ -210,7 +210,7 @@ function DetalheDoEvento({ id }: { id: string }) {
       {data.alert_id ? (
         <p className="secundario">
           Este evento foi agregado num alerta, com todos os outros sinais
-          equivalentes. <Link to="/alertas">Ver a fila de alertas</Link>
+          equivalentes. <Link to={`/alertas?alerta=${data.alert_id}`}>Ver o alerta</Link>
         </p>
       ) : (
         <p className="terciario">

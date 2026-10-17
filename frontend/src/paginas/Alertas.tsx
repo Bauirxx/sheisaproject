@@ -173,6 +173,25 @@ export function Alertas() {
   // Guarda-se apenas o identificador: a decomposicao vem do detalhe, que a
   // listagem nao traz de proposito (seria um dicionario de factores por linha).
   const [aberto, definirAberto] = useState<AlertaResumo | null>(null);
+  const [alvoDispensado, definirAlvoDispensado] = useState(false);
+
+  // Ligação profunda: `/alertas?alerta=<id>` (p.ex. vindo de um evento) abre o
+  // painel desse alerta. O alerta do painel é **derivado**: o que o utilizador
+  // clicou tem prioridade; senão, o alvo da ligação, até ser fechado. Derivar
+  // em vez de chamar setState num efeito (ver react-hooks/set-state-in-effect).
+  const alvoId = ler("alerta");
+  const { data: alvo } = useQuery({
+    queryKey: ["alerta-alvo", alvoId],
+    queryFn: () => pedir<Alerta>(`/alerts/${alvoId}`),
+    enabled: alvoId !== "",
+  });
+  const noPainel: AlertaResumo | null =
+    aberto ?? (alvoDispensado ? null : alvo ?? null);
+
+  const fecharPainel = () => {
+    definirAberto(null);
+    definirAlvoDispensado(true);
+  };
 
   const parametros = {
     estado: ler("estado"),
@@ -330,33 +349,33 @@ export function Alertas() {
         </div>
       ) : null}
 
-      {aberto ? (
+      {noPainel ? (
         <div
           className="sobreposicao"
           role="dialog"
           aria-modal="true"
-          aria-label={`Decomposição da pontuação de ${aberto.reference}`}
-          onClick={() => definirAberto(null)}
+          aria-label={`Decomposição da pontuação de ${noPainel.reference}`}
+          onClick={fecharPainel}
         >
           <div className="painel-lateral" onClick={(e) => e.stopPropagation()}>
             <div className="linha linha--espalhada" style={{ marginBottom: "var(--espaco-4)" }}>
               <div className="pilha" style={{ gap: 0 }}>
-                <h2>Como se chegou a {aberto.triage_score}/100</h2>
-                <span className="terciario mono">{aberto.reference}</span>
+                <h2>Como se chegou a {noPainel.triage_score}/100</h2>
+                <span className="terciario mono">{noPainel.reference}</span>
               </div>
               <button
                 type="button"
                 className="botao botao--discreto"
-                onClick={() => definirAberto(null)}
+                onClick={fecharPainel}
               >
                 Fechar
               </button>
             </div>
-            <DetalheDaPontuacao id={aberto.id} />
+            <DetalheDaPontuacao id={noPainel.id} />
 
             <div className="separador" style={{ margin: "var(--espaco-5) 0" }} />
             <h3 style={{ marginBottom: "var(--espaco-3)" }}>Triagem</h3>
-            <TriagemDeAlerta alertaId={aberto.id} />
+            <TriagemDeAlerta alertaId={noPainel.id} />
           </div>
         </div>
       ) : null}
