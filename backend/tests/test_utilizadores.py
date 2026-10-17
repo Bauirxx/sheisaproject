@@ -213,3 +213,40 @@ async def test_cada_um_ve_e_marca_so_as_suas_notificacoes(
     assert nao_lidas.json() == []
     await sessao.refresh(alheia)
     assert alheia.read_at is None
+
+
+async def test_criar_utilizador_envia_email_de_boas_vindas(cliente, token_admin, monkeypatch):
+    """Ao criar a conta, a pessoa recebe um email com a palavra-passe inicial
+    (temporária: troca obrigatória no primeiro acesso) e o endereço de acesso."""
+    from app.services import email_service
+
+    enviados: list[dict] = []
+    monkeypatch.setattr(email_service, "enviar", lambda **kw: enviados.append(kw) or "<id>")
+    monkeypatch.setattr(email_service.settings, "smtp_host", "smtp.exemplo")
+    monkeypatch.setattr(email_service.settings, "mail_from", "cert@exemplo")
+
+    resposta = await _criar(cliente, token_admin)
+    assert resposta.status_code == 201, resposta.text
+
+    assert [e["para"] for e in enviados] == ["nova.conta@soc.local"]
+    assert "conta" in enviados[0]["assunto"].lower()
+    assert SENHA in enviados[0]["corpo"]              # leva a palavra-passe inicial
+    assert "http" in enviados[0]["corpo"]             # leva o endereço de acesso
+
+
+async def test_falha_do_email_de_boas_vindas_nao_desfaz_a_criacao(
+    cliente, token_admin, monkeypatch
+):
+    """O essencial não se troca pelo acessório: se o correio falhar, a conta fica."""
+    from app.services import email_service
+
+    def rebenta(**kw):
+        raise RuntimeError("servidor de correio em baixo")
+
+    monkeypatch.setattr(email_service, "enviar", rebenta)
+    monkeypatch.setattr(email_service.settings, "smtp_host", "smtp.exemplo")
+    monkeypatch.setattr(email_service.settings, "mail_from", "cert@exemplo")
+
+    resposta = await _criar(cliente, token_admin, email="outra.conta@soc.local")
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["email"] == "outra.conta@soc.local"

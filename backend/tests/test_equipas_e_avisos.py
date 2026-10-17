@@ -229,6 +229,10 @@ async def test_entregar_a_uma_equipa_avisa_cada_membro_activo_menos_o_autor(
     )
     incidente = await _incidente(cliente, token_admin)
 
+    # Criar a conta acima enviou-lhe o email de boas-vindas; isso é ruído para
+    # este teste, que mede só os avisos da entrega à equipa. Limpa antes da acção.
+    correio.clear()
+
     resposta = await cliente.post(
         f"/api/incidents/{incidente['id']}/assign", json={"team_id": equipa["id"]},
         headers=cabecalho(token_admin),

@@ -1039,6 +1039,18 @@ que a caixa devolve o que lhe foi enviado.
     chamada no `lifespan` falha 1, a encontrar sem avisar falha 1, com a medição
     sempre vazia falham 2.
 
+72. **Criar uma conta não avisava a pessoa** (2026-10-17). A criação de
+    utilizador não enviava nada: o administrador tinha de comunicar tudo à parte.
+    `auth_service.enviar_email_de_boas_vindas` passa a avisar por email ao criar a
+    conta, chamada pelo `create_user`, **com a palavra-passe inicial**. Mesmo
+    contrato dos outros avisos: só envia se o canal estiver configurado, corre o
+    SMTP fora do ciclo de eventos, e **nunca faz falhar a criação** se o correio
+    estiver em baixo. A palavra-passe vai no email para a pessoa entrar sozinha,
+    mas é **temporária**: a conta é criada com `must_change_password`, pelo que na
+    primeira entrada define a sua e a enviada deixa de servir; o registo de
+    auditoria nunca a contém — só o email. 2 testes, o do envio verificado por
+    reversão; o segundo prova que uma falha de correio não desfaz a conta.
+
 Uma decisão de desenho que vale registar: **a plataforma não classifica por
 palavras-chave.** Uma categoria inferida do assunto de um email seria apresentada
 com a mesma confiança de uma afirmada por quem comunica, e o §4 proíbe-o. Uma

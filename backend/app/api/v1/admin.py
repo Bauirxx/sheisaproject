@@ -129,6 +129,12 @@ async def create_user(
         # A palavra-passe nunca entra no registo de auditoria.
         new_value={"email": user.email, "nome": user.full_name, "perfil": role.name},
     )
+
+    # Avisa a pessoa, por email, com a palavra-passe inicial (temporária: troca
+    # obrigatória no primeiro acesso). Nunca faz falhar a criação se o correio
+    # estiver em baixo.
+    await auth_service.enviar_email_de_boas_vindas(user, password=payload.password)
+
     await session.refresh(user, ["role", "team"])
     return _to_detail(user)
 

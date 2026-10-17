@@ -15,6 +15,8 @@ Comportamentos com implicação de segurança, explicitados:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -44,6 +46,54 @@ from app.core.security import (
     verify_password,
 )
 from app.models.identity import Role, User, UserSession
+from app.services import email_service
+
+logger = logging.getLogger(__name__)
+
+
+async def enviar_email_de_boas_vindas(user: User, *, password: str) -> None:
+    """Avisa, por email, que foi criada uma conta — com a palavra-passe inicial.
+
+    Mesmo contrato dos outros avisos: só envia se o canal de correio estiver
+    configurado, corre o SMTP fora do ciclo de eventos, e **nunca faz falhar a
+    criação da conta** — a conta já existe e está auditada; um servidor de
+    correio em baixo não a desfaz.
+
+    A palavra-passe segue no email para a pessoa poder entrar sozinha, mas é
+    **temporária**: a conta é criada com `must_change_password`, pelo que na
+    primeira entrada define a sua própria e a que foi enviada deixa de servir. O
+    registo de auditoria nunca contém a palavra-passe — só o email.
+    """
+    if not settings.envio_de_email_configurado:
+        return
+
+    corpo = "\n".join([
+        f"{user.full_name},",
+        "",
+        "Foi-lhe criada uma conta na plataforma SHEISA, de gestão de incidentes.",
+        "",
+        f"Endereço:      {settings.url_da_interface}",
+        f"Utilizador:    {user.email}",
+        f"Palavra-passe: {password}",
+        "",
+        "Entre com estes dados. No primeiro acesso ser-lhe-á pedido que defina uma",
+        "palavra-passe sua — a que recebeu aqui serve apenas para a primeira entrada.",
+        "",
+        "-- ",
+        "Mensagem gerada automaticamente ao criar a sua conta.",
+    ])
+
+    try:
+        await asyncio.to_thread(
+            email_service.enviar,
+            para=user.email,
+            assunto="A sua conta no SHEISA foi criada",
+            corpo=corpo,
+        )
+    except Exception:
+        # Registado e não levantado: a conta está criada e auditada, e não se
+        # desfaz por o correio ter falhado.
+        logger.exception("Falhou o email de boas-vindas para %s", user.email)
 
 
 async def _load_user_by_email(session: AsyncSession, email: str) -> User | None:
