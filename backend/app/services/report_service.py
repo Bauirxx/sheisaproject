@@ -360,9 +360,57 @@ async def build_incident_report(
     ):
         resultado["nota"] = "O incidente ainda não foi resolvido."
 
+    # --- Resumo executivo: um parágrafo em prosa que abre o relatório.
+    # Em vez de começar com secções de dados soltos, dá primeiro o contexto —
+    # o que sintetiza as oito secções que se seguem numa leitura corrida.
+    def _legivel_enum(valor: str) -> str:
+        return valor.lower().replace("_", " ")
+
+    frases = [
+        f"O incidente {incident.reference} — «{incident.title}» — é um caso de "
+        f"{_legivel_enum(incident.category.value)}, de severidade "
+        f"{_legivel_enum(incident.severity.value)}, actualmente no estado "
+        f"«{_legivel_enum(incident.status.value)}»."
+    ]
+    if incident.detected_at:
+        origem = _legivel_enum(incident.origin.value) if incident.origin else "origem não registada"
+        frases.append(
+            f"Foi detectado em {incident.detected_at.strftime('%d/%m/%Y às %H:%M')} UTC "
+            f"({origem})"
+            + (f", a partir de {len(alerts)} alerta(s) correlacionado(s)." if alerts else ".")
+        )
+    investigacao = []
+    if incident.assignee:
+        investigacao.append(f"foi conduzido por {incident.assignee.full_name}")
+    if evidence:
+        investigacao.append(f"recolheram-se {len(evidence)} evidência(s)")
+    if observations:
+        investigacao.append(f"observaram-se {len(observations)} indicador(es)")
+    if techniques:
+        investigacao.append(f"mapearam-se {len(techniques)} técnica(s) MITRE ATT&CK")
+    if investigacao:
+        frases.append("Na investigação, " + ", ".join(investigacao) + ".")
+    resposta = []
+    if executed:
+        resposta.append(f"{len(executed)} acção(ões) executada(s)")
+    if failed:
+        resposta.append(f"{len(failed)} falhada(s)")
+    if executions:
+        resposta.append(f"{len(executions)} execução(ões) de playbook")
+    if resposta:
+        frases.append("Na resposta, " + ", ".join(resposta) + ".")
+    if incident.resolution_summary:
+        frases.append(f"Resolução: {incident.resolution_summary}")
+    elif incident.false_positive_reason:
+        frases.append(f"Classificado como falso positivo: {incident.false_positive_reason}")
+    elif incident.status.value not in ("RESOLVIDO", "ENCERRADO"):
+        frases.append("O incidente ainda não está resolvido.")
+    resumo_executivo = " ".join(frases)
+
     return {
         "tipo": "relatorio_de_incidente",
         "gerado_em": datetime.now(UTC).isoformat(),
+        "resumo_executivo": resumo_executivo,
         "o_que_aconteceu": o_que_aconteceu,
         "quando": quando,
         "como_foi_detectado": como_detectado,
@@ -416,9 +464,41 @@ async def build_period_report(
         session, days=days, start=start, end=end
     )
 
+    # --- Resumo executivo: um parágrafo em prosa que abre o relatório.
+    if not incidents:
+        resumo_executivo = (
+            f"Entre {start.strftime('%d/%m/%Y')} e {end.strftime('%d/%m/%Y')} "
+            f"({days} dia(s)) não se registou nenhum incidente. Foram recebidos "
+            f"{int(alerts_total or 0)} alerta(s) e propostas "
+            f"{int(actions_total or 0)} acção(ões) de resposta."
+        )
+    else:
+        frases = [
+            f"Entre {start.strftime('%d/%m/%Y')} e {end.strftime('%d/%m/%Y')} "
+            f"({days} dia(s)), registaram-se {len(incidents)} incidente(s), "
+            f"{int(alerts_total or 0)} alerta(s) e {int(actions_total or 0)} "
+            f"acção(ões) de resposta."
+        ]
+        cat_top = max(by_category.items(), key=lambda kv: kv[1])
+        frases.append(
+            f"A categoria mais frequente foi «{cat_top[0].lower().replace('_', ' ')}» "
+            f"({cat_top[1]} de {len(incidents)})."
+        )
+        criticos = by_severity.get("CRITICA", 0) + by_severity.get("ALTA", 0)
+        if criticos:
+            frases.append(f"{criticos} foram de severidade alta ou crítica.")
+        fechados = by_status.get("ENCERRADO", 0) + by_status.get("RESOLVIDO", 0)
+        em_curso = len(incidents) - fechados - by_status.get("FALSO_POSITIVO", 0)
+        frases.append(
+            f"{fechados} já estão resolvidos ou encerrados"
+            + (f"; {em_curso} continuam em curso." if em_curso > 0 else ".")
+        )
+        resumo_executivo = " ".join(frases)
+
     return {
         "tipo": "relatorio_de_periodo",
         "gerado_em": datetime.now(UTC).isoformat(),
+        "resumo_executivo": resumo_executivo,
         "periodo": {
             "inicio": start.isoformat(), "fim": end.isoformat(), "dias": days,
         },

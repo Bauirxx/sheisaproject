@@ -186,3 +186,52 @@ async def test_relatorio_de_tipo_sem_apresentacao_continua_exportavel(
     assert "dedicada em PDF" in texto
     assert "valor preservado" in texto
     assert (await sessao.execute(select(Report).where(Report.id == registo.id))).scalar_one()
+
+
+async def test_o_relatorio_de_periodo_abre_com_resumo_executivo(
+    cliente, sessao, token_analista
+):
+    """O relatório começa por um texto que contextualiza, não por dados soltos."""
+    await _dois_periodos(cliente, sessao, token_analista)
+
+    resposta = await _periodo(
+        cliente, token_analista, AGORA - timedelta(days=90), AGORA + timedelta(days=1)
+    )
+    assert resposta.status_code == 201, resposta.text
+    conteudo = resposta.json()["content"]
+
+    resumo = conteudo["resumo_executivo"]
+    assert isinstance(resumo, str) and resumo.strip()
+    assert "incidente" in resumo.lower()
+    # o resumo vem ANTES das secções de dados
+    chaves = [c for c in conteudo if c not in ("tipo", "gerado_em")]
+    assert chaves[0] == "resumo_executivo"
+    # e aparece no PDF
+    pdf = await cliente.get(
+        f"/api/reports/{resposta.json()['id']}/pdf", headers=cabecalho(token_analista)
+    )
+    assert pdf.status_code == 200, pdf.text
+    assert "Resumo executivo" in texto_do_pdf(pdf.content)
+
+
+async def test_o_relatorio_de_incidente_abre_com_resumo_executivo(
+    cliente, sessao, token_analista
+):
+    inc = await _incidente(
+        cliente, sessao, token_analista, titulo="Força bruta SSH",
+        detectado=AGORA - timedelta(hours=2), reconhecido_apos=timedelta(minutes=5),
+    )
+    resposta = await cliente.post(
+        "/api/reports/incident",
+        json={"incident_id": str(inc.id)},
+        headers=cabecalho(token_analista),
+    )
+    assert resposta.status_code == 201, resposta.text
+    conteudo = resposta.json()["content"]
+
+    resumo = conteudo["resumo_executivo"]
+    assert isinstance(resumo, str) and resumo.strip()
+    assert inc.reference in resumo
+    assert "Força bruta SSH" in resumo
+    chaves = [c for c in conteudo if c not in ("tipo", "gerado_em")]
+    assert chaves[0] == "resumo_executivo"

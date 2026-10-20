@@ -167,6 +167,11 @@ def _incidente(conteudo: dict, estilos) -> list:
     accoes = conteudo.get("que_accoes_foram_executadas", {})
     resultado = conteudo.get("qual_foi_o_resultado", {})
 
+    resumo = conteudo.get("resumo_executivo")
+    if resumo:
+        e(Paragraph("Resumo executivo", estilos["seccao"]))
+        e(Paragraph(_escapar(resumo), estilos["corpo"]))
+
     # --- 1 ---
     e(Paragraph("1. O que aconteceu", estilos["seccao"]))
     e(_tabela_de_propriedades([
@@ -392,6 +397,11 @@ def _periodo(conteudo: dict, estilos) -> list:
     distribuicao = conteudo.get("distribuicao", {})
     metricas = conteudo.get("metricas_de_resposta", {})
     incidentes = conteudo.get("incidentes") or []
+
+    resumo = conteudo.get("resumo_executivo")
+    if resumo:
+        e(Paragraph("Resumo executivo", estilos["seccao"]))
+        e(Paragraph(_escapar(resumo), estilos["corpo"]))
 
     e(Paragraph("Período", estilos["seccao"]))
     e(_tabela_de_propriedades([
