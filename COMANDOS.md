@@ -74,6 +74,10 @@ cd backend
 # Cenário de demonstração (marcado como dados de demo, removível):
 .\.venv\Scripts\python.exe -m scripts.manage demo --reset
 
+# Simular um ataque de força bruta (um só comando; cria alertas e um incidente
+# por correlação -- «Tentativa de acesso por força bruta»; marcado como demo):
+.\.venv\Scripts\python.exe -m scripts.manage simular-forca-bruta
+
 # Testes:
 .\.venv\Scripts\python.exe -m pytest -q
 ```

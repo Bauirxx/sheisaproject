@@ -244,6 +244,69 @@ async def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+async def cmd_simular_forca_bruta(args: argparse.Namespace) -> int:
+    """Simula um ataque de força bruta, para demonstração.
+
+    Injecta tentativas de autenticação falhadas pelo **pipeline real** de
+    ingestão — o que as agrega em alertas e deixa a regra de correlação criar o
+    incidente «Tentativa de acesso por força bruta» sozinha. Fica marcado como
+    demonstração (`is_demo`), pelo que a interface o assinala e `demo --reset` o
+    remove (§4). Um só comando: não precisa de chave nem de nada colado à mão.
+    """
+    from datetime import UTC, datetime
+
+    from app.core.audit import AuditContext
+    from app.services import ingestion_service
+
+    factory = get_sessionmaker()
+    async with factory() as session:
+        _banner("Simulação de ataque de força bruta")
+        ctx = AuditContext(actor_email="simulacao@sheisa.local", origin="simulacao")
+        agora = datetime.now(UTC).isoformat()
+        atacante, alvo = "203.0.113.10", "10.0.0.5"
+        eventos = [
+            {
+                "id": f"sim-forca-bruta-{n}",
+                "timestamp": agora,
+                "severity": "high",
+                "event_type": "authentication_failure",
+                "description": f"Failed password for root from {atacante} port 51{n:02d} ssh2",
+                "source_ip": atacante,
+                "destination_ip": alvo,
+                "host": "srv-ssh-01",
+                "username": "root",
+                "rule_id": "5710",
+                "rule_name": "sshd: tentativa de autenticação falhada",
+                "rule_groups": ["authentication_failures"],
+            }
+            for n in range(12)
+        ]
+        resultados = await ingestion_service.ingest_batch(
+            session, ctx, eventos,
+            source_name="Simulação de força bruta",
+            source_kind=None,
+            is_demo=True,
+        )
+        await session.commit()
+
+        criados = sum(1 for r in resultados if r.status == "criado")
+        incidentes = sorted(
+            {r.correlated_incident_reference for r in resultados
+             if r.correlated_incident_reference}
+        )
+        print(f"  {len(eventos)} tentativas de autenticação falhadas, do atacante {atacante}.")
+        print(f"  {criados} alerta(s) de autenticação falhada criado(s).")
+        if incidentes:
+            print(
+                f"  Incidente criado por correlação: {', '.join(incidentes)} "
+                "(«Tentativa de acesso por força bruta»)."
+            )
+        else:
+            print("  Aviso: nenhum incidente de correlação — correu `seed-correlation`?")
+    print("\nSimulação concluída. Mostre-a na interface, em Alertas e Incidentes.\n")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="manage", description="Utilitário de administração da plataforma SHEISA."
@@ -285,6 +348,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_key.add_argument("--kind", required=True, help="WAZUH | SURICATA | QRADAR | ...")
     p_key.add_argument("--description")
     p_key.set_defaults(func=cmd_create_api_key)
+
+    p_sim = sub.add_parser(
+        "simular-forca-bruta",
+        help="Simula um ataque de força bruta (demonstração): alertas + incidente por correlação.",
+    )
+    p_sim.set_defaults(func=cmd_simular_forca_bruta)
 
     p_demo = sub.add_parser("demo", help="Executa o cenário de demonstração.")
     p_demo.add_argument(
